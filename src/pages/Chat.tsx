@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Brain, Send, User, ArrowLeft, MessageCircle, Upload, FileText, Image, File, X, Mic, MicOff, Camera } from 'lucide-react';
+import { Brain, Send, User, ArrowLeft, MessageCircle, Upload, FileText, Image, File, X, Mic, MicOff, Camera, Volume2, VolumeX } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -36,6 +36,7 @@ const Chat = () => {
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -74,11 +75,15 @@ const Chat = () => {
     }
   }, []);
 
-  // Cleanup camera on unmount
+  // Cleanup camera and speech synthesis on unmount
   useEffect(() => {
     return () => {
       if (cameraStream) {
         cameraStream.getTracks().forEach(track => track.stop());
+      }
+      // Stop speech synthesis
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
       }
     };
   }, [cameraStream]);
@@ -103,6 +108,44 @@ const Chat = () => {
       stopVoiceRecording();
     } else {
       startVoiceRecording();
+    }
+  };
+
+  // Function to speak text using Web Speech API
+  const speakText = (text: string, messageId: string) => {
+    if ('speechSynthesis' in window) {
+      // Stop any currently speaking
+      window.speechSynthesis.cancel();
+
+      if (speakingMessageId === messageId) {
+        // If already speaking this message, stop it
+        setSpeakingMessageId(null);
+        return;
+      }
+
+      const utterance = new SpeechSynthesisUtterance(text);
+
+      // Set Russian language for better pronunciation
+      utterance.lang = 'ru-RU';
+      utterance.rate = 0.9; // Slightly slower for clarity
+      utterance.pitch = 1;
+
+      utterance.onstart = () => {
+        setSpeakingMessageId(messageId);
+      };
+
+      utterance.onend = () => {
+        setSpeakingMessageId(null);
+      };
+
+      utterance.onerror = (event) => {
+        console.error('Speech synthesis error:', event);
+        setSpeakingMessageId(null);
+      };
+
+      window.speechSynthesis.speak(utterance);
+    } else {
+      alert('Ваш браузер не поддерживает озвучивание текста.');
     }
   };
 
@@ -692,9 +735,30 @@ const Chat = () => {
                       <div className="whitespace-pre-wrap">
                         {formatMessageContent(message.content)}
                       </div>
-                      <p className="text-xs opacity-70 mt-1">
-                        {message.timestamp.toLocaleTimeString()}
-                      </p>
+                      <div className="flex items-center justify-between mt-2">
+                        <p className="text-xs opacity-70">
+                          {message.timestamp.toLocaleTimeString()}
+                        </p>
+                        {message.role === 'assistant' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => speakText(message.content, message.id)}
+                            className={`h-6 w-6 p-0 ${
+                              speakingMessageId === message.id
+                                ? 'text-red-500 hover:text-red-600'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                            title={speakingMessageId === message.id ? 'Остановить озвучивание' : 'Озвучить сообщение'}
+                          >
+                            {speakingMessageId === message.id ? (
+                              <VolumeX className="h-3 w-3" />
+                            ) : (
+                              <Volume2 className="h-3 w-3" />
+                            )}
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
                     {message.role === 'user' && (
