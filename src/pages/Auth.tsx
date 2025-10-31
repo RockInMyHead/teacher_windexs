@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Brain, ArrowLeft } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 
@@ -13,6 +14,7 @@ const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [loginData, setLoginData] = useState({ email: '', password: '' });
   const [registerData, setRegisterData] = useState({ name: '', email: '', password: '' });
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const { login, register } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -49,6 +51,16 @@ const Auth = () => {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!acceptTerms) {
+      toast({
+        title: "Требуется согласие",
+        description: "Пожалуйста, согласитесь с пользовательским соглашением",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -172,7 +184,34 @@ const Auth = () => {
                     required
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={isLoading}>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="terms"
+                    checked={acceptTerms}
+                    onCheckedChange={(checked) => setAcceptTerms(checked as boolean)}
+                  />
+                  <Label htmlFor="terms" className="text-sm leading-relaxed">
+                    Я согласен с{' '}
+                    <button
+                      type="button"
+                      className="text-primary hover:underline"
+                      onClick={() => window.open('/terms', '_blank')}
+                    >
+                      пользовательским соглашением
+                    </button>
+                    {' '}и{' '}
+                    <button
+                      type="button"
+                      className="text-primary hover:underline"
+                      onClick={() => window.open('/privacy', '_blank')}
+                    >
+                      политикой конфиденциальности
+                    </button>
+                  </Label>
+                </div>
+
+                <Button type="submit" className="w-full" disabled={isLoading || !acceptTerms}>
                   {isLoading ? "Регистрация..." : "Зарегистрироваться"}
                 </Button>
               </form>
