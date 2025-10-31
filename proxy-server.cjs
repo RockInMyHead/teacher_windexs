@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const fetch = require('node-fetch');
+const axios = require('axios');
 
 const app = express();
 const PORT = 4002;
@@ -12,22 +12,14 @@ app.use(express.json({ limit: '10mb' }));
 // Proxy endpoint for OpenAI Chat Completions
 app.post('/api/chat/completions', async (req, res) => {
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
+    const response = await axios.post('https://api.openai.com/v1/chat/completions', req.body, {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
       },
-      body: JSON.stringify(req.body),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('OpenAI API Error:', response.status, errorText);
-      return res.status(response.status).json({ error: 'OpenAI API error', details: errorText });
-    }
-
-    const data = await response.json();
+    const data = response.data;
     res.json(data);
   } catch (error) {
     console.error('Proxy server error:', error);
