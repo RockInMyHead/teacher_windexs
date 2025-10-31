@@ -10,7 +10,7 @@ export default defineConfig(() => ({
   },
   preview: {
     host: "::",
-    port: process.env.PORT ? parseInt(process.env.PORT) : 4173,
+    port: process.env.PORT ? parseInt(process.env.PORT) : 1035,
   },
   plugins: [react()],
   resolve: {
