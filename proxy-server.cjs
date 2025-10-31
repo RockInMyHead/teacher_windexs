@@ -3,7 +3,7 @@ const cors = require('cors');
 const fetch = require('node-fetch');
 
 const app = express();
-const PORT = 3002;
+const PORT = 4002;
 
 // Middleware
 app.use(cors());
