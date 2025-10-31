@@ -46,7 +46,47 @@ const PersonalizedCoursePage = () => {
   }
 
   const course = user.personalizedCourse;
+  if (!course || !course.modules || course.modules.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Курс не найден</CardTitle>
+            <CardDescription>
+              Персонализированный курс еще не создан или недоступен.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => navigate('/assessment')} className="w-full">
+              Пройти тест для создания курса
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const module = course.modules[currentModule];
+  if (!module) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Модуль не найден</CardTitle>
+            <CardDescription>
+              Выбранный модуль недоступен.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => navigate('/courses')} className="w-full">
+              Вернуться к курсам
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const progress = ((currentModule + 1) / course.modules.length) * 100;
 
   return (
