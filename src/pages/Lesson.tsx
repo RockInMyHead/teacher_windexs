@@ -32,6 +32,97 @@ import {
   Legend,
 } from 'chart.js';
 import { Bar, Line, Pie, Doughnut } from 'react-chartjs-2';
+import 'katex/dist/katex.min.css';
+import { InlineMath, BlockMath } from 'react-katex';
+
+// Component for rendering LaTeX in text
+const LatexText = ({ text }: { text: string }) => {
+  const parts = text.split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g);
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.startsWith('$$') && part.endsWith('$$')) {
+          // Block math
+          const math = part.slice(2, -2);
+          return <BlockMath key={index} math={math} />;
+        } else if (part.startsWith('$') && part.endsWith('$') && part.length > 2) {
+          // Inline math
+          const math = part.slice(1, -1);
+          return <InlineMath key={index} math={math} />;
+        } else {
+          // Regular text - convert line breaks
+          return <span key={index} style={{ whiteSpace: 'pre-wrap' }}>{part}</span>;
+        }
+      })}
+    </>
+  );
+};
+
+// Component for rendering lesson content with LaTeX support
+const LessonContent = ({ content, generatedImages }: { content: string, generatedImages: Record<string, string> }) => {
+  // Split content by different markers
+  const parts = content.split(/(<\w+[^>]*>.*?<\/\w+>|\$\$[\s\S]*?\$\$|\$[\s\S]*?\$|\[.*?\]|\[Генерация изображения.*?\]|\[Изображение: .*?\])/g);
+
+  return (
+    <div className="text-sm leading-relaxed">
+      {parts.map((part, index) => {
+        if (part.startsWith('$$') && part.endsWith('$$')) {
+          // Block math
+          const math = part.slice(2, -2);
+          return <BlockMath key={index} math={math} />;
+        } else if (part.startsWith('$') && part.endsWith('$') && part.length > 2) {
+          // Inline math
+          const math = part.slice(1, -1);
+          return <InlineMath key={index} math={math} />;
+        } else if (part.startsWith('[') && part.endsWith(']')) {
+          // LaTeX in square brackets (fallback for \[...\])
+          const math = part.slice(1, -1);
+          return <BlockMath key={index} math={math} />;
+        } else if (part.includes('[Генерация изображения')) {
+          // Image generation placeholder
+          return (
+            <div key={index} className="inline-block mx-2 my-2 p-4 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+              <div className="text-sm text-gray-500 text-center">
+                <div className="animate-spin inline-block w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full mr-2"></div>
+                Генерация изображения...
+              </div>
+            </div>
+          );
+        } else if (part.includes('[Изображение:')) {
+          // Generated image
+          const description = part.match(/\[Изображение: (.*?)\]/)?.[1] || '';
+          const imageKey = `image_${Object.keys(generatedImages).length - 1}`;
+          return (
+            <div key={index} className="inline-block mx-2 my-2">
+              <img src={generatedImages[imageKey]} alt={description} className="max-w-xs rounded-lg shadow-lg border" />
+              <div className="text-xs text-gray-500 mt-1 text-center">AI Generated</div>
+            </div>
+          );
+        } else if (part.includes('<')) {
+          // HTML content (tables, charts)
+          return <div key={index} dangerouslySetInnerHTML={{ __html: part }} />;
+        } else if (part.includes('<br>')) {
+          // Handle line breaks
+          const lines = part.split('<br>');
+          return (
+            <span key={index}>
+              {lines.map((line, lineIndex) => (
+                <React.Fragment key={lineIndex}>
+                  {line}
+                  {lineIndex < lines.length - 1 && <br />}
+                </React.Fragment>
+              ))}
+            </span>
+          );
+        } else {
+          // Regular text
+          return <span key={index} style={{ whiteSpace: 'pre-wrap' }}>{part}</span>;
+        }
+      })}
+    </div>
+  );
+};
 
 // Register Chart.js components
 ChartJS.register(
@@ -1175,18 +1266,10 @@ const Lesson = () => {
             console.error('Error generating inline image:', error);
           });
           // Пока изображение генерируется, показываем плейсхолдер
-          return `<div class="inline-block mx-2 my-2 p-4 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
-                    <div class="text-sm text-gray-500 text-center">
-                      <div class="animate-spin inline-block w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full mr-2"></div>
-                      Генерация изображения...
-                    </div>
-                  </div>`;
+          return '[Генерация изображения...]';
         } else {
           // Изображение уже сгенерировано, показываем его
-          return `<div class="inline-block mx-2 my-2">
-                    <img src="${generatedImages[imageKey]}" alt="${description.trim()}" class="max-w-xs rounded-lg shadow-lg border" />
-                    <div class="text-xs text-gray-500 mt-1 text-center">AI Generated</div>
-                  </div>`;
+          return `[Изображение: ${description.trim()}]`;
         }
       })
       // Обработка маркеров таблиц **[TABLE: ...]**
@@ -1198,13 +1281,6 @@ const Lesson = () => {
         chartCounter++;
         return renderChart(chartData, chartCounter.toString());
       })
-      // Обработка ### блоков - жирный зеленый текст с увеличенным шрифтом
-      .replace(/^### (.+)$/gm, '<div class="text-green-600 font-bold text-lg my-2 bg-green-50 dark:bg-green-950/20 px-3 py-2 rounded-md border-l-4 border-green-500">$1</div>')
-      // Обработка **жирного зеленого текста**
-      .replace(/\*\*(.+?)\*\*/g, '<span class="text-green-600 font-semibold">$1</span>')
-      // Обработка заголовков # и ##
-      .replace(/^# (.+)$/gm, '<h2 class="text-lg font-semibold mb-2 mt-4">$1</h2>')
-      .replace(/^## (.+)$/gm, '<h3 class="text-base font-medium mb-1 mt-3">$1</h3>')
       // Сохранение переносов строк
       .replace(/\n/g, '<br>');
   };
@@ -1646,12 +1722,7 @@ ${weakTopics.length > 0 ? `Ученик имеет слабые места в с
               <ScrollArea className="h-[60vh] pr-4">
                 {/* Theory Content */}
                 <div className="prose prose-sm max-w-none mb-6">
-                  <div
-                    className="whitespace-pre-wrap text-sm leading-relaxed"
-                    dangerouslySetInnerHTML={{
-                      __html: formatLessonContent(currentLesson.theory)
-                    }}
-                  />
+                  <LessonContent content={formatLessonContent(currentLesson.theory)} generatedImages={generatedImages} />
                 </div>
 
                 {/* Examples */}
