@@ -16,6 +16,7 @@ import Lesson from "./pages/Lesson";
 import Achievements from "./pages/Achievements";
 import PersonalAccount from "./pages/PersonalAccount";
 import CustomAssessment from "./pages/CustomAssessment";
+import DuolingoAssessment from "./pages/DuolingoAssessment";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import NotFound from "./pages/NotFound";
@@ -47,6 +48,7 @@ const App = () => (
                 <Route path="/achievements" element={<Achievements />} />
                 <Route path="/account" element={<PersonalAccount />} />
                 <Route path="/custom-assessment" element={<CustomAssessment />} />
+                <Route path="/duolingo-assessment" element={<DuolingoAssessment />} />
                 <Route path="/terms" element={<Terms />} />
                 <Route path="/privacy" element={<Privacy />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

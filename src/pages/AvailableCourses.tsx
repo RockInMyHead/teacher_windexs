@@ -16,7 +16,8 @@ import {
   Brain,
   Star,
   CheckCircle,
-  Play
+  Play,
+  Gamepad2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -344,6 +345,10 @@ const AvailableCourses = () => {
             Присоединяйтесь к тысячам студентов, которые уже улучшают свои знания с помощью нашего AI-ассистента
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Button size="lg" onClick={() => navigate('/duolingo-assessment')}>
+              <Gamepad2 className="w-5 h-5 mr-2" />
+              Duolingo тест английского
+            </Button>
             <Button size="lg" onClick={() => navigate('/chat')}>
               <Brain className="w-5 h-5 mr-2" />
               Начать чат с AI

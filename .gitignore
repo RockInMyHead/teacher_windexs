@@ -27,4 +27,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Server logs and PIDs
+*.log
+*.pid
+
+# Dependencies
+node_modules
 package-lock.json

@@ -66,6 +66,43 @@ npm run dev
 Приложение будет доступно по адресу: http://localhost:4000
 Прокси-сервер будет доступен по адресу: http://localhost:4002
 
+### Запуск на сервере (порты 1037-1039)
+
+Для запуска на сервере с портами 1037-1039:
+
+```bash
+# Настройка переменных окружения (скопируйте .env.example в .env и заполните API ключи)
+cp env.example .env
+nano .env  # Добавьте ваш OpenAI API ключ
+
+# Запуск всех серверов одновременно
+./start-servers.sh
+
+# Или используйте npm скрипт
+npm run start:server
+```
+
+Серверы запустятся на портах:
+- **Frontend (Vite)**: http://localhost:1037
+- **Proxy (OpenAI)**: http://localhost:1038
+- **Production**: http://localhost:1039
+
+#### Управление серверами
+
+```bash
+# Проверка статуса серверов
+./check-servers.sh
+
+# Остановка всех серверов
+./stop-servers.sh
+
+# Запуск только прокси-сервера
+./start-proxy.sh
+
+# Запуск только dev сервера
+./start-dev.sh
+```
+
 ### Сборка для продакшена
 
 ```bash

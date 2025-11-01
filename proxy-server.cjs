@@ -3,7 +3,7 @@ const cors = require('cors');
 const axios = require('axios');
 
 const app = express();
-const PORT = 4002;
+const PORT = process.env.PROXY_PORT || 4002;
 
 // Middleware
 app.use(cors());

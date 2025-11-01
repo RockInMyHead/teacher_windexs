@@ -6,7 +6,7 @@ import path from "path";
 export default defineConfig(() => ({
   server: {
     host: "::",
-    port: 4000,
+    port: process.env.VITE_DEV_PORT ? parseInt(process.env.VITE_DEV_PORT) : 4000,
   },
   preview: {
     host: "::",
