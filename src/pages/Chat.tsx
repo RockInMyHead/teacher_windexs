@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Brain, Send, User, ArrowLeft, MessageCircle, Upload, FileText, Image, File, X, Mic, MicOff, Camera, Volume2, VolumeX } from 'lucide-react';
+import { Brain, Send, User, ArrowLeft, MessageCircle, Upload, FileText, Image, File, X, Camera, Volume2, VolumeX } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -13,15 +13,9 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  ttsPlayed?: boolean;
 }
 
-// Web Speech API type declarations
-declare global {
-  interface Window {
-    SpeechRecognition: typeof SpeechRecognition;
-    webkitSpeechRecognition: typeof SpeechRecognition;
-  }
-}
 
 const Chat = () => {
   const { isAuthenticated } = useAuth();
@@ -31,49 +25,30 @@ const Chat = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [speechRecognition, setSpeechRecognition] = useState<SpeechRecognition | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [isTtsEnabled, setIsTtsEnabled] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Initialize Speech Recognition
+
+  // Auto TTS for new messages when enabled
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
-
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'ru-RU'; // Russian language
-
-      recognition.onstart = () => {
-        setIsRecording(true);
-      };
-
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setInputMessage(prev => prev + (prev ? ' ' : '') + transcript);
-      };
-
-      recognition.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        setIsRecording(false);
-      };
-
-      recognition.onend = () => {
-        setIsRecording(false);
-      };
-
-      setSpeechRecognition(recognition);
+    if (isTtsEnabled && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      // Only auto-speak assistant messages, not user messages
+      if (lastMessage.role === 'assistant' && !lastMessage.ttsPlayed) {
+        // Mark as played to avoid re-playing
+        lastMessage.ttsPlayed = true;
+        speakText(lastMessage.content, lastMessage.id, false); // false = don't show visual feedback
+      }
     }
-  }, []);
+  }, [messages, isTtsEnabled]);
 
   // Cleanup camera and speech synthesis on unmount
   useEffect(() => {
@@ -88,36 +63,14 @@ const Chat = () => {
     };
   }, [cameraStream]);
 
-  // Function to start voice recording
-  const startVoiceRecording = () => {
-    if (speechRecognition && !isRecording) {
-      speechRecognition.start();
-    }
-  };
-
-  // Function to stop voice recording
-  const stopVoiceRecording = () => {
-    if (speechRecognition && isRecording) {
-      speechRecognition.stop();
-    }
-  };
-
-  // Function to toggle voice recording
-  const toggleVoiceRecording = () => {
-    if (isRecording) {
-      stopVoiceRecording();
-    } else {
-      startVoiceRecording();
-    }
-  };
 
   // Function to speak text using Web Speech API
-  const speakText = (text: string, messageId: string) => {
+  const speakText = (text: string, messageId: string, showVisualFeedback: boolean = true) => {
     if ('speechSynthesis' in window) {
       // Stop any currently speaking
       window.speechSynthesis.cancel();
 
-      if (speakingMessageId === messageId) {
+      if (showVisualFeedback && speakingMessageId === messageId) {
         // If already speaking this message, stop it
         setSpeakingMessageId(null);
         return;
@@ -130,22 +83,39 @@ const Chat = () => {
       utterance.rate = 0.9; // Slightly slower for clarity
       utterance.pitch = 1;
 
-      utterance.onstart = () => {
-        setSpeakingMessageId(messageId);
-      };
+      if (showVisualFeedback) {
+        utterance.onstart = () => {
+          setSpeakingMessageId(messageId);
+        };
 
-      utterance.onend = () => {
-        setSpeakingMessageId(null);
-      };
+        utterance.onend = () => {
+          setSpeakingMessageId(null);
+        };
 
-      utterance.onerror = (event) => {
-        console.error('Speech synthesis error:', event);
-        setSpeakingMessageId(null);
-      };
+        utterance.onerror = (event) => {
+          console.error('Speech synthesis error:', event);
+          setSpeakingMessageId(null);
+        };
+      }
 
       window.speechSynthesis.speak(utterance);
     } else {
       alert('Ваш браузер не поддерживает озвучивание текста.');
+    }
+  };
+
+  // Function to toggle TTS mode
+  const toggleTts = () => {
+    if (isTtsEnabled) {
+      // Disable TTS
+      setIsTtsEnabled(false);
+      setSpeakingMessageId(null);
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    } else {
+      // Enable TTS
+      setIsTtsEnabled(true);
     }
   };
 
@@ -739,7 +709,8 @@ const Chat = () => {
                         <p className="text-xs opacity-70">
                           {message.timestamp.toLocaleTimeString()}
                         </p>
-                        {message.role === 'assistant' && (
+                        {/* TTS Button - only for assistant messages and when auto-TTS is disabled */}
+                        {message.role === 'assistant' && 'speechSynthesis' in window && !isTtsEnabled && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -757,6 +728,13 @@ const Chat = () => {
                               <Volume2 className="h-3 w-3" />
                             )}
                           </Button>
+                        )}
+
+                        {/* Auto-TTS indicator - show when auto-TTS is enabled */}
+                        {message.role === 'assistant' && isTtsEnabled && (
+                          <div className="flex items-center text-green-600" title="Авто-озвучивание включено">
+                            <Volume2 className="h-3 w-3" />
+                          </div>
                         )}
                       </div>
                     </div>
@@ -923,16 +901,17 @@ const Chat = () => {
                     className="flex-1"
                   />
 
-                  {/* Voice Recording Button */}
+
+                  {/* TTS Toggle Button */}
                   <Button
-                    variant={isRecording ? "destructive" : "outline"}
+                    variant={isTtsEnabled ? "default" : "outline"}
                     size="icon"
-                    onClick={toggleVoiceRecording}
-                    disabled={isLoading || !speechRecognition}
-                    title={isRecording ? "Остановить запись" : "Голосовой ввод"}
-                    className={isRecording ? "animate-pulse" : ""}
+                    onClick={toggleTts}
+                    disabled={!('speechSynthesis' in window)}
+                    title={isTtsEnabled ? "Выключить авто-озвучивание" : "Включить авто-озвучивание"}
+                    className={isTtsEnabled ? "bg-green-600 hover:bg-green-700" : ""}
                   >
-                    {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                    {isTtsEnabled ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                   </Button>
 
                   <Button
