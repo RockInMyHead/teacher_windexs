@@ -46,23 +46,157 @@ buildProcess.on('close', (code) => {
 function startSinglePortServer() {
   console.log('🚀 Запуск единого сервера на порту 1031...');
 
-  // Импортируем proxy-server после сборки
-  const proxyApp = require('./proxy-server.cjs');
+  // Создаем новый Express app
+  const app = express();
 
-  // Добавляем статические файлы frontend
-  proxyApp.use(express.static(path.join(__dirname, 'dist')));
+  // Настраиваем статические файлы frontend
+  app.use(express.static(path.join(__dirname, 'dist')));
 
-  // SPA fallback - отправляем index.html для всех не-API маршрутов
-  proxyApp.get('*', (req, res) => {
-    // Пропускаем API маршруты
-    if (req.path.startsWith('/api') || req.path === '/health') {
-      return;
+  // Настраиваем middleware
+  const cors = require('cors');
+  const axios = require('axios');
+  const { HttpsProxyAgent } = require('https-proxy-agent');
+
+  // Настройки
+  const PROXY_URL = process.env.PROXY_URL;
+  if (!PROXY_URL) {
+    console.error('❌ ОШИБКА: PROXY_URL не установлен! Прокси ОБЯЗАТЕЛЕН для OpenAI API.');
+    process.exit(1);
+  }
+  const proxyAgent = new HttpsProxyAgent(PROXY_URL);
+
+  // Middleware
+  app.use(cors());
+  app.use(express.json({ limit: '10mb' }));
+
+  // Health check
+  app.get('/health', (req, res) => {
+    res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  });
+
+  // OpenAI API routes
+  app.get('/api/models', async (req, res) => {
+    try {
+      const response = await axios.get('https://api.openai.com/v1/models', {
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        proxy: {
+          host: '45.147.180.58',
+          port: 8000,
+          auth: {
+            username: 'pb3jms',
+            password: '85pNLX'
+          }
+        },
+        httpsAgent: proxyAgent,
+      });
+      res.json(response.data);
+    } catch (error) {
+      console.error('Proxy server models error:', error);
+      res.status(500).json({
+        error: 'Internal server error',
+        details: error.message,
+        status: error.response?.status,
+        key_loaded: !!process.env.OPENAI_API_KEY
+      });
     }
+  });
+
+  // Chat completions
+  app.post('/api/chat/completions', async (req, res) => {
+    try {
+      const response = await axios.post('https://api.openai.com/v1/chat/completions', req.body, {
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        proxy: {
+          host: '45.147.180.58',
+          port: 8000,
+          auth: {
+            username: 'pb3jms',
+            password: '85pNLX'
+          }
+        },
+        httpsAgent: proxyAgent,
+      });
+      res.json(response.data);
+    } catch (error) {
+      console.error('Chat completions error:', error);
+      res.status(error.response?.status || 500).json({
+        error: 'OpenAI API error',
+        details: error.message
+      });
+    }
+  });
+
+  // Image generations
+  app.post('/api/images/generations', async (req, res) => {
+    try {
+      const response = await axios.post('https://api.openai.com/v1/images/generations', req.body, {
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        proxy: {
+          host: '45.147.180.58',
+          port: 8000,
+          auth: {
+            username: 'pb3jms',
+            password: '85pNLX'
+          }
+        },
+        httpsAgent: proxyAgent,
+      });
+      res.json(response.data);
+    } catch (error) {
+      console.error('Images generations error:', error);
+      res.status(error.response?.status || 500).json({
+        error: 'OpenAI Images API error',
+        details: error.message
+      });
+    }
+  });
+
+  // Text-to-Speech
+  app.post('/api/audio/speech', async (req, res) => {
+    try {
+      const response = await axios.post('https://api.openai.com/v1/audio/speech', req.body, {
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        proxy: {
+          host: '45.147.180.58',
+          port: 8000,
+          auth: {
+            username: 'pb3jms',
+            password: '85pNLX'
+          }
+        },
+        httpsAgent: proxyAgent,
+        responseType: 'stream',
+      });
+
+      res.setHeader('Content-Type', 'audio/mpeg');
+      response.data.pipe(res);
+    } catch (error) {
+      console.error('TTS error:', error);
+      res.status(error.response?.status || 500).json({
+        error: 'OpenAI TTS API error',
+        details: error.message
+      });
+    }
+  });
+
+  // SPA fallback - ОТПРАВЛЯЕМ ПОСЛЕДНИМ
+  app.use((req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
   });
 
-  // Запускаем сервер на порту 1031
-  const server = proxyApp.listen(1031, () => {
+  // Запускаем сервер
+  const server = app.listen(1031, () => {
     console.log('✅ Единый сервер запущен на порту 1031');
     console.log('');
     console.log('🎉 TRUE SINGLE-PORT SERVER ГОТОВ!');
