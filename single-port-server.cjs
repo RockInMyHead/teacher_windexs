@@ -63,8 +63,24 @@ function startSinglePortServer() {
     console.error('❌ ОШИБКА: PROXY_URL не установлен! Прокси ОБЯЗАТЕЛЕН для OpenAI API.');
     process.exit(1);
   }
+
+  // Парсим URL прокси
+  const proxyUrl = new URL(PROXY_URL);
+  const proxyConfig = {
+    host: proxyUrl.hostname,
+    port: parseInt(proxyUrl.port),
+    auth: proxyUrl.username && proxyUrl.password ? {
+      username: proxyUrl.username,
+      password: proxyUrl.password
+    } : undefined
+  };
+
   const proxyAgent = new HttpsProxyAgent(PROXY_URL);
-  console.log(`🌐 Прокси настроен: ${PROXY_URL}`);
+  
+  console.log(`🌐 Прокси настроен:`);
+  console.log(`   Host: ${proxyConfig.host}`);
+  console.log(`   Port: ${proxyConfig.port}`);
+  console.log(`   Auth: ${proxyConfig.auth ? '✅ Да' : '❌ Нет'}`);
 
   // Middleware
   app.use(cors());
@@ -98,11 +114,12 @@ function startSinglePortServer() {
   // Test proxy connection
   app.get('/api/test-proxy', async (req, res) => {
     console.log('🧪 Тестирование прокси соединения...');
-    console.log('🔍 Прокси URL:', PROXY_URL.replace(/:([^:]+)@/, ':***@'));
+    console.log('🔍 Прокси:', `${proxyConfig.host}:${proxyConfig.port}`);
     
     try {
       // Тестируем прокси на простом запросе
       const response = await axios.get('https://httpbin.org/ip', {
+        proxy: proxyConfig,
         httpsAgent: proxyAgent,
         timeout: 10000
       });
@@ -112,15 +129,19 @@ function startSinglePortServer() {
         success: true,
         message: 'Proxy is working',
         proxy_ip: response.data.origin,
-        proxy_url: PROXY_URL.replace(/:([^:]+)@/, ':***@')
+        proxy_config: `${proxyConfig.host}:${proxyConfig.port}`
       });
     } catch (error) {
       console.error('❌ Прокси НЕ работает:', error.message);
+      if (error.response?.data) {
+        console.error('📄 Детали:', error.response.data);
+      }
       res.status(500).json({
         success: false,
         message: 'Proxy connection failed',
         error: error.message,
-        proxy_url: PROXY_URL.replace(/:([^:]+)@/, ':***@')
+        details: error.response?.data,
+        proxy_config: `${proxyConfig.host}:${proxyConfig.port}`
       });
     }
   });
@@ -138,13 +159,14 @@ function startSinglePortServer() {
     }
 
     console.log('🔑 API ключ найден, делаем запрос к OpenAI через прокси...');
-    console.log('🔍 Прокси агент:', proxyAgent.proxy.href);
+    console.log('🔍 Прокси:', `${proxyConfig.host}:${proxyConfig.port}`);
 
     try {
       const response = await axios.get('https://api.openai.com/v1/models', {
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
         },
+        proxy: proxyConfig,
         httpsAgent: proxyAgent,
         timeout: 30000
       });
@@ -179,6 +201,7 @@ function startSinglePortServer() {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
         },
+        proxy: proxyConfig,
         httpsAgent: proxyAgent,
         timeout: 30000
       });
@@ -200,6 +223,7 @@ function startSinglePortServer() {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
         },
+        proxy: proxyConfig,
         httpsAgent: proxyAgent,
         timeout: 30000
       });
@@ -221,6 +245,7 @@ function startSinglePortServer() {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
         },
+        proxy: proxyConfig,
         httpsAgent: proxyAgent,
         responseType: 'stream',
         timeout: 30000
