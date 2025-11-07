@@ -55,7 +55,6 @@ function startSinglePortServer() {
   // Настраиваем middleware
   const cors = require('cors');
   const axios = require('axios');
-  const { HttpsProxyAgent } = require('https-proxy-agent');
 
   // Проверяем что прокси настроен (обязательно)
   const PROXY_URL = process.env.PROXY_URL;
@@ -75,17 +74,19 @@ function startSinglePortServer() {
     } : undefined
   };
 
-  const proxyAgent = new HttpsProxyAgent(PROXY_URL);
-  
   console.log(`🌐 Прокси настроен:`);
   console.log(`   Host: ${proxyConfig.host}`);
   console.log(`   Port: ${proxyConfig.port}`);
   console.log(`   Auth: ${proxyConfig.auth ? '✅ Да' : '❌ Нет'}`);
 
-  // Устанавливаем переменные окружения для прокси
+  // Устанавливаем переменные окружения для прокси (axios их использует автоматически)
   process.env.HTTP_PROXY = PROXY_URL;
   process.env.HTTPS_PROXY = PROXY_URL;
   console.log(`   HTTP_PROXY: ${process.env.HTTP_PROXY ? '✅ Установлена' : '❌ Нет'}`);
+
+  // Устанавливаем глобальную конфигурацию axios для прокси
+  axios.defaults.proxy = proxyConfig;
+  console.log(`   Axios proxy: ✅ Настроен`);
 
   // Middleware
   app.use(cors());
@@ -118,23 +119,22 @@ function startSinglePortServer() {
 
   // Test proxy connection
   app.get('/api/test-proxy', async (req, res) => {
-    console.log('🧪 Тестирование прокси соединения...');
+    console.log('🧪 Тестирование прокси соединения через axios.defaults.proxy...');
     console.log('🔍 Прокси:', `${proxyConfig.host}:${proxyConfig.port}`);
-    
+
     try {
-      // Тестируем прокси на простом запросе
+      // Тестируем прокси через глобальную конфигурацию axios
       const response = await axios.get('https://httpbin.org/ip', {
-        proxy: proxyConfig,
-        httpsAgent: proxyAgent,
         timeout: 10000
       });
-      
+
       console.log('✅ Прокси работает! IP:', response.data.origin);
       res.json({
         success: true,
         message: 'Proxy is working',
         proxy_ip: response.data.origin,
-        proxy_config: `${proxyConfig.host}:${proxyConfig.port}`
+        proxy_config: `${proxyConfig.host}:${proxyConfig.port}`,
+        method: 'axios.defaults.proxy'
       });
     } catch (error) {
       console.error('❌ Прокси НЕ работает:', error.message);
@@ -146,7 +146,8 @@ function startSinglePortServer() {
         message: 'Proxy connection failed',
         error: error.message,
         details: error.response?.data,
-        proxy_config: `${proxyConfig.host}:${proxyConfig.port}`
+        proxy_config: `${proxyConfig.host}:${proxyConfig.port}`,
+        method: 'axios.defaults.proxy'
       });
     }
   });
@@ -167,23 +168,21 @@ function startSinglePortServer() {
     console.log('🔍 Прокси:', `${proxyConfig.host}:${proxyConfig.port}`);
 
     try {
-      // Сначала попробуем простой тест прокси через httpsAgent
-      console.log('🧪 Тестируем прокси соединение через httpsAgent...');
+      // Сначала попробуем простой тест прокси через глобальную конфигурацию
+      console.log('🧪 Тестируем прокси соединение через axios.defaults.proxy...');
       const testResponse = await axios.get('https://httpbin.org/ip', {
-        httpsAgent: proxyAgent,
         timeout: 5000
       });
       console.log('✅ Прокси тест прошел! IP:', testResponse.data.origin);
 
-      // Теперь основной запрос к OpenAI через httpsAgent
-      console.log('🚀 Отправляем запрос к OpenAI через httpsAgent...');
+      // Теперь основной запрос к OpenAI через глобальную конфигурацию
+      console.log('🚀 Отправляем запрос к OpenAI через axios.defaults.proxy...');
       const response = await axios.get('https://api.openai.com/v1/models', {
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
           'User-Agent': 'curl/7.68.0',
           'Accept': '*/*'
         },
-        httpsAgent: proxyAgent,
         timeout: 30000,
         decompress: true,
         validateStatus: (status) => status < 500
@@ -224,7 +223,6 @@ function startSinglePortServer() {
           'User-Agent': 'curl/7.68.0',
           'Accept': '*/*'
         },
-        httpsAgent: proxyAgent,
         timeout: 30000,
         decompress: true,
         validateStatus: (status) => status < 500
@@ -249,7 +247,6 @@ function startSinglePortServer() {
           'User-Agent': 'curl/7.68.0',
           'Accept': '*/*'
         },
-        httpsAgent: proxyAgent,
         timeout: 30000,
         decompress: true,
         validateStatus: (status) => status < 500
@@ -274,7 +271,6 @@ function startSinglePortServer() {
           'User-Agent': 'curl/7.68.0',
           'Accept': '*/*'
         },
-        httpsAgent: proxyAgent,
         responseType: 'stream',
         timeout: 30000,
         decompress: true,
