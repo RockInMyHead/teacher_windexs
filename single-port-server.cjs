@@ -165,10 +165,15 @@ function startSinglePortServer() {
       const response = await axios.get('https://api.openai.com/v1/models', {
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'User-Agent': 'curl/7.68.0', // Имитируем curl
+          'Accept': '*/*'
         },
         proxy: proxyConfig,
-        httpsAgent: proxyAgent,
-        timeout: 30000
+        timeout: 30000,
+        // Отключаем автоматическое сжатие
+        decompress: true,
+        // Не добавляем лишние заголовки
+        validateStatus: (status) => status < 500
       });
 
       console.log('✅ Успешный ответ от OpenAI через прокси');
@@ -200,10 +205,13 @@ function startSinglePortServer() {
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
+          'User-Agent': 'curl/7.68.0',
+          'Accept': '*/*'
         },
         proxy: proxyConfig,
-        httpsAgent: proxyAgent,
-        timeout: 30000
+        timeout: 30000,
+        decompress: true,
+        validateStatus: (status) => status < 500
       });
       res.json(response.data);
     } catch (error) {
@@ -222,10 +230,13 @@ function startSinglePortServer() {
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
+          'User-Agent': 'curl/7.68.0',
+          'Accept': '*/*'
         },
         proxy: proxyConfig,
-        httpsAgent: proxyAgent,
-        timeout: 30000
+        timeout: 30000,
+        decompress: true,
+        validateStatus: (status) => status < 500
       });
       res.json(response.data);
     } catch (error) {
@@ -244,11 +255,14 @@ function startSinglePortServer() {
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
+          'User-Agent': 'curl/7.68.0',
+          'Accept': '*/*'
         },
         proxy: proxyConfig,
-        httpsAgent: proxyAgent,
         responseType: 'stream',
-        timeout: 30000
+        timeout: 30000,
+        decompress: true,
+        validateStatus: (status) => status < 500
       });
 
       res.setHeader('Content-Type', 'audio/mpeg');
