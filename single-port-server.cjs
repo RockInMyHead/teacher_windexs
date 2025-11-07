@@ -55,15 +55,13 @@ function startSinglePortServer() {
   // Настраиваем middleware
   const cors = require('cors');
   const axios = require('axios');
-  const { HttpProxyAgent } = require('http-proxy-agent');
 
-  // Настройки
+  // Проверяем что прокси настроен
   const PROXY_URL = process.env.PROXY_URL;
   if (!PROXY_URL) {
     console.error('❌ ОШИБКА: PROXY_URL не установлен! Прокси ОБЯЗАТЕЛЕН для OpenAI API.');
     process.exit(1);
   }
-  const proxyAgent = new HttpProxyAgent(PROXY_URL);
 
   // Middleware
   app.use(cors());
@@ -123,7 +121,6 @@ function startSinglePortServer() {
             password: '85pNLX'
           }
         },
-        httpsAgent: proxyAgent,
         timeout: 10000
       });
 
@@ -182,7 +179,6 @@ function startSinglePortServer() {
             password: '85pNLX'
           }
         },
-        httpsAgent: proxyAgent,
       });
       res.json(response.data);
     } catch (error) {
@@ -210,7 +206,6 @@ function startSinglePortServer() {
             password: '85pNLX'
           }
         },
-        httpsAgent: proxyAgent,
       });
       res.json(response.data);
     } catch (error) {
@@ -238,7 +233,6 @@ function startSinglePortServer() {
             password: '85pNLX'
           }
         },
-        httpsAgent: proxyAgent,
         responseType: 'stream',
       });
 
