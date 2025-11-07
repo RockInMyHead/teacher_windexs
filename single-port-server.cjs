@@ -55,14 +55,16 @@ function startSinglePortServer() {
   // Настраиваем middleware
   const cors = require('cors');
   const axios = require('axios');
+  const { HttpsProxyAgent } = require('https-proxy-agent');
 
-  // Проверяем что прокси настроен (опционально)
+  // Проверяем что прокси настроен (обязательно)
   const PROXY_URL = process.env.PROXY_URL;
-  if (PROXY_URL) {
-    console.log(`🌐 Прокси настроен: ${PROXY_URL}`);
-  } else {
-    console.log('ℹ️  Прокси не настроен, используем прямые запросы');
+  if (!PROXY_URL) {
+    console.error('❌ ОШИБКА: PROXY_URL не установлен! Прокси ОБЯЗАТЕЛЕН для OpenAI API.');
+    process.exit(1);
   }
+  const proxyAgent = new HttpsProxyAgent(PROXY_URL);
+  console.log(`🌐 Прокси настроен: ${PROXY_URL}`);
 
   // Middleware
   app.use(cors());
@@ -105,75 +107,30 @@ function startSinglePortServer() {
       });
     }
 
-    console.log('🔑 API ключ найден, делаем запрос к OpenAI...');
+    console.log('🔑 API ключ найден, делаем запрос к OpenAI через прокси...');
 
-    // Сначала пробуем прямой запрос (без прокси)
     try {
-      console.log('🔄 Делаем прямой запрос к OpenAI...');
       const response = await axios.get('https://api.openai.com/v1/models', {
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
         },
-        timeout: 15000
+        httpsAgent: proxyAgent,
+        timeout: 30000
       });
 
-      console.log('✅ Успешный прямой ответ от OpenAI');
+      console.log('✅ Успешный ответ от OpenAI через прокси');
       res.json(response.data);
 
-    } catch (directError) {
-      console.error('❌ Прямой запрос failed:', directError.response?.status, directError.message);
+    } catch (error) {
+      console.error('❌ Ошибка запроса к OpenAI:', error.response?.status, error.message);
 
-      // Если прямой запрос не работает, пробуем через прокси
-      if (PROXY_URL) {
-        console.log('🌐 Пробуем запрос через прокси...');
-        try {
-          const proxyResponse = await axios.get('https://api.openai.com/v1/models', {
-            headers: {
-              'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-            },
-            proxy: {
-              host: '45.147.180.58',
-              port: 8000,
-              auth: {
-                username: 'pb3jms',
-                password: '85pNLX'
-              }
-            },
-            timeout: 15000
-          });
-
-          console.log('✅ Успешный ответ от OpenAI через прокси');
-          res.json(proxyResponse.data);
-
-        } catch (proxyError) {
-          console.error('❌ Прокси тоже failed:', proxyError.response?.status, proxyError.message);
-
-          res.status(500).json({
-            error: 'OpenAI API unavailable',
-            direct_error: {
-              status: directError.response?.status,
-              message: directError.message
-            },
-            proxy_error: {
-              status: proxyError.response?.status,
-              message: proxyError.message
-            },
-            key_loaded: !!process.env.OPENAI_API_KEY,
-            proxy_configured: !!PROXY_URL
-          });
-        }
-      } else {
-        // Прокси не настроен, возвращаем ошибку прямого запроса
-        res.status(500).json({
-          error: 'OpenAI API unavailable',
-          direct_error: {
-            status: directError.response?.status,
-            message: directError.message
-          },
-          key_loaded: !!process.env.OPENAI_API_KEY,
-          proxy_configured: false
-        });
-      }
+      res.status(500).json({
+        error: 'OpenAI API error',
+        status: error.response?.status,
+        message: error.message,
+        key_loaded: !!process.env.OPENAI_API_KEY,
+        proxy_configured: !!PROXY_URL
+      });
     }
   });
 
@@ -185,6 +142,7 @@ function startSinglePortServer() {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
         },
+        httpsAgent: proxyAgent,
         timeout: 30000
       });
       res.json(response.data);
@@ -205,6 +163,7 @@ function startSinglePortServer() {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
         },
+        httpsAgent: proxyAgent,
         timeout: 30000
       });
       res.json(response.data);
@@ -225,6 +184,7 @@ function startSinglePortServer() {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
         },
+        httpsAgent: proxyAgent,
         responseType: 'stream',
         timeout: 30000
       });
