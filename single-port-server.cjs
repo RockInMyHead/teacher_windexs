@@ -95,6 +95,36 @@ function startSinglePortServer() {
     });
   });
 
+  // Test proxy connection
+  app.get('/api/test-proxy', async (req, res) => {
+    console.log('🧪 Тестирование прокси соединения...');
+    console.log('🔍 Прокси URL:', PROXY_URL.replace(/:([^:]+)@/, ':***@'));
+    
+    try {
+      // Тестируем прокси на простом запросе
+      const response = await axios.get('https://httpbin.org/ip', {
+        httpsAgent: proxyAgent,
+        timeout: 10000
+      });
+      
+      console.log('✅ Прокси работает! IP:', response.data.origin);
+      res.json({
+        success: true,
+        message: 'Proxy is working',
+        proxy_ip: response.data.origin,
+        proxy_url: PROXY_URL.replace(/:([^:]+)@/, ':***@')
+      });
+    } catch (error) {
+      console.error('❌ Прокси НЕ работает:', error.message);
+      res.status(500).json({
+        success: false,
+        message: 'Proxy connection failed',
+        error: error.message,
+        proxy_url: PROXY_URL.replace(/:([^:]+)@/, ':***@')
+      });
+    }
+  });
+
   // OpenAI API routes
   app.get('/api/models', async (req, res) => {
     console.log('📋 Запрос к /api/models получен');
@@ -108,6 +138,7 @@ function startSinglePortServer() {
     }
 
     console.log('🔑 API ключ найден, делаем запрос к OpenAI через прокси...');
+    console.log('🔍 Прокси агент:', proxyAgent.proxy.href);
 
     try {
       const response = await axios.get('https://api.openai.com/v1/models', {
@@ -123,11 +154,17 @@ function startSinglePortServer() {
 
     } catch (error) {
       console.error('❌ Ошибка запроса к OpenAI:', error.response?.status, error.message);
+      
+      // Логируем детали ошибки
+      if (error.response?.data) {
+        console.error('📄 Детали ошибки от OpenAI:', JSON.stringify(error.response.data, null, 2));
+      }
 
       res.status(500).json({
         error: 'OpenAI API error',
         status: error.response?.status,
         message: error.message,
+        details: error.response?.data,
         key_loaded: !!process.env.OPENAI_API_KEY,
         proxy_configured: !!PROXY_URL
       });
