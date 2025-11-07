@@ -82,6 +82,11 @@ function startSinglePortServer() {
   console.log(`   Port: ${proxyConfig.port}`);
   console.log(`   Auth: ${proxyConfig.auth ? '✅ Да' : '❌ Нет'}`);
 
+  // Устанавливаем переменные окружения для прокси
+  process.env.HTTP_PROXY = PROXY_URL;
+  process.env.HTTPS_PROXY = PROXY_URL;
+  console.log(`   HTTP_PROXY: ${process.env.HTTP_PROXY ? '✅ Установлена' : '❌ Нет'}`);
+
   // Middleware
   app.use(cors());
   app.use(express.json({ limit: '10mb' }));
@@ -162,17 +167,25 @@ function startSinglePortServer() {
     console.log('🔍 Прокси:', `${proxyConfig.host}:${proxyConfig.port}`);
 
     try {
+      // Сначала попробуем простой тест прокси через httpsAgent
+      console.log('🧪 Тестируем прокси соединение через httpsAgent...');
+      const testResponse = await axios.get('https://httpbin.org/ip', {
+        httpsAgent: proxyAgent,
+        timeout: 5000
+      });
+      console.log('✅ Прокси тест прошел! IP:', testResponse.data.origin);
+
+      // Теперь основной запрос к OpenAI через httpsAgent
+      console.log('🚀 Отправляем запрос к OpenAI через httpsAgent...');
       const response = await axios.get('https://api.openai.com/v1/models', {
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'User-Agent': 'curl/7.68.0', // Имитируем curl
+          'User-Agent': 'curl/7.68.0',
           'Accept': '*/*'
         },
-        proxy: proxyConfig,
+        httpsAgent: proxyAgent,
         timeout: 30000,
-        // Отключаем автоматическое сжатие
         decompress: true,
-        // Не добавляем лишние заголовки
         validateStatus: (status) => status < 500
       });
 
@@ -181,10 +194,12 @@ function startSinglePortServer() {
 
     } catch (error) {
       console.error('❌ Ошибка запроса к OpenAI:', error.response?.status, error.message);
-      
+
       // Логируем детали ошибки
       if (error.response?.data) {
         console.error('📄 Детали ошибки от OpenAI:', JSON.stringify(error.response.data, null, 2));
+      } else {
+        console.error('📄 Нет данных в ответе ошибки');
       }
 
       res.status(500).json({
@@ -193,7 +208,8 @@ function startSinglePortServer() {
         message: error.message,
         details: error.response?.data,
         key_loaded: !!process.env.OPENAI_API_KEY,
-        proxy_configured: !!PROXY_URL
+        proxy_configured: !!PROXY_URL,
+        timeout: error.code === 'ECONNABORTED' ? 'Connection timeout' : null
       });
     }
   });
@@ -208,7 +224,7 @@ function startSinglePortServer() {
           'User-Agent': 'curl/7.68.0',
           'Accept': '*/*'
         },
-        proxy: proxyConfig,
+        httpsAgent: proxyAgent,
         timeout: 30000,
         decompress: true,
         validateStatus: (status) => status < 500
@@ -233,7 +249,7 @@ function startSinglePortServer() {
           'User-Agent': 'curl/7.68.0',
           'Accept': '*/*'
         },
-        proxy: proxyConfig,
+        httpsAgent: proxyAgent,
         timeout: 30000,
         decompress: true,
         validateStatus: (status) => status < 500
@@ -258,7 +274,7 @@ function startSinglePortServer() {
           'User-Agent': 'curl/7.68.0',
           'Accept': '*/*'
         },
-        proxy: proxyConfig,
+        httpsAgent: proxyAgent,
         responseType: 'stream',
         timeout: 30000,
         decompress: true,
