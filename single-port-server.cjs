@@ -55,6 +55,7 @@ function startSinglePortServer() {
   // Настраиваем middleware
   const cors = require('cors');
   const axios = require('axios');
+  const https = require('https');
 
   // Проверяем что прокси настроен (обязательно)
   const PROXY_URL = process.env.PROXY_URL;
@@ -117,13 +118,95 @@ function startSinglePortServer() {
     });
   });
 
+  // Test proxy connection with native Node.js
+  app.get('/api/test-proxy-native', async (req, res) => {
+    console.log('🧪 Тестирование прокси через нативный Node.js https...');
+
+    return new Promise((resolve) => {
+      const proxyUrl = new URL(PROXY_URL);
+      const options = {
+        hostname: proxyUrl.hostname,
+        port: proxyUrl.port,
+        path: 'https://httpbin.org/ip',
+        method: 'GET',
+        headers: {
+          'Proxy-Authorization': 'Basic ' + Buffer.from(`${proxyUrl.username}:${proxyUrl.password}`).toString('base64'),
+          'User-Agent': 'Node.js'
+        }
+      };
+
+      const request = https.request(options, (response) => {
+        let data = '';
+        response.on('data', (chunk) => {
+          data += chunk;
+        });
+
+        response.on('end', () => {
+          try {
+            const parsed = JSON.parse(data);
+            console.log('✅ Нативный прокси тест прошел! IP:', parsed.origin);
+            resolve(res.json({
+              success: true,
+              message: 'Native proxy test successful',
+              proxy_ip: parsed.origin,
+              method: 'native-node-https'
+            }));
+          } catch (e) {
+            console.log('❌ Ошибка парсинга ответа:', e.message);
+            resolve(res.status(500).json({
+              success: false,
+              message: 'Response parse error',
+              error: e.message,
+              raw_data: data.substring(0, 200) + '...'
+            }));
+          }
+        });
+      });
+
+      request.on('error', (error) => {
+        console.log('❌ Нативный прокси тест провалился:', error.message);
+        resolve(res.status(500).json({
+          success: false,
+          message: 'Native proxy test failed',
+          error: error.message,
+          method: 'native-node-https'
+        }));
+      });
+
+      request.setTimeout(10000, () => {
+        console.log('❌ Нативный прокси тест: таймаут');
+        request.destroy();
+        resolve(res.status(500).json({
+          success: false,
+          message: 'Native proxy timeout',
+          method: 'native-node-https'
+        }));
+      });
+
+      request.end();
+    });
+  });
+
   // Test proxy connection
   app.get('/api/test-proxy', async (req, res) => {
     console.log('🧪 Тестирование прокси соединения через axios.defaults.proxy...');
     console.log('🔍 Прокси:', `${proxyConfig.host}:${proxyConfig.port}`);
 
     try {
-      // Тестируем прокси через глобальную конфигурацию axios
+      // Сначала тест БЕЗ прокси
+      console.log('🔍 Тестируем прямое соединение...');
+      try {
+        const directResponse = await axios.get('https://httpbin.org/ip', {
+          timeout: 5000,
+          proxy: false
+        });
+        console.log('✅ Прямое соединение: IP =', directResponse.data.origin);
+      } catch (directError) {
+        console.log('❌ Прямое соединение не работает:', directError.message);
+      }
+
+      // Теперь тест прокси
+      console.log('🔍 Тестируем прокси соединение...');
       const response = await axios.get('https://httpbin.org/ip', {
         timeout: 10000
       });
@@ -133,6 +216,7 @@ function startSinglePortServer() {
         success: true,
         message: 'Proxy is working',
         proxy_ip: response.data.origin,
+        direct_test: 'completed',
         proxy_config: `${proxyConfig.host}:${proxyConfig.port}`,
         method: 'axios.defaults.proxy'
       });
@@ -147,7 +231,8 @@ function startSinglePortServer() {
         error: error.message,
         details: error.response?.data,
         proxy_config: `${proxyConfig.host}:${proxyConfig.port}`,
-        method: 'axios.defaults.proxy'
+        method: 'axios.defaults.proxy',
+        timeout: error.code === 'ECONNABORTED' ? 'Connection timeout' : null
       });
     }
   });
@@ -168,7 +253,25 @@ function startSinglePortServer() {
     console.log('🔍 Прокси:', `${proxyConfig.host}:${proxyConfig.port}`);
 
     try {
-      // Сначала попробуем простой тест прокси через глобальную конфигурацию
+      // Сначала попробуем тест БЕЗ прокси
+      console.log('🧪 Тестируем соединение БЕЗ прокси...');
+      try {
+        const directResponse = await axios.get('https://httpbin.org/ip', {
+          timeout: 5000,
+          proxy: false  // Отключаем прокси для этого запроса
+        });
+        console.log('✅ Прямое соединение работает! IP:', directResponse.data.origin);
+      } catch (directError) {
+        console.log('❌ Даже прямое соединение не работает:', directError.message);
+        console.log('🌐 Сетевая проблема на сервере!');
+        return res.status(500).json({
+          error: 'Network connectivity issue',
+          message: 'Even direct connections are failing',
+          details: directError.message
+        });
+      }
+
+      // Теперь тест прокси
       console.log('🧪 Тестируем прокси соединение через axios.defaults.proxy...');
       const testResponse = await axios.get('https://httpbin.org/ip', {
         timeout: 5000
