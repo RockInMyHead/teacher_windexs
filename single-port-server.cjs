@@ -74,56 +74,95 @@ function startSinglePortServer() {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
   });
 
+  // Diagnostic route
+  app.get('/api/diagnostic', (req, res) => {
+    res.json({
+      timestamp: new Date().toISOString(),
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        PORT: process.env.PORT,
+        PROXY_PORT: process.env.PROXY_PORT
+      },
+      api_key: {
+        loaded: !!process.env.OPENAI_API_KEY,
+        prefix: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.substring(0, 20) + '...' : null
+      },
+      proxy: {
+        configured: !!process.env.PROXY_URL,
+        url: process.env.PROXY_URL ? process.env.PROXY_URL.replace(/:([^:]+)@/, ':***@') : null
+      }
+    });
+  });
+
   // OpenAI API routes
   app.get('/api/models', async (req, res) => {
+    console.log('📋 Запрос к /api/models получен');
+
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('❌ OPENAI_API_KEY не найден в переменных окружения');
+      return res.status(500).json({
+        error: 'API key not configured',
+        details: 'OPENAI_API_KEY is missing'
+      });
+    }
+
+    console.log('🔑 API ключ найден, делаем запрос к OpenAI...');
+
     try {
-      // Пытаемся без прокси сначала
-      console.log('📋 Получение моделей OpenAI...');
+      // Сначала пробуем через прокси
+      console.log('🌐 Пробуем запрос через прокси...');
       const response = await axios.get('https://api.openai.com/v1/models', {
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
         },
-        // Пока без прокси для тестирования
-        timeout: 10000,
+        proxy: {
+          host: '45.147.180.58',
+          port: 8000,
+          auth: {
+            username: 'pb3jms',
+            password: '85pNLX'
+          }
+        },
+        httpsAgent: proxyAgent,
+        timeout: 10000
       });
+
+      console.log('✅ Успешный ответ от OpenAI через прокси');
       res.json(response.data);
-    } catch (error) {
-      console.error('Models API error:', error.message);
-      console.error('Status:', error.response?.status);
-      
-      // Если напрямую не работает, пробуем через прокси
-      if (error.response?.status === 429 || error.response?.status === 403) {
-        try {
-          console.log('🔄 Повторная попытка через прокси...');
-          const response = await axios.get('https://api.openai.com/v1/models', {
-            headers: {
-              'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-            },
-            proxy: {
-              host: '45.147.180.58',
-              port: 8000,
-              auth: {
-                username: 'pb3jms',
-                password: '85pNLX'
-              }
-            },
-            httpsAgent: proxyAgent,
-            timeout: 10000,
-          });
-          res.json(response.data);
-          return;
-        } catch (proxyError) {
-          console.error('Proxy also failed:', proxyError.message);
-        }
+
+    } catch (proxyError) {
+      console.error('❌ Ошибка прокси:', proxyError.response?.status, proxyError.message);
+
+      // Если прокси не работает, пробуем напрямую (только для диагностики)
+      console.log('🔄 Пробуем запрос напрямую к OpenAI...');
+      try {
+        const directResponse = await axios.get('https://api.openai.com/v1/models', {
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          },
+          timeout: 10000
+        });
+
+        console.log('✅ Успешный прямой ответ от OpenAI (прокси не нужен)');
+        res.json(directResponse.data);
+
+      } catch (directError) {
+        console.error('❌ Прямой запрос тоже failed:', directError.response?.status, directError.message);
+
+        res.status(500).json({
+          error: 'OpenAI API unavailable',
+          proxy_error: {
+            status: proxyError.response?.status,
+            message: proxyError.message
+          },
+          direct_error: {
+            status: directError.response?.status,
+            message: directError.message
+          },
+          key_loaded: !!process.env.OPENAI_API_KEY,
+          proxy_url: process.env.PROXY_URL
+        });
       }
-      
-      res.status(error.response?.status || 500).json({
-        error: 'Internal server error',
-        details: error.message,
-        status: error.response?.status,
-        key_loaded: !!process.env.OPENAI_API_KEY,
-        tried_proxy: true
-      });
     }
   });
 
