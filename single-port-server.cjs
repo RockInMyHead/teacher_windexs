@@ -10,6 +10,9 @@ require('dotenv').config(); // Загружаем переменные окру�
 const express = require('express');
 const path = require('path');
 const { spawn } = require('child_process');
+const { exec } = require('child_process');
+const util = require('util');
+const execAsync = util.promisify(exec);
 
 console.log('🚀 Запуск TRUE Single Port Server (ТОЛЬКО ПОРТ 1031)');
 console.log('================================================');
@@ -85,9 +88,45 @@ function startSinglePortServer() {
   process.env.HTTPS_PROXY = PROXY_URL;
   console.log(`   HTTP_PROXY: ${process.env.HTTP_PROXY ? '✅ Установлена' : '❌ Нет'}`);
 
-  // Устанавливаем глобальную конфигурацию axios для прокси
-  axios.defaults.proxy = proxyConfig;
+  // Создаем axios instance с прокси конфигурацией
+  const axiosWithProxy = axios.create({
+    proxy: proxyConfig,
+    timeout: 30000
+  });
   console.log(`   Axios proxy: ✅ Настроен`);
+
+  // Helper function to make curl requests with proxy
+  async function curlWithProxy(url, options = {}) {
+    const method = options.method || 'GET';
+    const headers = options.headers || {};
+    const data = options.data;
+
+    let curlCommand = `curl -s -X ${method}`;
+
+    // Add proxy
+    curlCommand += ` --proxy ${PROXY_URL}`;
+
+    // Add headers
+    Object.entries(headers).forEach(([key, value]) => {
+      curlCommand += ` -H "${key}: ${value}"`;
+    });
+
+    // Add data for POST requests
+    if (data && (method === 'POST' || method === 'PUT')) {
+      curlCommand += ` -d '${JSON.stringify(data)}'`;
+    }
+
+    // Add URL
+    curlCommand += ` "${url}"`;
+
+    console.log('🔧 Executing curl command:', curlCommand.replace(/(-H "Authorization: Bearer [^"]+)"/, '$1 [HIDDEN]"'));
+    // Execute curl command
+    const { stdout, stderr } = await execAsync(curlCommand);
+    if (stderr) {
+      console.error('Curl stderr:', stderr);
+    }
+    return stdout;
+  }
 
   // Middleware
   app.use(cors());
@@ -189,7 +228,7 @@ function startSinglePortServer() {
 
   // Test proxy connection
   app.get('/api/test-proxy', async (req, res) => {
-    console.log('🧪 Тестирование прокси соединения через axios.defaults.proxy...');
+    console.log('🧪 Тестирование прокси соединения через axiosWithProxy...');
     console.log('🔍 Прокси:', `${proxyConfig.host}:${proxyConfig.port}`);
 
     try {
@@ -206,33 +245,27 @@ function startSinglePortServer() {
       }
 
       // Теперь тест прокси
-      console.log('🔍 Тестируем прокси соединение...');
-      const response = await axios.get('https://httpbin.org/ip', {
-        timeout: 10000
-      });
+      console.log('🔍 Тестируем прокси соединение через curl...');
+      const curlOutput = await curlWithProxy('https://httpbin.org/ip');
+      const response = JSON.parse(curlOutput);
 
-      console.log('✅ Прокси работает! IP:', response.data.origin);
+      console.log('✅ Прокси работает! IP:', response.origin);
       res.json({
         success: true,
         message: 'Proxy is working',
-        proxy_ip: response.data.origin,
+        proxy_ip: response.origin,
         direct_test: 'completed',
         proxy_config: `${proxyConfig.host}:${proxyConfig.port}`,
-        method: 'axios.defaults.proxy'
+        method: 'curlWithProxy'
       });
     } catch (error) {
       console.error('❌ Прокси НЕ работает:', error.message);
-      if (error.response?.data) {
-        console.error('📄 Детали:', error.response.data);
-      }
       res.status(500).json({
         success: false,
         message: 'Proxy connection failed',
         error: error.message,
-        details: error.response?.data,
         proxy_config: `${proxyConfig.host}:${proxyConfig.port}`,
-        method: 'axios.defaults.proxy',
-        timeout: error.code === 'ECONNABORTED' ? 'Connection timeout' : null
+        method: 'curlWithProxy'
       });
     }
   });
@@ -272,27 +305,24 @@ function startSinglePortServer() {
       }
 
       // Теперь тест прокси
-      console.log('🧪 Тестируем прокси соединение через axios.defaults.proxy...');
-      const testResponse = await axios.get('https://httpbin.org/ip', {
-        timeout: 5000
-      });
-      console.log('✅ Прокси тест прошел! IP:', testResponse.data.origin);
+      console.log('🧪 Тестируем прокси соединение через curl...');
+      const testOutput = await curlWithProxy('https://httpbin.org/ip');
+      const testResponse = JSON.parse(testOutput);
+      console.log('✅ Прокси тест прошел! IP:', testResponse.origin);
 
-      // Теперь основной запрос к OpenAI через глобальную конфигурацию
-      console.log('🚀 Отправляем запрос к OpenAI через axios.defaults.proxy...');
-      const response = await axios.get('https://api.openai.com/v1/models', {
+      // Теперь основной запрос к OpenAI через прокси
+      console.log('🚀 Отправляем запрос к OpenAI через curl...');
+      const responseOutput = await curlWithProxy('https://api.openai.com/v1/models', {
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
           'User-Agent': 'curl/7.68.0',
           'Accept': '*/*'
-        },
-        timeout: 30000,
-        decompress: true,
-        validateStatus: (status) => status < 500
+        }
       });
 
       console.log('✅ Успешный ответ от OpenAI через прокси');
-      res.json(response.data);
+      const response = JSON.parse(responseOutput);
+      res.json(response);
 
     } catch (error) {
       console.error('❌ Ошибка запроса к OpenAI:', error.response?.status, error.message);
@@ -319,21 +349,21 @@ function startSinglePortServer() {
   // Chat completions
   app.post('/api/chat/completions', async (req, res) => {
     try {
-      const response = await axios.post('https://api.openai.com/v1/chat/completions', req.body, {
+      const responseOutput = await curlWithProxy('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
           'User-Agent': 'curl/7.68.0',
           'Accept': '*/*'
         },
-        timeout: 30000,
-        decompress: true,
-        validateStatus: (status) => status < 500
+        data: req.body
       });
-      res.json(response.data);
+      const response = JSON.parse(responseOutput);
+      res.json(response);
     } catch (error) {
       console.error('Chat completions error:', error);
-      res.status(error.response?.status || 500).json({
+      res.status(500).json({
         error: 'OpenAI API error',
         details: error.message
       });
@@ -343,21 +373,21 @@ function startSinglePortServer() {
   // Image generations
   app.post('/api/images/generations', async (req, res) => {
     try {
-      const response = await axios.post('https://api.openai.com/v1/images/generations', req.body, {
+      const responseOutput = await curlWithProxy('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
           'User-Agent': 'curl/7.68.0',
           'Accept': '*/*'
         },
-        timeout: 30000,
-        decompress: true,
-        validateStatus: (status) => status < 500
+        data: req.body
       });
-      res.json(response.data);
+      const response = JSON.parse(responseOutput);
+      res.json(response);
     } catch (error) {
       console.error('Images generations error:', error);
-      res.status(error.response?.status || 500).json({
+      res.status(500).json({
         error: 'OpenAI Images API error',
         details: error.message
       });
@@ -367,24 +397,42 @@ function startSinglePortServer() {
   // Text-to-Speech
   app.post('/api/audio/speech', async (req, res) => {
     try {
-      const response = await axios.post('https://api.openai.com/v1/audio/speech', req.body, {
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'curl/7.68.0',
-          'Accept': '*/*'
-        },
-        responseType: 'stream',
-        timeout: 30000,
-        decompress: true,
-        validateStatus: (status) => status < 500
-      });
+      // For TTS, we need to stream the response, so we'll use spawn instead of exec
+      const curlArgs = [
+        '-s', '-X', 'POST',
+        '--proxy', PROXY_URL,
+        '-H', `Authorization: Bearer ${process.env.OPENAI_API_KEY}`,
+        '-H', 'Content-Type: application/json',
+        '-H', 'User-Agent: curl/7.68.0',
+        '-H', 'Accept: */*',
+        '-d', JSON.stringify(req.body),
+        'https://api.openai.com/v1/audio/speech'
+      ];
+
+      const curlProcess = spawn('curl', curlArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
 
       res.setHeader('Content-Type', 'audio/mpeg');
-      response.data.pipe(res);
+
+      curlProcess.stdout.pipe(res);
+
+      curlProcess.on('error', (error) => {
+        console.error('TTS curl error:', error);
+        if (!res.headersSent) {
+          res.status(500).json({
+            error: 'OpenAI TTS API error',
+            details: error.message
+          });
+        }
+      });
+
+      curlProcess.on('close', (code) => {
+        if (code !== 0) {
+          console.error('TTS curl process exited with code:', code);
+        }
+      });
     } catch (error) {
       console.error('TTS error:', error);
-      res.status(error.response?.status || 500).json({
+      res.status(500).json({
         error: 'OpenAI TTS API error',
         details: error.message
       });
