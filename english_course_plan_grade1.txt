@@ -1,0 +1,75 @@
+ПОЛНЫЙ ГОДОВОЙ ПЛАН КУРСА АНГЛИЙСКОГО ЯЗЫКА ДЛЯ 1 КЛАССА
+========================================================
+
+Учебный год: 34 недели
+Формат: 1 урок в неделю (35–40 минут)
+Тип программы: базовый курс начального уровня (Beginner, A0)
+Дата генерации: 11.11.2025
+
+--------------------------------------------------------
+СТРУКТУРА УРОКА
+--------------------------------------------------------
+1. Greeting (приветствие, повторение)
+2. Warm-up (разминка: песня, движение)
+3. New Material (новая лексика/фразы)
+4. Practice (упражнения, диалоги, игры)
+5. Wrap-up (закрепление, мини-тест)
+
+--------------------------------------------------------
+1 ЧЕТВЕРТЬ — ЗНАКОМСТВО И АЛФАВИТ (1–9 УРОКИ)
+--------------------------------------------------------
+1. Hello! — Hello, Hi, Goodbye, Friend — песня “Hello Song”
+2. What’s your name? — My name is..., You, Me — игра “Find your name”
+3. Alphabet A–G — Apple, Ball, Cat — песня “ABC Song Part 1”
+4. Alphabet H–N — Dog, Fish, Hat — карточки и произношение
+5. Alphabet O–Z — Zebra, Sun, Kite — “Find the letter”
+6. Numbers 1–5 — One, Two, Three, Four, Five — песня “Five Little Ducks”
+7. Numbers 6–10 — Six–Ten — игра “Count and Clap”
+8. Colours (1) — Red, Blue, Green, Yellow — раскраска по цветам
+9. Colours (2) — Black, White, Orange, Pink, Purple — игра “Color Hunt”
+
+--------------------------------------------------------
+2 ЧЕТВЕРТЬ — МИР ВОКРУГ МЕНЯ (10–17 УРОКИ)
+--------------------------------------------------------
+10. My Toys — Ball, Doll, Car, Train, Teddy Bear — песня “My Toys”
+11. My Family (1) — Mother, Father, Sister, Brother — песня “Finger Family”
+12. My Family (2) — Grandma, Grandpa, Baby — диалог “This is my mother”
+13. Animals (1) — Cat, Dog, Fish, Bird — песня “Old MacDonald”
+14. Animals (2) — Lion, Tiger, Elephant, Monkey — игра “Guess the animal”
+15. Body (1) — Head, Shoulders, Knees, Toes — песня “Head and Shoulders”
+16. Body (2) — Eyes, Nose, Mouth, Ears — игра “Touch your...”
+17. Revision — повторение всех тем, викторина
+
+--------------------------------------------------------
+3 ЧЕТВЕРТЬ — ПОВСЕДНЕВНАЯ ЖИЗНЬ (18–26 УРОКИ)
+--------------------------------------------------------
+18. Clothes (1) — Hat, Dress, Shirt, Shoes — песня “Put On Your Clothes”
+19. Clothes (2) — Blue hat, Red dress — игра “Who’s wearing...?”
+20. Food (1) — Apple, Banana, Milk, Bread — ролевые фразы “I like...”
+21. Food (2) — I like / I don’t like — песня “Do You Like Broccoli Ice Cream?”
+22. School Things — Book, Pen, Bag, Desk — игра “What’s in my bag?”
+23. My Classroom — Sit down, Stand up, Open your book — “Simon Says”
+24. Weather (1) — Sunny, Rainy, Cloudy, Snowy — песня “What’s the weather like?”
+25. Weather (2) — Hot, Cold, Warm — диалог “It’s sunny today!”
+26. Seasons — Winter, Spring, Summer, Autumn — “Find the season”
+
+--------------------------------------------------------
+4 ЧЕТВЕРТЬ — ОБОБЩЕНИЕ (27–34 УРОКИ)
+--------------------------------------------------------
+27. Transport (1) — Car, Bus, Plane, Bike — песня “The Wheels on the Bus”
+28. Transport (2) — On, In, Under — игра “Where is the car?”
+29. My House (1) — Kitchen, Bedroom, Bathroom, Living room — песня “My House”
+30. My House (2) — Bed, Table, Chair — “Where’s the...?”
+31. Actions (1) — Run, Jump, Sing, Dance — “Do the action!”
+32. Actions (2) — Sit down, Stand up, Clap your hands — повторение команд
+33. Review — итоговое повторение всех тем, викторина
+34. Celebration — Goodbye, Thank you, Happy — праздничная игра
+
+--------------------------------------------------------
+РЕКОМЕНДАЦИИ ДЛЯ AI-УЧИТЕЛЯ
+--------------------------------------------------------
+- Автоматическая озвучка лексики (британский акцент)
+- Мини-игры и проверки после каждого урока
+- Подсчёт прогресса: количество слов, успешность тестов
+- Review Mode каждые 5 уроков
+- Поддержка мультимедиа: аудио, видео, карточки, песни

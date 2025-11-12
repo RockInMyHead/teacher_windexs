@@ -4,10 +4,11 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Brain, Send, User, ArrowLeft, MessageCircle, Upload, FileText, Image, File, X, Camera, Volume2, VolumeX, Mic, MicOff, Trash2 } from 'lucide-react';
+import { Brain, Send, User, MessageCircle, Upload, FileText, Image, File, X, Camera, Volume2, VolumeX, Mic, MicOff, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { OpenAITTS, isTTSAvailable } from '@/lib/openaiTTS';
+import { runAdaptiveAssessment, AssessmentResult, AssessmentQuestion } from '@/utils/adaptiveAssessment';
 
 // Global types for Speech Recognition API
 interface SpeechRecognitionEvent extends Event {
@@ -43,17 +44,7 @@ interface SpeechRecognition extends EventTarget {
   onend: ((event: Event) => void) | null;
 }
 
-declare var SpeechRecognition: {
-  prototype: SpeechRecognition;
-  new(): SpeechRecognition;
-};
 
-declare global {
-  interface Window {
-    SpeechRecognition: typeof SpeechRecognition;
-    webkitSpeechRecognition: typeof SpeechRecognition;
-  }
-}
 
 interface Message {
   id: string;
@@ -64,6 +55,7 @@ interface Message {
 }
 
 
+
 const Chat = () => {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -71,6 +63,15 @@ const Chat = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  
+  // Adaptive assessment states
+  const [isInAdaptiveMode, setIsInAdaptiveMode] = useState(false);
+  const [assessmentState, setAssessmentState] = useState<'initial' | 'collecting_grade' | 'collecting_topic' | 'in_progress' | 'completed'>('initial');
+  const [classGrade, setClassGrade] = useState('');
+  const [lastTopic, setLastTopic] = useState('');
+  const [currentAssessmentQuestion, setCurrentAssessmentQuestion] = useState<AssessmentQuestion | null>(null);
+  const [assessmentResult, setAssessmentResult] = useState<AssessmentResult | null>(null);
+  const [questionCount, setQuestionCount] = useState(0);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -85,12 +86,15 @@ const Chat = () => {
   const [totalSentences, setTotalSentences] = useState<number>(0);
   const [isGeneratingTTS, setIsGeneratingTTS] = useState(false);
   const [showSphere, setShowSphere] = useState(false);
+  const [isAudioTaskActive, setIsAudioTaskActive] = useState(false);
+  const [audioTaskText, setAudioTaskText] = useState('');
+  const [isRecordingAudioTask, setIsRecordingAudioTask] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<any>(null);
   const ttsContinueRef = useRef<boolean>(true);
   const audioContextRef = useRef<AudioContext | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -176,25 +180,25 @@ const Chat = () => {
     console.log('🎤 Initializing Speech Recognition...');
 
     // Try different ways to access Speech Recognition API
-    let SpeechRecognition = null;
+    let SpeechRecognitionConstructor: any = null;
 
-    if ('SpeechRecognition' in window) {
-      SpeechRecognition = window.SpeechRecognition;
+    if ((window as any).SpeechRecognition) {
+      SpeechRecognitionConstructor = (window as any).SpeechRecognition;
       console.log('✅ Found SpeechRecognition');
-    } else if ('webkitSpeechRecognition' in window) {
-      SpeechRecognition = window.webkitSpeechRecognition;
+    } else if ((window as any).webkitSpeechRecognition) {
+      SpeechRecognitionConstructor = (window as any).webkitSpeechRecognition;
       console.log('✅ Found webkitSpeechRecognition');
-    } else if ('mozSpeechRecognition' in window) {
-      SpeechRecognition = window.mozSpeechRecognition;
+    } else if ((window as any).mozSpeechRecognition) {
+      SpeechRecognitionConstructor = (window as any).mozSpeechRecognition;
       console.log('✅ Found mozSpeechRecognition');
-    } else if ('msSpeechRecognition' in window) {
-      SpeechRecognition = window.msSpeechRecognition;
+    } else if ((window as any).msSpeechRecognition) {
+      SpeechRecognitionConstructor = (window as any).msSpeechRecognition;
       console.log('✅ Found msSpeechRecognition');
     }
 
-    if (SpeechRecognition) {
+    if (SpeechRecognitionConstructor) {
       try {
-        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current = new SpeechRecognitionConstructor();
         recognitionRef.current.continuous = false;
         recognitionRef.current.interimResults = false;
         recognitionRef.current.lang = 'ru-RU';
@@ -642,19 +646,9 @@ const Chat = () => {
             startContinuousSound(500, 1800);
 
             // Get AI response using GPT-3.5-turbo for faster response with fallback
-            let response;
-            try {
-              response = await fetch(`${window.location.origin}/api/chat/completions`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  model: 'gpt-3.5-turbo',
-                  messages: [
-                    {
-                      role: 'system',
-                      content: `Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Давайте краткие, но полные объяснения.
+
+            // Создать персонализированный системный промпт для голосового чата
+            let voiceSystemPrompt = `Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Давайте краткие, но полные объяснения.
 
 ВАЖНО: Пишите ВСЕ числа, даты, математические знаки и операции БУКВАМИ, а не цифрами!
 
@@ -685,7 +679,30 @@ const Chat = () => {
 - Используйте фразы типа "как мы только что обсуждали", "продолжая нашу тему", "на основе предыдущего объяснения"
 - Отвечайте в контексте всего разговора, а не изолированно
 
-Память и контекст: История последних 30 сообщений передается вам. ОБЯЗАТЕЛЬНО используйте её!`,
+СТРУКТУРА ГОЛОСОВОГО УРОКА:
+Голосовой чат НЕ поддерживает интерактивные тесты, поэтому:
+- Задавайте устные вопросы и ждите ответов ученика
+- Давайте краткие объяснения (2-3 предложения)
+- Проводите беседу в формате "вопрос-ответ"
+- Поддерживайте разговорный стиль
+- После каждого объяснения спрашивайте: "Понятно? Есть вопросы?"
+
+Память и контекст: История последних 30 сообщений передается вам. ОБЯЗАТЕЛЬНО используйте её!`;
+
+
+            let response;
+            try {
+              response = await fetch(`${window.location.origin}/api/chat/completions`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'gpt-3.5-turbo',
+                  messages: [
+                    {
+                      role: 'system',
+                      content: voiceSystemPrompt,
                     },
                     ...messages.slice(-30).map(msg => ({ // Keep last 30 messages for teacher memory context
                       role: msg.role,
@@ -1214,24 +1231,18 @@ const Chat = () => {
   useEffect(() => {
     const checkApiKey = async () => {
       const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-      if (!apiKey) {
+      if (!apiKey || apiKey === 'your_openai_api_key_here') {
         setApiKeyStatus('invalid');
         return;
       }
 
+      // Проверяем доступность API через health endpoint сервера
       try {
-        // Make a minimal request to check if API key is valid
-        const response = await fetch(`${window.location.origin}/api/models`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-          },
-        });
-
+        const response = await fetch(`${window.location.origin}/health`);
         if (response.ok) {
+          // Если сервер отвечает, считаем что API ключ настроен
+          // (фактическая проверка происходит на стороне сервера)
           setApiKeyStatus('valid');
-        } else if (response.status === 401) {
-          setApiKeyStatus('invalid');
         } else {
           setApiKeyStatus('error');
         }
@@ -1243,6 +1254,71 @@ const Chat = () => {
 
     checkApiKey();
   }, []);
+
+  // Initialize chat with welcome message for new learning sessions
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const startParam = urlParams.get('start');
+    const modeParam = urlParams.get('mode');
+
+    if (startParam === 'true' && messages.length === 0) {
+      // Check if this is adaptive assessment mode
+      if (modeParam === 'adaptive') {
+        setIsInAdaptiveMode(true);
+        setAssessmentState('collecting_grade');
+        
+        const welcomeMessage: Message = {
+          id: `welcome-${Date.now()}`,
+          role: 'assistant',
+          content: 'Я проведу короткое интервью, чтобы понять твой уровень и составить план. Отвечай коротко. В каком ты классе учишься?',
+          timestamp: new Date(),
+          ttsPlayed: false
+        };
+        
+        setMessages([welcomeMessage]);
+      } else {
+        // Regular chat mode
+        const welcomeContent = 'Привет! Я ваш персональный AI-учитель. ' +
+          'Я готов помочь вам с обучением и ответить на любые вопросы!\n\n' +
+          'Расскажите, пожалуйста:\n1. В каком классе вы учитесь или в каком вузе?\n2. Какие темы вас интересуют?\n\n' +
+          'Я помогу вам разобраться с любыми вопросами и объяснить сложные темы просто и понятно.';
+
+        const welcomeMessage: Message = {
+          id: `welcome-${Date.now()}`,
+          role: 'assistant',
+          content: welcomeContent,
+          timestamp: new Date(),
+          ttsPlayed: false
+        };
+
+        setMessages([welcomeMessage]);
+      }
+    }
+  }, [messages.length]);
+
+  // Format assessment results for display
+  const formatAssessmentResults = (result: AssessmentResult): string => {
+    let text = '📊 **Результаты оценки**\n\n';
+    text += `✅ Класс: ${result.classGrade}\n`;
+    text += `📚 Последняя тема: ${result.lastTopic || 'Ничего'}\n`;
+    text += `🎯 Уровень: ${result.cluster}\n\n`;
+
+    text += '**Микро-профиль владения:**\n';
+    result.profile.forEach(p => {
+      const level = p.p === 1.0 ? '🟢 Отличное' : p.p === 0.7 ? '🟡 Хорошее' : p.p === 0.4 ? '🟠 Среднее' : '🔴 Слабое';
+      text += `• ${p.concept}: ${level} (${Math.round(p.p * 100)}%)\n`;
+    });
+
+    text += '\n**2-недельный план обучения:**\n';
+    result.plan2w.forEach(session => {
+      text += `\n**Сессия ${session.session}:**\n`;
+      text += `📋 Темы: ${session.targets.join(', ')}\n`;
+      text += `📊 Распределение: Повторение ${Math.round(session.mix.review * 100)}% | Слабые ${Math.round(session.mix.weak * 100)}% | Новое ${Math.round(session.mix.new * 100)}%\n`;
+    });
+
+    text += '\n🚀 Готовы начать обучение?';
+    return text;
+  };
 
   // Global keyboard shortcuts for TTS control
   useEffect(() => {
@@ -1260,23 +1336,97 @@ const Chat = () => {
   }, []);
 
 
-  const clearMemory = () => {
-    // Keep only the first system message, clear all user/assistant messages
-    setMessages(prev => prev.filter(msg => msg.role === 'system'));
-    // Stop any ongoing TTS and sounds
-    OpenAITTS.stop();
-    stopContinuousSound();
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current = null;
+  // Check if message contains audio task keywords
+  const checkForAudioTask = (message: string): { isAudioTask: boolean; taskText: string } => {
+    const audioTaskPatterns = [
+      /повторим?\s+все/i,
+      /повтори\s+за\s+мной/i,
+      /проговори/i,
+      /скажи\s+по-английски/i,
+      /произнеси/i,
+      /повтори\s+цвета/i,
+      /повтори\s+числа/i,
+      /давай\s+повторим/i,
+      /теперь\s+повторим/i,
+      /попробуем\s+снова/i
+    ];
+
+    const isAudioTask = audioTaskPatterns.some(pattern => pattern.test(message));
+    let taskText = '';
+
+    if (isAudioTask) {
+      // Extract the specific task from the message
+      if (message.includes('повтори')) {
+        const match = message.match(/повтори[^\n]*/i);
+        if (match) taskText = match[0];
+      } else if (message.includes('проговори')) {
+        const match = message.match(/проговори[^\n]*/i);
+        if (match) taskText = match[0];
+      } else if (message.includes('скажи')) {
+        const match = message.match(/скажи[^\n]*/i);
+        if (match) taskText = match[0];
+      } else {
+        taskText = 'Выполни задание голосом';
+      }
     }
 
-    ttsContinueRef.current = true;
-    setSpeakingMessageId(null);
-    setCurrentSentence(0);
-    setTotalSentences(0);
-    setIsGeneratingTTS(false);
+    return { isAudioTask, taskText };
   };
+
+  // Handle audio task recording
+  const startAudioTaskRecording = () => {
+    if (!('webkitSpeechRecognition' in window && 'SpeechRecognition' in window)) {
+      alert('Ваш браузер не поддерживает распознавание речи');
+      return;
+    }
+
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US'; // Listen for English speech
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => {
+      setIsRecordingAudioTask(true);
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      console.log('Audio task transcript:', transcript);
+      setInputMessage(transcript);
+      setIsAudioTaskActive(false);
+      setAudioTaskText('');
+      setIsRecordingAudioTask(false);
+      // Auto-send the message
+      setTimeout(() => {
+        sendMessage();
+      }, 100);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event.error);
+      setIsRecordingAudioTask(false);
+      alert('Ошибка распознавания речи. Попробуйте ещё раз.');
+    };
+
+    recognition.onend = () => {
+      setIsRecordingAudioTask(false);
+    };
+
+    recognition.start();
+  };
+
+  // Handle new assistant message to check for audio tasks
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.ttsPlayed) {
+      const { isAudioTask, taskText } = checkForAudioTask(lastMessage.content);
+      if (isAudioTask) {
+        setIsAudioTaskActive(true);
+        setAudioTaskText(taskText || 'Выполни задание голосом');
+      }
+    }
+  }, [messages]);
 
   const sendMessage = async () => {
     if ((!inputMessage.trim() && uploadedFiles.length === 0) || isLoading || isProcessingFile) return;
@@ -1320,18 +1470,102 @@ const Chat = () => {
     setUploadedFiles([]); // Clear uploaded files after sending
     setIsLoading(true);
 
-    try {
-      const response = await fetch(`${window.location.origin}/api/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: `Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Вы можете "разжевывать" сложные концепции, приводить примеры из реальной жизни, использовать аналогии и пошаговые объяснения.
+    // Handle adaptive assessment mode
+    if (isInAdaptiveMode) {
+      if (assessmentState === 'collecting_grade') {
+        setClassGrade(messageContent);
+        setAssessmentState('collecting_topic');
+        const topicQuestion: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: 'Что последним проходил(а) по английскому?',
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, topicQuestion]);
+        setIsLoading(false);
+        return;
+      } else if (assessmentState === 'collecting_topic') {
+        setLastTopic(messageContent);
+        setAssessmentState('in_progress');
+        setQuestionCount(0);
+        
+        // Start adaptive assessment
+        const startAssessment = async () => {
+          try {
+            const result = await runAdaptiveAssessment(
+              classGrade,
+              messageContent,
+              async (question: AssessmentQuestion, num: number, total: number) => {
+                // Show question
+                const questionMsg: Message = {
+                  id: (Date.now() + num).toString(),
+                  role: 'assistant',
+                  content: `Вопрос ${num}/${total}:\n\n${question.prompt}`,
+                  timestamp: new Date(),
+                };
+                setMessages(prev => [...prev, questionMsg]);
+                setCurrentAssessmentQuestion(question);
+                setQuestionCount(num);
+                setIsLoading(false); // Reset loading indicator after showing question
+
+                // Wait for user input
+                return new Promise<string>((resolve) => {
+                  // This will be resolved when user sends next message
+                  const resolver = (ans: string) => {
+                    resolve(ans);
+                    // @ts-ignore
+                    window._assessmentResolver = null;
+                  };
+                  // @ts-ignore
+                  window._assessmentResolver = resolver;
+                });
+              },
+              (progress) => {
+                console.log('Assessment progress:', progress);
+              }
+            );
+            
+            setAssessmentResult(result);
+            setAssessmentState('completed');
+            
+            // Show results
+            const resultsMsg: Message = {
+              id: (Date.now() + 1000).toString(),
+              role: 'assistant',
+              content: formatAssessmentResults(result),
+              timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, resultsMsg]);
+          } catch (error) {
+            console.error('Assessment error:', error);
+            const errorMsg: Message = {
+              id: (Date.now() + 999).toString(),
+              role: 'assistant',
+              content: 'Произошла ошибка при проведении интервью. Попробуем еще раз.',
+              timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, errorMsg]);
+            setAssessmentState('initial');
+          }
+          setIsLoading(false);
+        };
+        
+        startAssessment();
+        return;
+      } else if (assessmentState === 'in_progress' && currentAssessmentQuestion) {
+        // User answered the question
+        // @ts-ignore
+        if (window._assessmentResolver) {
+          // @ts-ignore
+          window._assessmentResolver(messageContent);
+        }
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    // Создать базовый системный промпт для чата
+    let systemPrompt = `Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Вы можете "разжевывать" сложные концепции, приводить примеры из реальной жизни, использовать аналогии и пошаговые объяснения.
 
 Особенности вашего стиля:
 - Объясняйте сложное простыми словами
@@ -1347,9 +1581,20 @@ const Chat = () => {
 - Помните, что обсуждалось ранее
 - Продолжайте логическую нить разговора
 - Избегайте повторений уже объясненного
-- Используйте фразы типа "как мы обсуждали ранее", "продолжая нашу тему", "на основе предыдущего объяснения"
+- Используйте фразы типа "как мы обсуждали ранее", "продолжая нашу тему", "на основе предыдущего объяснения"`;
 
-Помните: ваша цель - не просто дать ответ, а поддерживать непрерывный образовательный диалог!`,
+    try {
+      const response = await fetch(`${window.location.origin}/api/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt,
             },
             ...messages.slice(-29).map(msg => ({
               role: msg.role,
@@ -1360,7 +1605,7 @@ const Chat = () => {
               content: userMessage.content,
             },
           ],
-          max_tokens: 1000,
+          max_tokens: 2000,
           temperature: 0.7,
         }),
       });
@@ -1391,10 +1636,13 @@ const Chat = () => {
         console.error('Invalid OpenAI response:', data);
         throw new Error('Некорректный ответ от OpenAI');
       }
+
+      const aiContent = data.choices[0].message.content;
+      
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.choices[0].message.content,
+        content: aiContent,
         timestamp: new Date(),
       };
 
@@ -1505,14 +1753,6 @@ const Chat = () => {
           <div className="flex items-center justify-between gap-2">
             {/* Left side - Logo */}
             <div className="flex items-center gap-2 flex-shrink-0">
-              <Button
-                variant="ghost"
-                onClick={() => navigate('/courses')}
-                className="flex items-center gap-2 px-2"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span className="hidden sm:inline">Назад</span>
-              </Button>
               <div className="w-8 h-8 bg-gradient-to-r from-primary to-accent rounded-xl flex items-center justify-center">
                 <Brain className="w-4 h-4 text-white" />
               </div>
@@ -1583,6 +1823,7 @@ const Chat = () => {
                       </Avatar>
                     )}
 
+                    {/* Regular Message Bubble */}
                     <div
                       className={`max-w-[70%] rounded-lg px-4 py-2 ${
                         message.role === 'user'
@@ -1817,54 +2058,92 @@ const Chat = () => {
                 <Camera className="w-4 h-4" />
               </Button>
 
-                  <Input
-                    ref={inputRef}
-                    value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder="Задайте вопрос по любой учебной теме..."
-                    disabled={isLoading || isProcessingFile}
-                    className="flex-1"
-                  />
+                  {/* Audio Task UI */}
+                  {isAudioTaskActive ? (
+                    <div className="flex-1 bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                            <Mic className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-blue-900">🎯 Аудио-задание</p>
+                            <p className="text-sm text-blue-700">{audioTaskText}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={startAudioTaskRecording}
+                            disabled={isRecordingAudioTask || isLoading}
+                            className="bg-red-500 hover:bg-red-600 text-white animate-pulse"
+                            size="lg"
+                          >
+                          {isRecordingAudioTask ? (
+                            <>
+                              <Mic className="w-4 h-4 mr-2 animate-pulse" />
+                              Слушаю...
+                            </>
+                          ) : (
+                            <>
+                              <Mic className="w-4 h-4 mr-2" />
+                              🎙️ Выполнить задание
+                            </>
+                          )}
+                          </Button>
+                          <Button
+                            onClick={() => setIsAudioTaskActive(false)}
+                            disabled={isRecordingAudioTask || isLoading}
+                            variant="outline"
+                            size="lg"
+                            className="border-gray-300 hover:bg-gray-50"
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Отмена
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Input
+                        ref={inputRef}
+                        value={inputMessage}
+                        onChange={(e) => setInputMessage(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        placeholder="Задайте вопрос по любой учебной теме..."
+                        disabled={isLoading || isProcessingFile}
+                        className="flex-1"
+                      />
 
+                      {/* Voice Chat Button */}
+                      <Button
+                        variant={isVoiceChatActive ? "default" : "outline"}
+                        size="icon"
+                        onClick={startVoiceChat}
+                        disabled={!isTTSAvailable()}
+                        title={isVoiceChatActive ? "Остановить голосовое общение" : `Начать голосовое общение с AI Учителем${!('webkitSpeechRecognition' in window && 'SpeechRecognition' in window) ? ' (Браузер может не поддерживать распознавание речи)' : ''}`}
+                        className={isVoiceChatActive ? "bg-red-600 hover:bg-red-700 animate-pulse" : ""}
+                      >
+                        {isVoiceChatActive ? (
+                          isListening ? <Mic className="w-4 h-4 animate-pulse text-white" /> : <MicOff className="w-4 h-4" />
+                        ) : (
+                          <MessageCircle className="w-4 h-4" />
+                        )}
+                      </Button>
 
-                  {/* Voice Chat Button */}
-                  <Button
-                    variant={isVoiceChatActive ? "default" : "outline"}
-                    size="icon"
-                    onClick={startVoiceChat}
-                    disabled={!isTTSAvailable()}
-                    title={isVoiceChatActive ? "Остановить голосовое общение" : `Начать голосовое общение с AI Учителем${!('webkitSpeechRecognition' in window && 'SpeechRecognition' in window) ? ' (Браузер может не поддерживать распознавание речи)' : ''}`}
-                    className={isVoiceChatActive ? "bg-red-600 hover:bg-red-700 animate-pulse" : ""}
-                  >
-                    {isVoiceChatActive ? (
-                      isListening ? <Mic className="w-4 h-4 animate-pulse text-white" /> : <MicOff className="w-4 h-4" />
-                    ) : (
-                      <MessageCircle className="w-4 h-4" />
-                    )}
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={clearMemory}
-                    disabled={messages.length <= 1} // Disable if only system message
-                    title="Очистить память учителя"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-
-                  <Button
-                    onClick={sendMessage}
-                    disabled={(!inputMessage.trim() && uploadedFiles.length === 0) || isLoading || isProcessingFile}
-                    size="icon"
-                  >
-                {isProcessingFile ? (
-                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-              </Button>
+                      <Button
+                        onClick={sendMessage}
+                        disabled={(!inputMessage.trim() && uploadedFiles.length === 0) || isLoading || isProcessingFile}
+                        size="icon"
+                      >
+                        {isProcessingFile ? (
+                          <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </>
+                  )}
             </div>
           </CardContent>
         </Card>
@@ -1874,3 +2153,4 @@ const Chat = () => {
 };
 
 export default Chat;
+

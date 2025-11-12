@@ -9,6 +9,7 @@ import { Brain, ArrowLeft } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import { useLocation } from 'react-router-dom';
 
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -17,7 +18,11 @@ const Auth = () => {
   const [acceptTerms, setAcceptTerms] = useState(false);
   const { login, register } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+
+  // Получить URL для перенаправления из state
+  const redirectTo = location.state?.redirectTo;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +35,8 @@ const Auth = () => {
           title: "Вход выполнен",
           description: "Добро пожаловать в Windexs-Учитель!",
         });
-        navigate('/courses');
+        // Перенаправить на сохраненный URL или на страницу курсов по умолчанию
+        navigate(redirectTo || '/courses');
       } else {
         toast({
           title: "Ошибка входа",
@@ -70,7 +76,8 @@ const Auth = () => {
           title: "Регистрация успешна",
           description: "Добро пожаловать в Windexs-Учитель!",
         });
-        navigate('/courses');
+        // Перенаправить на сохраненный URL или на страницу курсов по умолчанию
+        navigate(redirectTo || '/courses');
       } else {
         toast({
           title: "Ошибка регистрации",

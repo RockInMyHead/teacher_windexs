@@ -509,8 +509,15 @@ const CourseDetail = () => {
   const Icon = course.icon;
 
   const handleStartAssessment = () => {
-    // Здесь будет логика для начала тестирования
-    navigate(`/assessment?courseId=${courseId}`);
+    // Проверить аутентификацию перед переходом в чат
+    if (!user) {
+      // Если пользователь не аутентифицирован, перенаправить на страницу входа
+      navigate('/auth', { state: { redirectTo: `/chat?courseId=${courseId}&start=true&mode=adaptive` } });
+      return;
+    }
+
+    // Начать адаптивное обучение с интервью
+    navigate(`/chat?courseId=${courseId}&start=true&mode=adaptive`);
   };
 
   return (
@@ -584,18 +591,18 @@ const CourseDetail = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-2xl font-bold mb-2">Готовы начать?</h3>
+                  <h3 className="text-2xl font-bold mb-2">Готовы начать обучение?</h3>
                   <p className="text-muted-foreground mb-4">
-                    Пройдите тест оценки знаний, чтобы мы могли подобрать оптимальный план обучения
+                    Начните персонализированное обучение с AI-учителем, который адаптируется под ваш уровень и цели
                   </p>
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <div className="flex items-center gap-1">
-                      <TestTube className="w-4 h-4" />
-                      15 вопросов
+                      <MessageSquare className="w-4 h-4" />
+                      Чат с AI-учителем
                     </div>
                     <div className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
-                      10 минут
+                      Гибкое расписание
                     </div>
                     <div className="flex items-center gap-1">
                       <Target className="w-4 h-4" />
@@ -603,9 +610,9 @@ const CourseDetail = () => {
                     </div>
                   </div>
                 </div>
-                <Button size="lg" onClick={handleStartAssessment} className="flex items-center gap-2">
+                  <Button size="lg" onClick={handleStartAssessment} className="flex items-center gap-2">
                   <Play className="w-5 h-5" />
-                  Пройти тест
+                  Начать обучение
                 </Button>
               </div>
             </CardContent>
