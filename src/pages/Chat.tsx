@@ -89,6 +89,13 @@ const Chat = () => {
   const [isAudioTaskActive, setIsAudioTaskActive] = useState(false);
   const [audioTaskText, setAudioTaskText] = useState('');
   const [isRecordingAudioTask, setIsRecordingAudioTask] = useState(false);
+  const [isTestQuestionActive, setIsTestQuestionActive] = useState(false);
+  const [testQuestionData, setTestQuestionData] = useState<{
+    question: string;
+    options: string[];
+    currentQuestion: number;
+    totalQuestions: number;
+  } | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1373,6 +1380,56 @@ const Chat = () => {
     return { isAudioTask, taskText };
   };
 
+  // Check if message contains test question with options
+  const checkForTestQuestion = (message: string): { isTestQuestion: boolean; questionData?: { question: string; options: string[]; currentQuestion: number; totalQuestions: number } } => {
+    const testQuestionPattern = /Вопрос\s+(\d+)\/(\d+):/i;
+    const match = message.match(testQuestionPattern);
+
+    if (!match) {
+      return { isTestQuestion: false };
+    }
+
+    const currentQuestion = parseInt(match[1]);
+    const totalQuestions = parseInt(match[2]);
+
+    // First, check if this is from adaptive assessment and has structured options
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage && lastMessage.role === 'assistant' && currentAssessmentQuestion?.options) {
+      return {
+        isTestQuestion: true,
+        questionData: {
+          question: currentAssessmentQuestion.prompt,
+          options: currentAssessmentQuestion.options,
+          currentQuestion: currentQuestion,
+          totalQuestions: totalQuestions
+        }
+      };
+    }
+
+    // Fallback: Look for options in parentheses like (in/on/under)
+    const optionsMatch = message.match(/\(([^)]+)\)/);
+    if (!optionsMatch) {
+      return { isTestQuestion: false };
+    }
+
+    // Extract options
+    const optionsText = optionsMatch[1];
+    const options = optionsText.split('/').map(opt => opt.trim());
+
+    // Extract the question text (everything before the options)
+    const questionText = message.split('(')[0].trim();
+
+    return {
+      isTestQuestion: true,
+      questionData: {
+        question: questionText,
+        options: options,
+        currentQuestion: currentQuestion,
+        totalQuestions: totalQuestions
+      }
+    };
+  };
+
   // Handle audio task recording
   const startAudioTaskRecording = () => {
     if (!('webkitSpeechRecognition' in window && 'SpeechRecognition' in window)) {
@@ -1416,7 +1473,18 @@ const Chat = () => {
     recognition.start();
   };
 
-  // Handle new assistant message to check for audio tasks
+  // Handle test question answer selection
+  const handleTestAnswer = (selectedAnswer: string) => {
+    setInputMessage(selectedAnswer);
+    setIsTestQuestionActive(false);
+    setTestQuestionData(null);
+    // Auto-send the message
+    setTimeout(() => {
+      sendMessage();
+    }, 100);
+  };
+
+  // Handle new assistant message to check for audio tasks and test questions
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
     if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.ttsPlayed) {
@@ -1424,6 +1492,12 @@ const Chat = () => {
       if (isAudioTask) {
         setIsAudioTaskActive(true);
         setAudioTaskText(taskText || 'Выполни задание голосом');
+      } else {
+        const { isTestQuestion, questionData } = checkForTestQuestion(lastMessage.content);
+        if (isTestQuestion && questionData) {
+          setIsTestQuestionActive(true);
+          setTestQuestionData(questionData);
+        }
       }
     }
   }, [messages]);
@@ -1497,10 +1571,17 @@ const Chat = () => {
               messageContent,
               async (question: AssessmentQuestion, num: number, total: number) => {
                 // Show question
+                let questionContent = `Вопрос ${num}/${total}:\n\n${question.prompt}`;
+
+                // Add options if available
+                if (question.options && question.options.length > 0) {
+                  questionContent += ` (${question.options.join('/')})`;
+                }
+
                 const questionMsg: Message = {
                   id: (Date.now() + num).toString(),
                   role: 'assistant',
-                  content: `Вопрос ${num}/${total}:\n\n${question.prompt}`,
+                  content: questionContent,
                   timestamp: new Date(),
                 };
                 setMessages(prev => [...prev, questionMsg]);
@@ -2058,35 +2139,90 @@ const Chat = () => {
                 <Camera className="w-4 h-4" />
               </Button>
 
-                  {/* Audio Task UI */}
-                  {isAudioTaskActive ? (
-                    <div className="flex-1 bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
+                  {/* Test Question UI */}
+                  {isTestQuestionActive && testQuestionData ? (
+                    <div className="w-full max-w-2xl bg-gradient-to-r from-emerald-50 to-green-50 border-2 border-emerald-200 rounded-lg p-4">
+                      <div className="space-y-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                            <Mic className="w-4 h-4 text-blue-600" />
+                          <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <Brain className="w-4 h-4 text-emerald-600" />
                           </div>
-                          <div>
-                            <p className="font-medium text-blue-900">🎯 Аудио-задание</p>
-                            <p className="text-sm text-blue-700">{audioTaskText}</p>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-emerald-900 text-sm">📚 Тестовое задание</p>
+                            <p className="text-xs text-emerald-700">
+                              Вопрос {testQuestionData.currentQuestion}/{testQuestionData.totalQuestions}
+                            </p>
                           </div>
                         </div>
-                        <div className="flex gap-2">
+
+                        <div className="bg-white rounded-lg p-3 border border-emerald-200">
+                          <p className="text-base font-medium text-gray-800 mb-3">
+                            {testQuestionData.question}
+                          </p>
+
+                          <div className="grid grid-cols-1 gap-2">
+                            {testQuestionData.options.map((option, index) => (
+                              <Button
+                                key={index}
+                                onClick={() => handleTestAnswer(option)}
+                                disabled={isLoading}
+                                className="bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2 px-3 rounded-lg transition-all duration-200 hover:scale-102 hover:shadow-md border-2 border-emerald-400 text-sm"
+                                size="sm"
+                              >
+                                <span className="text-base mr-2 font-bold">
+                                  {String.fromCharCode(65 + index)}.
+                                </span>
+                                {option}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end pt-2">
+                          <Button
+                            onClick={() => {
+                              setIsTestQuestionActive(false);
+                              setTestQuestionData(null);
+                            }}
+                            disabled={isLoading}
+                            variant="outline"
+                            size="sm"
+                            className="border-gray-300 hover:bg-gray-50 text-xs px-3 py-1 h-7"
+                          >
+                            <X className="w-3 h-3 mr-1" />
+                            Пропустить
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : isAudioTaskActive ? (
+                    <div className="w-full max-w-2xl bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <Mic className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-blue-900 text-sm">🎯 Аудио-задание</p>
+                            <p className="text-xs text-blue-700 truncate">{audioTaskText}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
                           <Button
                             onClick={startAudioTaskRecording}
                             disabled={isRecordingAudioTask || isLoading}
-                            className="bg-red-500 hover:bg-red-600 text-white animate-pulse"
-                            size="lg"
+                            className="bg-red-500 hover:bg-red-600 text-white animate-pulse text-sm px-3 py-2 h-9"
+                            size="sm"
                           >
                           {isRecordingAudioTask ? (
                             <>
-                              <Mic className="w-4 h-4 mr-2 animate-pulse" />
+                              <Mic className="w-4 h-4 mr-1 animate-pulse" />
                               Слушаю...
                             </>
                           ) : (
                             <>
-                              <Mic className="w-4 h-4 mr-2" />
-                              🎙️ Выполнить задание
+                              <Mic className="w-4 h-4 mr-1" />
+                              🎙️ Выполнить
                             </>
                           )}
                           </Button>
@@ -2094,10 +2230,10 @@ const Chat = () => {
                             onClick={() => setIsAudioTaskActive(false)}
                             disabled={isRecordingAudioTask || isLoading}
                             variant="outline"
-                            size="lg"
-                            className="border-gray-300 hover:bg-gray-50"
+                            size="sm"
+                            className="border-gray-300 hover:bg-gray-50 text-xs px-3 py-1 h-7"
                           >
-                            <X className="w-4 h-4 mr-2" />
+                            <X className="w-3 h-3 mr-1" />
                             Отмена
                           </Button>
                         </div>

@@ -278,14 +278,16 @@ const GRADE5_6_QUESTIONS: AssessmentQuestion[] = [
     concept: 'have_got',
     difficulty: 'beginner',
     prompt: 'Вставь "have/has": She ___ got a cat.',
-    key: 'has'
+    options: ['have', 'has', 'is'],
+    correctAnswer: 'has'
   },
   {
     id: 'g56_prepositions',
     concept: 'prepositions_place',
     difficulty: 'beginner',
-    prompt: 'Предлоги места: The book is ___ the table. (in/on/under)',
-    key: 'on'
+    prompt: 'Предлоги места: The book is ___ the table.',
+    options: ['in', 'on', 'under'],
+    correctAnswer: 'on'
   },
 ];
 
