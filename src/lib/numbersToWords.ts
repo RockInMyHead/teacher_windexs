@@ -208,7 +208,7 @@ function processDateForTTS(text: string): string {
 
 function getYearOrdinalForm(year: number): string {
   // Преобразует год в порядковую форму
-  let yearWords = numberToWords(year);
+  const yearWords = numberToWords(year);
 
   // Получаем последнюю цифру года для определения правильного окончания
   const lastDigit = year % 10;

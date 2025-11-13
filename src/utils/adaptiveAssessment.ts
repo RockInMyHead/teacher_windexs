@@ -84,56 +84,64 @@ const GRADE1_QUESTIONS: AssessmentQuestion[] = [
     concept: 'greetings_basic',
     difficulty: 'beginner',
     prompt: 'Что значит "Hello" по-русски?',
-    key: 'привет'
+    options: ['привет', 'до свидания', 'спасибо'],
+    correctAnswer: 'привет'
   },
   {
     id: 'g1_greet_2',
     concept: 'greetings_basic',
     difficulty: 'beginner',
     prompt: 'Что значит "Goodbye" по-русски?',
-    key: 'до свидания'
+    options: ['привет', 'до свидания', 'спасибо'],
+    correctAnswer: 'до свидания'
   },
   {
     id: 'g1_numbers_1',
     concept: 'numbers_1_5',
     difficulty: 'beginner',
-    prompt: 'Посчитай от 1 до 3 по-английски.',
-    key: 'one two three'
+    prompt: 'Какое число идёт после двух?',
+    options: ['one', 'two', 'three', 'four'],
+    correctAnswer: 'three'
   },
   {
     id: 'g1_numbers_2',
     concept: 'numbers_1_5',
     difficulty: 'beginner',
     prompt: 'Как сказать "пять" на английском?',
-    key: 'five'
+    options: ['four', 'five', 'six', 'seven'],
+    correctAnswer: 'five'
   },
   {
     id: 'g1_colors_1',
     concept: 'colors_basic',
     difficulty: 'beginner',
-    prompt: 'Какой это цвет? (если видишь красный предмет) Ответь по-английски.',
-    key: 'red'
+    prompt: 'Какой цвет по-английски: красный?',
+    options: ['red', 'blue', 'green', 'yellow'],
+    correctAnswer: 'red'
   },
   {
     id: 'g1_colors_2',
     concept: 'colors_basic',
     difficulty: 'beginner',
-    prompt: 'Назови один цвет по-английски.',
-    key: 'red blue green yellow'
+    prompt: 'Какой цвет по-английски: синий?',
+    options: ['red', 'blue', 'green', 'yellow'],
+    correctAnswer: 'blue'
   },
   {
     id: 'g1_alphabet_1',
     concept: 'alphabet_A_G',
     difficulty: 'beginner',
-    prompt: 'Как пишется первая буква английского алфавита? Скажи букву.',
-    key: 'a'
+    prompt: 'Первая буква английского алфавита:',
+    options: ['A', 'B', 'C', 'D'],
+    correctAnswer: 'A'
   },
   {
     id: 'g1_this_is_1',
     concept: 'this_is_noun',
     difficulty: 'beginner',
-    prompt: 'Закончи фразу: "This is a …" (Что это? Кот, собака, яблоко?)',
-    key: 'cat dog apple book'
+    prompt: 'Закончи: "This is a …" (животное)',
+    options: ['cat', 'dog', 'bird', 'fish'],
+    correctAnswer: 'cat'
   },
 ];
 
@@ -143,36 +151,41 @@ const GRADE2_QUESTIONS: AssessmentQuestion[] = [
     id: 'g2_alphabet_1',
     concept: 'full_alphabet',
     difficulty: 'beginner',
-    prompt: 'Напиши весь английский алфавит или скажи 10 букв подряд.',
-    key: 'a b c d e f g h i j'
+    prompt: 'Третья буква английского алфавита:',
+    options: ['A', 'B', 'C', 'D'],
+    correctAnswer: 'C'
   },
   {
     id: 'g2_numbers_1',
     concept: 'numbers_1_20',
     difficulty: 'beginner',
-    prompt: 'Посчитай от 1 до 10 по-английски.',
-    key: 'one two three four five six seven eight nine ten'
+    prompt: 'Как сказать "десять" по-английски?',
+    options: ['eight', 'nine', 'ten', 'eleven'],
+    correctAnswer: 'ten'
   },
   {
     id: 'g2_tobe_1',
     concept: 'to_be_present',
     difficulty: 'intermediate',
     prompt: 'Вставь "am/is/are": He __ a boy.',
-    key: 'is'
+    options: ['am', 'is', 'are'],
+    correctAnswer: 'is'
   },
   {
     id: 'g2_family_1',
     concept: 'family_basic',
     difficulty: 'beginner',
-    prompt: 'Назови членов семьи по-английски: мама, папа, сестра.',
-    key: 'mother father sister'
+    prompt: 'Женский родитель (мама) по-английски:',
+    options: ['father', 'mother', 'sister', 'brother'],
+    correctAnswer: 'mother'
   },
   {
     id: 'g2_what_who_1',
     concept: 'what_who_questions',
     difficulty: 'intermediate',
-    prompt: 'Собери вопрос: What / your / is / name?',
-    key: 'what is your name'
+    prompt: 'Начало вопроса о имени:',
+    options: ['Who is', 'What is', 'Where is', 'Why is'],
+    correctAnswer: 'What is'
   },
 ];
 
@@ -182,36 +195,41 @@ const GRADE3_4_QUESTIONS: AssessmentQuestion[] = [
     id: 'g34_tobe_full',
     concept: 'to_be_full',
     difficulty: 'intermediate',
-    prompt: 'Вставь "am/is/are": I __ happy. She __ a teacher. They __ students.',
-    key: 'am is are'
+    prompt: 'Вставь is для третьего лица: She __ a teacher.',
+    options: ['am', 'is', 'are'],
+    correctAnswer: 'is'
   },
   {
     id: 'g34_present_simple_1',
     concept: 'present_simple',
     difficulty: 'intermediate',
-    prompt: 'Переведи: "Я люблю читать." Используй "I like to read" или "I like reading".',
-    key: 'i like'
+    prompt: 'Я люблю читать:',
+    options: ['I like reading', 'I reading like', 'I like to read', 'I reading'],
+    correctAnswer: 'I like reading'
   },
   {
     id: 'g34_have_got_1',
     concept: 'have_got',
     difficulty: 'intermediate',
-    prompt: 'Вставь "have/has": She __ got a cat.',
-    key: 'has'
+    prompt: 'У неё есть кот: She __ got a cat.',
+    options: ['have', 'has', 'had'],
+    correctAnswer: 'has'
   },
   {
     id: 'g34_prepositions_1',
     concept: 'prepositions_place',
     difficulty: 'intermediate',
-    prompt: 'Вставь предлог: The book is __ the table. (in/on/under)',
-    key: 'on'
+    prompt: 'The book is __ the table.',
+    options: ['in', 'on', 'under', 'at'],
+    correctAnswer: 'on'
   },
   {
     id: 'g34_reading_1',
     concept: 'reading_2_3_sent',
     difficulty: 'intermediate',
-    prompt: 'Прочитай и скажи, о чём текст: "My name is Tom. I am 10 years old. I like football."',
-    key: 'tom football'
+    prompt: 'Прочитай: "My name is Tom. I am 10 years old." - Как его зовут?',
+    options: ['John', 'Tom', 'Tom', 'Mike'],
+    correctAnswer: 'Tom'
   },
 ];
 
@@ -221,57 +239,65 @@ const GRADE5_6_QUESTIONS: AssessmentQuestion[] = [
     id: 'g56_past_simple_reg',
     concept: 'past_simple_regular',
     difficulty: 'intermediate',
-    prompt: 'Что такое форма -ed? Дай пример: play → played. Скажи ещё 2 примера.',
-    key: 'played worked'
+    prompt: 'Play в Past Simple:',
+    options: ['play', 'played', 'plays', 'playing'],
+    correctAnswer: 'played'
   },
   {
     id: 'g56_past_simple_reg2',
     concept: 'past_simple_regular',
     difficulty: 'intermediate',
-    prompt: 'Past Simple правильных глаголов: walk → walked, clean → cleaned. Дай ещё 1 пример.',
-    key: 'helped'
+    prompt: 'Walk в Past Simple:',
+    options: ['walk', 'walked', 'walks', 'walking'],
+    correctAnswer: 'walked'
   },
   {
     id: 'g56_past_simple_irreg',
     concept: 'past_simple_irregular',
     difficulty: 'advanced',
-    prompt: 'Переведи: "я пошёл", "она была", "они пили". Используй Past Simple.',
-    key: 'went was drank'
+    prompt: 'Go в Past Simple ("я пошёл"):',
+    options: ['go', 'goes', 'went', 'going'],
+    correctAnswer: 'went'
   },
   {
     id: 'g56_past_simple_irreg2',
     concept: 'past_simple_irregular',
     difficulty: 'advanced',
-    prompt: 'Неправильные глаголы: go → went, see → saw. Дай ещё одну пару.',
-    key: 'eat ate'
+    prompt: 'See в Past Simple ("она видела"):',
+    options: ['see', 'sees', 'saw', 'seeing'],
+    correctAnswer: 'saw'
   },
   {
     id: 'g56_present_continuous_1',
     concept: 'present_continuous',
     difficulty: 'intermediate',
-    prompt: 'Вставь "am/is/are + -ing": They __ playing football.',
-    key: 'are'
+    prompt: 'They __ playing football.',
+    options: ['am', 'is', 'are', 'be'],
+    correctAnswer: 'are'
   },
   {
     id: 'g56_present_continuous_2',
     concept: 'present_continuous',
     difficulty: 'intermediate',
-    prompt: 'Present Continuous: "I ___ eating now." (ем сейчас)',
-    key: 'am'
+    prompt: 'I ___ eating now.',
+    options: ['am', 'is', 'are', 'be'],
+    correctAnswer: 'am'
   },
   {
     id: 'g56_comparative_1',
     concept: 'comparative',
     difficulty: 'intermediate',
-    prompt: 'Сравни: Кот быстрее собаки? Ответь на английском: "A cat is __ than a dog." (fast→faster)',
-    key: 'faster'
+    prompt: 'A cat is __ than a dog.',
+    options: ['fast', 'faster', 'fastest', 'more fast'],
+    correctAnswer: 'faster'
   },
   {
     id: 'g56_comparative_2',
     concept: 'comparative',
     difficulty: 'intermediate',
-    prompt: 'Степени сравнения: big → bigger → biggest. Дай пример с другим словом.',
-    key: 'small smaller smallest'
+    prompt: 'Big → bigger →:',
+    options: ['bigger', 'biggest', 'most big', 'more big'],
+    correctAnswer: 'biggest'
   },
   {
     id: 'g56_have_got',
@@ -297,71 +323,81 @@ const GRADE7_8_QUESTIONS: AssessmentQuestion[] = [
     id: 'g78_pres_perf_1',
     concept: 'present_perfect',
     difficulty: 'advanced',
-    prompt: 'Составь Present Perfect: "Я только что прочитал книгу." (I have ...)',
-    key: 'have read'
+    prompt: 'Present Perfect для "только что прочитал":',
+    options: ['have read', 'has read', 'read', 'has been read'],
+    correctAnswer: 'have read'
   },
   {
     id: 'g78_pres_perf_2',
     concept: 'present_perfect',
     difficulty: 'advanced',
-    prompt: 'Составь Present Perfect: "Она никогда не была в Лондоне." (She has ...)',
-    key: 'has never been'
+    prompt: 'Present Perfect для "никогда не была":',
+    options: ['has never been', 'has never go', 'never has been', 'not has been'],
+    correctAnswer: 'has never been'
   },
   {
     id: 'g78_modals_1',
     concept: 'modals_basic',
     difficulty: 'intermediate',
-    prompt: 'Вставь модальный глагол: You __ help him. (must/should/can)',
-    key: 'must should'
+    prompt: 'You __ help him (необходимо):',
+    options: ['can', 'should', 'must', 'may'],
+    correctAnswer: 'must'
   },
   {
     id: 'g78_modals_2',
     concept: 'modals_basic',
     difficulty: 'intermediate',
-    prompt: 'Выбери правильный модальный глагол: "You ___ swim here. It\'s dangerous." (mustn\'t/shouldn\'t/can\'t)',
-    key: 'mustn\'t shouldn\'t'
+    prompt: 'You ___ swim here (опасно):',
+    options: ['can', 'should', 'mustn\'t', 'may'],
+    correctAnswer: 'mustn\'t'
   },
   {
     id: 'g78_zero_cond_1',
     concept: 'zero_conditional',
     difficulty: 'advanced',
-    prompt: 'Закончи: If you heat ice, it __ (становится водой). Используй Present Simple.',
-    key: 'melts'
+    prompt: 'If you heat ice, it __:',
+    options: ['melted', 'melts', 'will melt', 'melt'],
+    correctAnswer: 'melts'
   },
   {
     id: 'g78_zero_cond_2',
     concept: 'zero_conditional',
     difficulty: 'advanced',
-    prompt: 'Закончи: If you mix blue and yellow, you ___ green. (получаешь)',
-    key: 'get'
+    prompt: 'If you mix blue and yellow, you ___ green:',
+    options: ['get', 'gets', 'will get', 'got'],
+    correctAnswer: 'get'
   },
   {
     id: 'g78_past_simple_reg',
     concept: 'past_simple_regular',
     difficulty: 'intermediate',
-    prompt: 'Что такое форма -ed? Дай пример: play → played. Скажи ещё 2 примера.',
-    key: 'played worked'
+    prompt: 'Play → played. Past Simple:',
+    options: ['play', 'played', 'plays', 'playing'],
+    correctAnswer: 'played'
   },
   {
     id: 'g78_past_simple_irreg',
     concept: 'past_simple_irregular',
     difficulty: 'advanced',
-    prompt: 'Переведи: "я пошёл", "она была", "они пили". Используй Past Simple.',
-    key: 'went was drank'
+    prompt: 'Go в Past Simple ("я пошёл"):',
+    options: ['go', 'goes', 'went', 'gone'],
+    correctAnswer: 'went'
   },
   {
     id: 'g78_present_continuous',
     concept: 'present_continuous',
     difficulty: 'intermediate',
-    prompt: 'Вставь "am/is/are + -ing": They __ playing football.',
-    key: 'are'
+    prompt: 'They __ playing football:',
+    options: ['am', 'is', 'are', 'be'],
+    correctAnswer: 'are'
   },
   {
     id: 'g78_comparative',
     concept: 'comparative',
     difficulty: 'intermediate',
-    prompt: 'Сравни: Кот быстрее собаки? Ответь на английском: "A cat is __ than a dog." (fast→faster)',
-    key: 'faster'
+    prompt: 'A cat is __ than a dog:',
+    options: ['fast', 'faster', 'fastest', 'more fast'],
+    correctAnswer: 'faster'
   },
 ];
 
@@ -371,57 +407,65 @@ const GRADE9_QUESTIONS: AssessmentQuestion[] = [
     id: 'g9_reported_1',
     concept: 'reported_speech',
     difficulty: 'advanced',
-    prompt: 'Перевод косвенной речи: "He said (that) he was busy." Переведи на русский.',
-    key: 'занят busy'
+    prompt: '"He said that he was busy." Косвенная речь означает:',
+    options: ['Он сказал, что занят', 'Он сказал мне', 'Он был занят', 'Он сказал'],
+    correctAnswer: 'Он сказал, что занят'
   },
   {
     id: 'g9_reported_2',
     concept: 'reported_speech',
     difficulty: 'advanced',
-    prompt: 'Трансформируй в косвенную речь: "I will come tomorrow." → "He said that ..."',
-    key: 'he would come'
+    prompt: '"He said that I would come." правильно для:',
+    options: ['He said I come', 'He said I came', 'I will come', 'I come tomorrow'],
+    correctAnswer: 'I will come tomorrow'
   },
   {
     id: 'g9_passive_1',
     concept: 'passive_present',
     difficulty: 'advanced',
-    prompt: 'Активный залог: "They write a letter." Трансформируй в Passive.',
-    key: 'is written'
+    prompt: '"They write a letter." в Passive:',
+    options: ['A letter is written', 'They are written', 'A letter writes', 'Is written a letter'],
+    correctAnswer: 'A letter is written'
   },
   {
     id: 'g9_passive_2',
     concept: 'passive_present',
     difficulty: 'advanced',
-    prompt: 'Passive: "The book was written by him." Трансформируй в Active.',
-    key: 'he wrote'
+    prompt: '"The book was written by him." в Active:',
+    options: ['He wrote the book', 'The book writes him', 'He was writing', 'He writes'],
+    correctAnswer: 'He wrote the book'
   },
   {
     id: 'g9_past_simple_regular',
     concept: 'past_simple_regular',
     difficulty: 'intermediate',
-    prompt: 'Образование Past Simple: need → needed. Дай ещё 3 примера.',
-    key: 'wanted helped'
+    prompt: 'Need в Past Simple:',
+    options: ['need', 'needed', 'needing', 'needs'],
+    correctAnswer: 'needed'
   },
   {
     id: 'g9_past_simple_irregular',
     concept: 'past_simple_irregular',
     difficulty: 'advanced',
-    prompt: 'Неправильные глаголы Past Simple: fly → flew, drink → drank. Дай ещё 2 пары.',
-    key: 'swim swam eat ate'
+    prompt: 'Fly в Past Simple:',
+    options: ['fly', 'flew', 'flying', 'flown'],
+    correctAnswer: 'flew'
   },
   {
     id: 'g9_present_perfect',
     concept: 'present_perfect',
     difficulty: 'intermediate',
-    prompt: 'Present Perfect: "I have lived here for 5 years." Измени на Past Simple.',
-    key: 'lived'
+    prompt: '"I have lived here for 5 years." в Past Simple:',
+    options: ['I live here', 'I lived here', 'I have been living', 'I am living'],
+    correctAnswer: 'I lived here'
   },
   {
     id: 'g9_modals',
     concept: 'modals_basic',
     difficulty: 'intermediate',
-    prompt: 'Модальные глаголы: "You must study hard." Замени must на should.',
-    key: 'should'
+    prompt: '"You must study hard." вместо must:',
+    options: ['can', 'should', 'may', 'might'],
+    correctAnswer: 'should'
   },
 ];
 
@@ -538,7 +582,7 @@ export async function runAdaptiveAssessment(
   let streakOk = 0;
   let streakBad = 0;
   let currentDifficulty = 'beginner';
-  let usedQuestionIndices: Set<number> = new Set();
+  const usedQuestionIndices: Set<number> = new Set();
   const results: Array<[string, boolean]> = [];
 
   // Initialize concept scores

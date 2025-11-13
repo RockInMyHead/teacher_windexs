@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { OpenAITTS, isTTSAvailable } from '@/lib/openaiTTS';
 import { runAdaptiveAssessment, AssessmentResult, AssessmentQuestion } from '@/utils/adaptiveAssessment';
+import { LessonContextManager, LessonContext, LessonBlock } from '@/utils/lessonContextManager';
 
 // Global types for Speech Recognition API
 interface SpeechRecognitionEvent extends Event {
@@ -54,6 +55,12 @@ interface Message {
   ttsPlayed?: boolean;
 }
 
+declare global {
+  interface Window {
+    _assessmentResolver?: ((answer: string) => void) | null;
+  }
+}
+
 
 
 const Chat = () => {
@@ -96,6 +103,10 @@ const Chat = () => {
     currentQuestion: number;
     totalQuestions: number;
   } | null>(null);
+
+  // Lesson context management
+  const [lessonContextManager] = useState(() => new LessonContextManager());
+  const [isLessonMode, setIsLessonMode] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -655,7 +666,7 @@ const Chat = () => {
             // Get AI response using GPT-3.5-turbo for faster response with fallback
 
             // Создать персонализированный системный промпт для голосового чата
-            let voiceSystemPrompt = `Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Давайте краткие, но полные объяснения.
+            const voiceSystemPrompt = `Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Давайте краткие, но полные объяснения.
 
 ВАЖНО: Пишите ВСЕ числа, даты, математические знаки и операции БУКВАМИ, а не цифрами!
 
@@ -1474,14 +1485,175 @@ const Chat = () => {
   };
 
   // Handle test question answer selection
-  const handleTestAnswer = (selectedAnswer: string) => {
-    setInputMessage(selectedAnswer);
+  const handleTestAnswer = async (selectedAnswer: string) => {
+    console.log('🧪 handleTestAnswer called with:', selectedAnswer);
+    console.log('🧪 isInAdaptiveMode:', isInAdaptiveMode);
+    console.log('🧪 isTestQuestionActive:', isTestQuestionActive);
+
+    // Directly resolve assessment promise if in adaptive mode
+    if (isInAdaptiveMode && window._assessmentResolver) {
+      console.log('🧪 Resolving adaptive assessment');
+      window._assessmentResolver(selectedAnswer);
+      setIsTestQuestionActive(false);
+      setTestQuestionData(null);
+      return;
+    }
+
+    // For test questions in regular chat, send directly
+    console.log('🧪 Sending test answer directly');
+    
+    // Add user answer to chat
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: selectedAnswer,
+      timestamp: new Date(),
+    };
+
+    // Hide test UI immediately
     setIsTestQuestionActive(false);
     setTestQuestionData(null);
-    // Auto-send the message
-    setTimeout(() => {
-      sendMessage();
-    }, 100);
+    setIsLoading(true);
+
+    // Add message and send to AI
+    setMessages(prev => [...prev, userMessage]);
+    
+    // Send the answer to AI
+    await sendDirectTestAnswer(selectedAnswer);
+  };
+
+  // Send test answer directly to AI
+  const sendDirectTestAnswer = async (answer: string) => {
+    try {
+      const systemPrompt = `Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Вы можете "разжевывать" сложные концепции, приводить примеры из реальной жизни, использовать аналогии и пошаговые объяснения.
+
+Особенности вашего стиля:
+- Объясняйте сложное простыми словами
+- Используйте примеры и аналогии
+- Разбивайте информацию на логические блоки
+- Задавайте наводящие вопросы для лучшего понимания
+- Будьте терпеливы и поддерживающи
+- Адаптируйте объяснения под уровень ученика
+- Поощряйте самостоятельное мышление
+
+КРИТИЧНО ВАЖНО: АКТИВНО ИСПОЛЬЗУЙТЕ ИСТОРИЮ БЕСЕДЫ!
+- Всегда ссылайтесь на предыдущие сообщения
+- Помните, что обсуждалось ранее
+- Продолжайте логическую нить разговора
+- Избегайте повторений уже объясненного
+- Используйте фразы типа "как мы обсуждали ранее", "продолжая нашу тему", "на основе предыдущего объяснения"
+
+КОНТЕКСТ ОБУЧЕНИЯ: Ученик выбрал курс "Английский язык". Вы преподаете именно английскому языку. Все объяснения и примеры должны быть связаны с этим предметом.`;
+
+      const response = await fetch(`${window.location.origin}/api/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt,
+            },
+            ...messages.slice(-29).map(msg => ({
+              role: msg.role,
+              content: msg.content,
+            })),
+            {
+              role: 'user',
+              content: answer
+            }
+          ],
+          max_tokens: 2000,
+          temperature: 0.7,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('OpenAI API Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+
+        // Handle specific error codes
+        if (response.status === 401) {
+          throw new Error('Неверный API ключ OpenAI. Проверьте настройки.');
+        } else if (response.status === 429) {
+          throw new Error('Превышен лимит запросов к OpenAI. Попробуйте позже.');
+        } else if (response.status === 500) {
+          throw new Error('Ошибка сервера OpenAI. Попробуйте еще раз.');
+        } else {
+          throw new Error(`Ошибка OpenAI: ${response.status} ${response.statusText}`);
+        }
+      }
+
+      const data = await response.json();
+
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        console.error('Invalid OpenAI response:', data);
+        throw new Error('Некорректный ответ от OpenAI');
+      }
+
+      const aiContent = data.choices[0].message.content;
+
+      const assistantMessage: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: aiContent,
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error('Error sending test answer:', error);
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: 'Извините, произошла ошибка при обработке ответа.',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSkipTest = async () => {
+    console.log('🧪 handleSkipTest called');
+
+    // Directly resolve assessment promise if in adaptive mode
+    if (isInAdaptiveMode && window._assessmentResolver) {
+      console.log('🧪 Resolving skip in adaptive assessment');
+      window._assessmentResolver('Пропустить');
+      setIsTestQuestionActive(false);
+      setTestQuestionData(null);
+      return;
+    }
+
+    // For test questions in regular chat, send skip directly
+    console.log('🧪 Sending skip action directly');
+    
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: 'Пропустить',
+      timestamp: new Date(),
+    };
+
+    // Hide test UI immediately
+    setIsTestQuestionActive(false);
+    setTestQuestionData(null);
+    setIsLoading(true);
+
+    // Add message and send to AI
+    setMessages(prev => [...prev, userMessage]);
+    
+    // Send the skip action to AI
+    await sendDirectTestAnswer('Пропустить');
   };
 
   // Handle new assistant message to check for audio tasks and test questions
@@ -1495,12 +1667,153 @@ const Chat = () => {
       } else {
         const { isTestQuestion, questionData } = checkForTestQuestion(lastMessage.content);
         if (isTestQuestion && questionData) {
+          // Convert text test question to interactive test
+          console.log('🧪 Converting text test question to interactive test:', questionData);
           setIsTestQuestionActive(true);
           setTestQuestionData(questionData);
+
+          // Mark message as processed to prevent re-processing
+          lastMessage.ttsPlayed = true;
         }
       }
     }
   }, [messages]);
+
+  // Function to handle lesson questions with context
+  const sendLessonQuestion = async () => {
+    if ((!inputMessage.trim() && uploadedFiles.length === 0) || isLoading || isProcessingFile) return;
+    const currentLessonContext = lessonContextManager.getCurrentContext();
+    if (!currentLessonContext) return;
+
+    // Stop any ongoing TTS and sounds when user sends a new message
+    if (OpenAITTS.isPlaying()) {
+      OpenAITTS.stop();
+      console.log('🛑 TTS stopped due to new user message');
+    }
+    stopContinuousSound();
+
+    let messageContent = inputMessage;
+    const fileContents: string[] = [];
+
+    // Process uploaded files first
+    if (uploadedFiles.length > 0) {
+      setIsProcessingFile(true);
+      try {
+        for (const file of uploadedFiles) {
+          const extractedText = await processFile(file);
+          fileContents.push(`\n\n--- Содержимое файла ${file.name} ---\n${extractedText}`);
+        }
+        messageContent += fileContents.join('\n');
+      } catch (error) {
+        console.error('Error processing files:', error);
+        messageContent += '\n\nОшибка при обработке файлов.';
+      } finally {
+        setIsProcessingFile(false);
+      }
+    }
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: messageContent,
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInputMessage('');
+    setUploadedFiles([]); // Clear uploaded files after sending
+    setIsLoading(true);
+
+    // Get lesson-aware system prompt from context manager
+    const lessonSystemPrompt = lessonContextManager.getSystemPrompt();
+    if (!lessonSystemPrompt) {
+      console.error('No lesson system prompt available');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${window.location.origin}/api/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: lessonSystemPrompt,
+            },
+            ...messages.slice(-25).map(msg => ({
+              role: msg.role,
+              content: msg.content,
+            })),
+            {
+              role: 'user',
+              content: userMessage.content,
+            },
+          ],
+          max_tokens: 1500,
+          temperature: 0.7,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('OpenAI API Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+
+        // Handle specific error codes
+        if (response.status === 401) {
+          throw new Error('Неверный API ключ OpenAI. Проверьте настройки.');
+        } else if (response.status === 429) {
+          throw new Error('Превышен лимит запросов к OpenAI. Попробуйте позже.');
+        } else if (response.status === 500) {
+          throw new Error('Ошибка сервера OpenAI. Попробуйте еще раз.');
+        } else {
+          throw new Error(`Ошибка OpenAI: ${response.status} ${response.statusText}`);
+        }
+      }
+
+      const data = await response.json();
+
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        console.error('Invalid OpenAI response:', data);
+        throw new Error('Некорректный ответ от OpenAI');
+      }
+
+      const aiContent = data.choices[0].message.content;
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: aiContent,
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error('Error sending lesson question:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'Извините, произошла ошибка при обработке вашего вопроса. Попробуйте еще раз или продолжайте урок.',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+      // Focus back to input after response
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+      }, 100);
+    }
+  };
 
   const sendMessage = async () => {
     if ((!inputMessage.trim() && uploadedFiles.length === 0) || isLoading || isProcessingFile) return;
@@ -1513,7 +1826,7 @@ const Chat = () => {
     stopContinuousSound();
 
     let messageContent = inputMessage;
-    let fileContents: string[] = [];
+    const fileContents: string[] = [];
 
     // Process uploaded files first
     if (uploadedFiles.length > 0) {
@@ -1563,90 +1876,155 @@ const Chat = () => {
         setAssessmentState('in_progress');
         setQuestionCount(0);
         
-        // Start adaptive assessment
-        const startAssessment = async () => {
-          try {
-            const result = await runAdaptiveAssessment(
-              classGrade,
-              messageContent,
-              async (question: AssessmentQuestion, num: number, total: number) => {
-                // Show question
-                let questionContent = `Вопрос ${num}/${total}:\n\n${question.prompt}`;
+        // Start adaptive assessment - this will run in background
+        runAdaptiveAssessment(
+          classGrade,
+          messageContent,
+          async (question: AssessmentQuestion, num: number, total: number) => {
+            // Show question
+            let questionContent = `Вопрос ${num}/${total}:\n\n${question.prompt}`;
 
-                // Add options if available
-                if (question.options && question.options.length > 0) {
-                  questionContent += ` (${question.options.join('/')})`;
-                }
+            // Add options if available
+            if (question.options && question.options.length > 0) {
+              questionContent += ` (${question.options.join('/')})`;
+            }
 
-                const questionMsg: Message = {
-                  id: (Date.now() + num).toString(),
-                  role: 'assistant',
-                  content: questionContent,
-                  timestamp: new Date(),
-                };
-                setMessages(prev => [...prev, questionMsg]);
-                setCurrentAssessmentQuestion(question);
-                setQuestionCount(num);
-                setIsLoading(false); // Reset loading indicator after showing question
-
-                // Wait for user input
-                return new Promise<string>((resolve) => {
-                  // This will be resolved when user sends next message
-                  const resolver = (ans: string) => {
-                    resolve(ans);
-                    // @ts-ignore
-                    window._assessmentResolver = null;
-                  };
-                  // @ts-ignore
-                  window._assessmentResolver = resolver;
-                });
-              },
-              (progress) => {
-                console.log('Assessment progress:', progress);
-              }
-            );
-            
-            setAssessmentResult(result);
-            setAssessmentState('completed');
-            
-            // Show results
-            const resultsMsg: Message = {
-              id: (Date.now() + 1000).toString(),
+            const questionMsg: Message = {
+              id: (Date.now() + num).toString(),
               role: 'assistant',
-              content: formatAssessmentResults(result),
+              content: questionContent,
               timestamp: new Date(),
             };
-            setMessages(prev => [...prev, resultsMsg]);
-          } catch (error) {
-            console.error('Assessment error:', error);
-            const errorMsg: Message = {
-              id: (Date.now() + 999).toString(),
-              role: 'assistant',
-              content: 'Произошла ошибка при проведении интервью. Попробуем еще раз.',
-              timestamp: new Date(),
-            };
-            setMessages(prev => [...prev, errorMsg]);
-            setAssessmentState('initial');
+            setMessages(prev => [...prev, questionMsg]);
+            setCurrentAssessmentQuestion(question);
+            setQuestionCount(num);
+            setIsLoading(false); // Reset loading indicator after showing question
+
+            // Wait for user input
+            return new Promise<string>((resolve) => {
+              // This will be resolved when user sends next message
+              const resolver = (ans: string) => {
+                resolve(ans);
+                window._assessmentResolver = null;
+              };
+              window._assessmentResolver = resolver;
+            });
+          },
+          (progress) => {
+            console.log('Assessment progress:', progress);
           }
+        ).then(async (result) => {
+          // Assessment completed successfully
+          console.log('🎉 Assessment completed:', result);
+          setAssessmentResult(result);
+          setAssessmentState('completed');
+
+          // Save assessment to database
+          try {
+            // Validate CEFR level format
+            const cefrLevels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+            let cefrLevel = result.cluster || 'B1'; // Default to B1 if not provided
+
+            // Ensure cefr_level is valid
+            if (!cefrLevels.includes(cefrLevel)) {
+              console.warn('⚠️ Invalid CEFR level:', cefrLevel, 'defaulting to B1');
+              cefrLevel = 'B1';
+            }
+
+            // Calculate correct answers more accurately
+            const totalQuestions = result.profile.length;
+            const correctAnswers = Math.round(result.profile.reduce((sum, p) => sum + p.p, 0) / result.profile.length * totalQuestions);
+
+            // Use a reasonable default duration since we don't track start time
+            const durationSeconds = 300; // 5 minutes default
+
+            const assessmentData = {
+              user_id: 1,
+              assessment_type: 'adaptive',
+              cefr_level: cefrLevel,
+              total_questions: totalQuestions,
+              correct_answers: correctAnswers,
+              duration_seconds: durationSeconds
+            };
+
+            console.log('💾 Saving assessment:', assessmentData);
+            console.log('💾 Assessment data types:', {
+              user_id: typeof assessmentData.user_id,
+              assessment_type: typeof assessmentData.assessment_type,
+              cefr_level: typeof assessmentData.cefr_level,
+              total_questions: typeof assessmentData.total_questions,
+              correct_answers: typeof assessmentData.correct_answers,
+              duration_seconds: typeof assessmentData.duration_seconds
+            });
+
+            // Ensure all numeric fields are actually numbers
+            const sanitizedData = {
+              user_id: Number(assessmentData.user_id),
+              assessment_type: String(assessmentData.assessment_type),
+              cefr_level: assessmentData.cefr_level ? String(assessmentData.cefr_level) : null,
+              total_questions: Number(assessmentData.total_questions),
+              correct_answers: Number(assessmentData.correct_answers),
+              duration_seconds: Number(assessmentData.duration_seconds)
+            };
+
+            console.log('🧹 Sanitized data:', sanitizedData);
+
+            const response = await fetch('/api/db/assessments', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(sanitizedData)
+            });
+
+            if (response.ok) {
+              const dbResult = await response.json();
+              console.log('✅ Assessment saved to database:', dbResult);
+            } else {
+              const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+              console.error('❌ Failed to save assessment to database:', {
+                status: response.status,
+                statusText: response.statusText,
+                error: errorData
+              });
+            }
+          } catch (dbError) {
+            console.warn('⚠️ Database save error:', dbError);
+          }
+
+          // Show results
+          const resultsMsg: Message = {
+            id: (Date.now() + 1000).toString(),
+            role: 'assistant',
+            content: formatAssessmentResults(result),
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, resultsMsg]);
           setIsLoading(false);
-        };
-        
-        startAssessment();
+        }).catch((error) => {
+          console.error('Assessment error:', error);
+          const errorMsg: Message = {
+            id: (Date.now() + 999).toString(),
+            role: 'assistant',
+            content: 'Произошла ошибка при проведении интервью. Попробуем еще раз.',
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, errorMsg]);
+          setAssessmentState('initial');
+          setIsLoading(false);
+        });
         return;
       } else if (assessmentState === 'in_progress' && currentAssessmentQuestion) {
-        // User answered the question
-        // @ts-ignore
+        // User answered the question - resolve the promise
+        // Do not clear currentAssessmentQuestion or reset questionCount
         if (window._assessmentResolver) {
-          // @ts-ignore
           window._assessmentResolver(messageContent);
         }
-        setIsLoading(false);
+        // Return to allow adaptive loop to progress to the next question
         return;
       }
     }
 
     // Создать базовый системный промпт для чата
-    let systemPrompt = `Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Вы можете "разжевывать" сложные концепции, приводить примеры из реальной жизни, использовать аналогии и пошаговые объяснения.
+    const systemPrompt = `Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Вы можете "разжевывать" сложные концепции, приводить примеры из реальной жизни, использовать аналогии и пошаговые объяснения.
 
 Особенности вашего стиля:
 - Объясняйте сложное простыми словами
@@ -1748,10 +2126,36 @@ const Chat = () => {
     }
   };
 
+  // Functions for lesson mode management
+  const startLessonMode = (lessonData: {
+    lessonId: string;
+    currentTopic: string;
+    lessonProgress?: string;
+  }) => {
+    lessonContextManager.startLesson(lessonData);
+    setIsLessonMode(true);
+    console.log('📚 Lesson mode activated:', lessonData);
+  };
+
+  const updateLessonBlock = (block: LessonBlock, blockIndex?: number, totalBlocks?: number) => {
+    lessonContextManager.updateCurrentBlock(block, blockIndex, totalBlocks);
+    console.log('📖 Lesson block updated:', block.title);
+  };
+
+  const endLessonMode = () => {
+    lessonContextManager.endLesson();
+    setIsLessonMode(false);
+    console.log('📚 Lesson mode deactivated');
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      if (isLessonMode && lessonContextManager.getCurrentContext()) {
+        sendLessonQuestion();
+      } else {
+        sendMessage();
+      }
     }
   };
 
@@ -1856,8 +2260,21 @@ const Chat = () => {
             <CardTitle className="flex items-center gap-2">
               <Brain className="w-5 h-5 text-primary" />
               Чат с AI Учителем
+              {isLessonMode && lessonContextManager.getCurrentContext() && (
+                <span className="ml-2 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full font-medium">
+                  📚 Урок: {lessonContextManager.getCurrentContext()?.currentTopic}
+                </span>
+              )}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
+              {isLessonMode && lessonContextManager.getCurrentContext() ? (
+                <span className="text-blue-600 font-medium">
+                  💬 Во время урока вы можете задавать вопросы по теме "{lessonContextManager.getCurrentContext()?.currentTopic}".
+                  Учитель будет отвечать, учитывая контекст урока.
+                </span>
+              ) : (
+                <span>💬 Задавайте вопросы по любым темам. AI Учитель поможет вам разобраться!</span>
+              )}
               {apiKeyStatus === 'invalid' && (
                 <span className="text-red-600 font-medium block mt-1">
                   ❌ OpenAI API ключ не настроен! Добавьте VITE_OPENAI_API_KEY в файл .env
@@ -2141,11 +2558,21 @@ const Chat = () => {
 
                   {/* Test Question UI */}
                   {isTestQuestionActive && testQuestionData ? (
-                    <div className="w-full max-w-2xl bg-gradient-to-r from-emerald-50 to-green-50 border-2 border-emerald-200 rounded-lg p-4">
+                    <div className="w-full max-w-xl bg-gradient-to-r from-emerald-50 to-green-50 border-2 border-emerald-200 rounded-lg p-4 shadow-sm">
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
-                            <Brain className="w-4 h-4 text-emerald-600" />
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-brain w-4 h-4 text-emerald-600">
+                              <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path>
+                              <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path>
+                              <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"></path>
+                              <path d="M17.599 6.5a3 3 0 0 0 .399-1.375"></path>
+                              <path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"></path>
+                              <path d="M3.477 10.896a4 4 0 0 1 .585-.396"></path>
+                              <path d="M19.938 10.5a4 4 0 0 1 .585.396"></path>
+                              <path d="M6 18a4 4 0 0 1-1.967-.516"></path>
+                              <path d="M19.967 17.484A4 4 0 0 1 18 18"></path>
+                            </svg>
                           </div>
                           <div className="min-w-0">
                             <p className="font-semibold text-emerald-900 text-sm">📚 Тестовое задание</p>
@@ -2154,88 +2581,84 @@ const Chat = () => {
                             </p>
                           </div>
                         </div>
-
                         <div className="bg-white rounded-lg p-3 border border-emerald-200">
                           <p className="text-base font-medium text-gray-800 mb-3">
                             {testQuestionData.question}
                           </p>
-
                           <div className="grid grid-cols-1 gap-2">
                             {testQuestionData.options.map((option, index) => (
-                              <Button
+                              <button
                                 key={index}
                                 onClick={() => handleTestAnswer(option)}
                                 disabled={isLoading}
-                                className="bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2 px-3 rounded-lg transition-all duration-200 hover:scale-102 hover:shadow-md border-2 border-emerald-400 text-sm"
-                                size="sm"
+                                className="inline-flex items-center justify-center gap-2 whitespace-nowrap ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 h-9 bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2 px-3 rounded-lg transition-all duration-200 hover:scale-102 hover:shadow-md border-2 border-emerald-400 text-sm"
                               >
                                 <span className="text-base mr-2 font-bold">
                                   {String.fromCharCode(65 + index)}.
                                 </span>
                                 {option}
-                              </Button>
+                              </button>
                             ))}
                           </div>
                         </div>
-
                         <div className="flex justify-end pt-2">
-                          <Button
-                            onClick={() => {
-                              setIsTestQuestionActive(false);
-                              setTestQuestionData(null);
-                            }}
+                          <button
+                            onClick={handleSkipTest}
                             disabled={isLoading}
-                            variant="outline"
-                            size="sm"
-                            className="border-gray-300 hover:bg-gray-50 text-xs px-3 py-1 h-7"
+                            className="inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border bg-background hover:text-accent-foreground rounded-md border-gray-300 hover:bg-gray-50 text-xs px-3 py-1 h-7"
                           >
-                            <X className="w-3 h-3 mr-1" />
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-x w-3 h-3 mr-1">
+                              <path d="M18 6 6 18"></path>
+                              <path d="m6 6 12 12"></path>
+                            </svg>
                             Пропустить
-                          </Button>
+                          </button>
                         </div>
                       </div>
                     </div>
                   ) : isAudioTaskActive ? (
-                    <div className="w-full max-w-2xl bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                            <Mic className="w-4 h-4 text-blue-600" />
+                    <div className="w-full flex justify-start">
+                      <div className="w-full max-w-xl bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg p-4 shadow-sm">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                              <Mic className="w-4 h-4 text-blue-600" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium text-blue-900 text-sm">🎯 Аудио-задание</p>
+                              <p className="text-xs text-blue-700 truncate">{audioTaskText}</p>
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <p className="font-medium text-blue-900 text-sm">🎯 Аудио-задание</p>
-                            <p className="text-xs text-blue-700 truncate">{audioTaskText}</p>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <Button
+                              onClick={startAudioTaskRecording}
+                              disabled={isRecordingAudioTask || isLoading}
+                              className="bg-red-500 hover:bg-red-600 text-white animate-pulse text-sm px-3 py-2 h-9"
+                              size="sm"
+                            >
+                            {isRecordingAudioTask ? (
+                              <>
+                                <Mic className="w-4 h-4 mr-1 animate-pulse" />
+                                Слушаю...
+                              </>
+                            ) : (
+                              <>
+                                <Mic className="w-4 h-4 mr-1" />
+                                🎙️ Выполнить
+                              </>
+                            )}
+                            </Button>
+                            <Button
+                              onClick={() => setIsAudioTaskActive(false)}
+                              disabled={isRecordingAudioTask || isLoading}
+                              variant="outline"
+                              size="sm"
+                              className="border-gray-300 hover:bg-gray-50 text-xs px-3 py-1 h-7"
+                            >
+                              <X className="w-3 h-3 mr-1" />
+                              Отмена
+                            </Button>
                           </div>
-                        </div>
-                        <div className="flex gap-2 flex-shrink-0">
-                          <Button
-                            onClick={startAudioTaskRecording}
-                            disabled={isRecordingAudioTask || isLoading}
-                            className="bg-red-500 hover:bg-red-600 text-white animate-pulse text-sm px-3 py-2 h-9"
-                            size="sm"
-                          >
-                          {isRecordingAudioTask ? (
-                            <>
-                              <Mic className="w-4 h-4 mr-1 animate-pulse" />
-                              Слушаю...
-                            </>
-                          ) : (
-                            <>
-                              <Mic className="w-4 h-4 mr-1" />
-                              🎙️ Выполнить
-                            </>
-                          )}
-                          </Button>
-                          <Button
-                            onClick={() => setIsAudioTaskActive(false)}
-                            disabled={isRecordingAudioTask || isLoading}
-                            variant="outline"
-                            size="sm"
-                            className="border-gray-300 hover:bg-gray-50 text-xs px-3 py-1 h-7"
-                          >
-                            <X className="w-3 h-3 mr-1" />
-                            Отмена
-                          </Button>
                         </div>
                       </div>
                     </div>
@@ -2246,7 +2669,11 @@ const Chat = () => {
                         value={inputMessage}
                         onChange={(e) => setInputMessage(e.target.value)}
                         onKeyPress={handleKeyPress}
-                        placeholder="Задайте вопрос по любой учебной теме..."
+                        placeholder={
+                          isLessonMode && lessonContextManager.getCurrentContext()
+                            ? `Задайте вопрос по теме "${lessonContextManager.getCurrentContext()?.currentTopic}"...`
+                            : "Задайте вопрос по любой учебной теме..."
+                        }
                         disabled={isLoading || isProcessingFile}
                         className="flex-1"
                       />
