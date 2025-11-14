@@ -3257,8 +3257,21 @@ const Chat = () => {
                 </div>
             )}
 
-            {/* Learning Plan Confirmation */}
-            {isLearningPlanActive && (
+            {/* Learning Plan Confirmation or Results */}
+            {isLearningPlanActive && learningPlanText ? (
+              <div className="flex flex-col items-center justify-center space-y-4 py-8">
+                <div className="text-center max-w-4xl">
+                  <div className="bg-white rounded-lg p-8 border border-emerald-200 shadow-lg">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+                      Результаты тестирования
+                    </h2>
+                    <div className="whitespace-pre-line text-left text-gray-700 leading-relaxed">
+                      {learningPlanText}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : isLearningPlanActive && (
                 <div className="pt-4 border-t">
                   <div className="flex flex-col gap-3">
                     <p className="text-sm text-muted-foreground text-center">
@@ -3285,22 +3298,7 @@ const Chat = () => {
                     </div>
                   </div>
                 </div>
-            )} : isLearningPlanActive && learningPlanText ? (
-              <div className="flex flex-col items-center justify-center space-y-4 py-8">
-                <div className="text-center max-w-4xl">
-                  <div className="bg-white rounded-lg p-8 border border-emerald-200 shadow-lg">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-                      Результаты тестирования
-                    </h2>
-                    <div className="whitespace-pre-line text-left text-gray-700 leading-relaxed">
-                      {learningPlanText}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-            <div></div>
-            )
+            )}
 
             {/* Online Communication Status */}
             {isOnlineCommunication && (
