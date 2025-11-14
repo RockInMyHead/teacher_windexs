@@ -34,7 +34,7 @@ const CTA = () => {
             </div>
             
             <h2 className="text-4xl md:text-6xl font-bold mb-6 leading-tight">
-              Готовы начать обучение? <br>
+              Готовы начать обучение? <br />
             </h2>
             
             <p className="text-xl md:text-2xl text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed">
@@ -53,14 +53,6 @@ const CTA = () => {
                   <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                 </span>
                 <div className="absolute inset-0 bg-gradient-to-r from-accent to-primary opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              </Button>
-              
-              <Button 
-                size="lg"
-                variant="outline"
-                className="border-2 border-primary/40 hover:bg-primary/10 hover:border-primary transition-all duration-300 px-10 py-7 text-lg"
-              >
-                Связаться с нами
               </Button>
             </div>
             
