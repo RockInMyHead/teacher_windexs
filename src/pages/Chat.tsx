@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { OpenAITTS, isTTSAvailable } from '@/lib/openaiTTS';
 import { runAdaptiveAssessment, AssessmentResult, AssessmentQuestion, mapGradeToCluster, buildTwoWeekPlan, GradeCluster } from '@/utils/adaptiveAssessment';
 import { LessonContextManager, LessonContext, LessonBlock } from '@/utils/lessonContextManager';
-import { getCourseRecommendation, CourseRecommendation } from '@/utils/coursePlans';
+import { getCourseRecommendation, CourseRecommendation, COURSE_PLANS } from '@/utils/coursePlans';
 import Header from '@/components/Header';
 
 // Global types for Speech Recognition API
