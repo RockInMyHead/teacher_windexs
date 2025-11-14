@@ -3502,14 +3502,24 @@ const Chat = () => {
                         />
 
                         <Button
-                          onClick={sendMessage}
+                          onClick={() => {
+                            if (inputMessage.trim()) {
+                              // Если есть текст - отправить сообщение
+                              sendMessage();
+                            } else {
+                              // Если текста нет - начать голосовой ввод
+                              startVoiceChat();
+                            }
+                          }}
                           disabled={(!inputMessage.trim() && uploadedFiles.length === 0) || isLoading || isProcessingFile}
                           size="icon"
                         >
                           {isProcessingFile ? (
                             <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                          ) : (
+                          ) : inputMessage.trim() ? (
                             <Send className="w-4 h-4" />
+                          ) : (
+                            <Mic className="w-4 h-4" />
                           )}
                         </Button>
                       </>
