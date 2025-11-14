@@ -250,27 +250,6 @@ const AvailableCourses = () => {
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-                  {/* Course Info */}
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="text-xs">
-                        {course.level}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Clock className="w-4 h-4" />
-                      {course.duration}
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Users className="w-4 h-4" />
-                      {course.students}
-                    </div>
-                    <div className="flex items-center gap-2 font-medium text-green-600">
-                      <CheckCircle className="w-4 h-4" />
-                      {course.price}
-                    </div>
-                  </div>
-
                   {/* Features */}
                   <div className="space-y-2">
                     <h4 className="font-medium text-sm">Что вы изучите:</h4>
