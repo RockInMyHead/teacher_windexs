@@ -38,7 +38,7 @@ const AIProcess = () => {
           </p>
         </div>
         
-        <div className="grid md:grid-cols-2 gap-8 lg:gap-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
           {steps.map((step, index) => {
             const Icon = step.icon;
             return (
