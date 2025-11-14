@@ -42,10 +42,19 @@ export class OpenAITTS {
     return await response.arrayBuffer();
   }
 
+  static async speak(text: string, options: TTSOptions = {}): Promise<void> {
+    return this.speakText(text, options);
+  }
+
   static async speakText(text: string, options: TTSOptions = {}): Promise<void> {
     try {
       // Останавливаем текущее воспроизведение
       this.stop();
+
+      // Проверяем поддержку Audio API
+      if (typeof Audio === 'undefined') {
+        throw new Error('Audio API not supported in this browser');
+      }
 
       // Генерируем речь
       const audioBuffer = await this.generateSpeech(text, options);
@@ -72,8 +81,13 @@ export class OpenAITTS {
           reject(new Error('Audio playback failed'));
         };
 
-        // Воспроизводим
-        this.currentAudio.play().catch(reject);
+        // Воспроизводим с обработкой ошибок
+        this.currentAudio.play().catch((playError) => {
+          console.error('Play error:', playError);
+          URL.revokeObjectURL(audioUrl);
+          this.currentAudio = null;
+          reject(new Error(`Audio play failed: ${playError.message}`));
+        });
       });
 
     } catch (error) {

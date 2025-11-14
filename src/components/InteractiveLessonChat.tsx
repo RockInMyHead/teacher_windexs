@@ -473,6 +473,18 @@ const InteractiveLessonChat = ({
       console.log('✅ Text speaking completed');
     } catch (error) {
       console.error('❌ Error speaking text:', error);
+
+      // Проверяем тип ошибки и показываем соответствующее сообщение
+      if (error instanceof Error) {
+        if (error.message.includes('NotSupportedError') ||
+            error.message.includes('not supported') ||
+            error.message.includes('Audio API not supported')) {
+          console.warn('⚠️ TTS not supported in this browser');
+          // Можно показать уведомление пользователю
+        } else if (error.message.includes('OpenAI TTS API error')) {
+          console.warn('⚠️ OpenAI TTS API error - check API key and network');
+        }
+      }
     }
   };
 

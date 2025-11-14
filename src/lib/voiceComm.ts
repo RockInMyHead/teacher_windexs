@@ -287,7 +287,18 @@ export class VoiceComm {
           }
         } catch (error) {
           console.error(`❌ Error speaking sentence ${i + 1}:`, error);
-          // Продолжаем со следующего предложения
+          // Проверяем тип ошибки
+          if (error instanceof Error) {
+            if (error.message.includes('NotSupportedError') ||
+                error.message.includes('not supported') ||
+                error.message.includes('Audio API not supported')) {
+              console.warn('⚠️ TTS not supported in this environment, skipping...');
+              this.callbacks.onError?.('TTS не поддерживается в этом браузере');
+              // Прерываем озвучку если TTS не поддерживается
+              break;
+            }
+          }
+          // Продолжаем со следующего предложения для других типов ошибок
         }
       }
 
