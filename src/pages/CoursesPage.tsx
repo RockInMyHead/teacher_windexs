@@ -174,74 +174,12 @@ const CoursesPage = () => {
               Ваш персонализированный курс
             </h2>
             <Card className="bg-gradient-to-r from-primary/5 to-accent/5 border-primary/20">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-xl">{user.personalizedCourse.title}</CardTitle>
-                    <CardDescription className="mt-2">{user.personalizedCourse.description}</CardDescription>
-                  </div>
-                  <Badge variant="secondary">
-                    {user.personalizedCourse.difficulty === 'beginner' ? 'Начинающий' :
-                     user.personalizedCourse.difficulty === 'intermediate' ? 'Средний' : 'Продвинутый'}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid md:grid-cols-2 gap-6">
-                  {/* Topics */}
-                  <div>
-                    <h4 className="font-semibold mb-3">Ключевые темы:</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {user.personalizedCourse.topics.map((topic, index) => (
-                        <Badge key={index} variant="outline" className="text-xs">
-                          {topic}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Course Info */}
-                  <div>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Модулей:</span>
-                        <span className="font-medium">{user.personalizedCourse.modules.length}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Примерное время:</span>
-                        <span className="font-medium">{user.personalizedCourse.estimatedHours} часов</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Modules Preview */}
-                <div className="mt-6">
-                  <h4 className="font-semibold mb-3">Структура курса:</h4>
-                  <div className="space-y-2">
-                    {user.personalizedCourse.modules.slice(0, 3).map((module, index) => (
-                      <div key={index} className="flex items-center gap-3 p-3 bg-background/50 rounded-lg">
-                        <div className="w-6 h-6 bg-primary/20 rounded-full flex items-center justify-center text-xs font-medium text-primary">
-                          {index + 1}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-sm">{module.title}</p>
-                          <p className="text-xs text-muted-foreground">{module.lessons.length} уроков</p>
-                        </div>
-                      </div>
-                    ))}
-                    {user.personalizedCourse.modules.length > 3 && (
-                      <p className="text-xs text-muted-foreground text-center">
-                        ... и ещё {user.personalizedCourse.modules.length - 3} модулей
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex justify-center mt-6">
+              <CardContent className="p-6">
+                <div className="text-center">
+                  <h3 className="text-xl font-semibold mb-4">{user.personalizedCourse.title}</h3>
                   <Button onClick={() => navigate('/personalized-course')} className="flex items-center gap-2">
                     <Play className="w-4 h-4" />
-                    Начать персонализированный курс
+                    Начать курс
                   </Button>
                 </div>
               </CardContent>
