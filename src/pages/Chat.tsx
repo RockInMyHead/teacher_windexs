@@ -3027,8 +3027,51 @@ const Chat = () => {
         <Card className="h-[calc(100vh-12rem)]">
 
           <CardContent className="flex flex-col h-full">
-            {/* Messages Area or Test Interface */}
-            {isTestQuestionActive && testQuestionData ? null : (
+            {/* Test Question UI at the top */}
+            {isTestQuestionActive && testQuestionData && (
+              <div className="flex flex-col items-center justify-center space-y-4 py-6 border-b border-gray-200 mb-4">
+                <div className="text-center">
+                  <p className="text-sm text-emerald-700 mb-4">
+                    Вопрос {testQuestionData.currentQuestion}/{testQuestionData.totalQuestions}
+                  </p>
+                  <div className="bg-white rounded-lg p-6 border border-emerald-200 shadow-lg max-w-2xl">
+                    <p className="text-lg font-medium text-gray-800 mb-6">
+                      {testQuestionData.question}
+                    </p>
+                    <div className="grid grid-cols-1 gap-3 max-w-md mx-auto">
+                      {testQuestionData.options.map((option, index) => (
+                        <button
+                          key={index}
+                          onClick={() => handleTestAnswer(option)}
+                          disabled={isLoading}
+                          className="inline-flex items-center justify-start gap-3 whitespace-nowrap ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 h-12 bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-3 px-4 rounded-lg transition-all duration-200 hover:scale-105 hover:shadow-md border-2 border-emerald-400 text-sm w-full"
+                        >
+                          <span className="text-lg mr-3 font-bold min-w-[24px]">
+                            {String.fromCharCode(65 + index)}.
+                          </span>
+                          <span className="text-left">{option}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="mt-6">
+                    <button
+                      onClick={handleSkipTest}
+                      disabled={isLoading}
+                      className="inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border bg-background hover:text-accent-foreground rounded-md border-gray-300 hover:bg-gray-50 text-sm px-4 py-2"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-x w-4 h-4 mr-2">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                      </svg>
+                      Пропустить тест
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Messages Area */}
             <ScrollArea className="flex-1 pr-4 mb-4" ref={scrollAreaRef}>
                 <div className="space-y-4">
 
@@ -3244,49 +3287,6 @@ const Chat = () => {
                   </div>
                 </div>
             )}
-
-            {/* Test Question UI or Learning Plan */}
-            {isTestQuestionActive && testQuestionData ? (
-              <div className="flex flex-col items-center justify-center space-y-4 py-8">
-                <div className="text-center">
-                  <p className="text-sm text-emerald-700 mb-4">
-                    Вопрос {testQuestionData.currentQuestion}/{testQuestionData.totalQuestions}
-                  </p>
-                  <div className="bg-white rounded-lg p-6 border border-emerald-200 shadow-lg max-w-2xl">
-                    <p className="text-lg font-medium text-gray-800 mb-6">
-                      {testQuestionData.question}
-                    </p>
-                    <div className="grid grid-cols-1 gap-3 max-w-md mx-auto">
-                      {testQuestionData.options.map((option, index) => (
-                        <button
-                          key={index}
-                          onClick={() => handleTestAnswer(option)}
-                          disabled={isLoading}
-                          className="inline-flex items-center justify-start gap-3 whitespace-nowrap ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 h-12 bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-3 px-4 rounded-lg transition-all duration-200 hover:scale-105 hover:shadow-md border-2 border-emerald-400 text-sm w-full"
-                        >
-                          <span className="text-lg mr-3 font-bold min-w-[24px]">
-                            {String.fromCharCode(65 + index)}.
-                          </span>
-                          <span className="text-left">{option}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="mt-6">
-                    <button
-                      onClick={handleSkipTest}
-                      disabled={isLoading}
-                      className="inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border bg-background hover:text-accent-foreground rounded-md border-gray-300 hover:bg-gray-50 text-sm px-4 py-2"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-x w-4 h-4 mr-2">
-                        <path d="M18 6 6 18"></path>
-                        <path d="m6 6 12 12"></path>
-                      </svg>
-                      Пропустить тест
-                    </button>
-                  </div>
-                </div>
-              </div>
             ) : isLearningPlanActive && learningPlanText ? (
               <div className="flex flex-col items-center justify-center space-y-4 py-8">
                 <div className="text-center max-w-4xl">
