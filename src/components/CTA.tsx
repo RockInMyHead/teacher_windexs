@@ -34,7 +34,7 @@ const CTA = () => {
             </div>
             
             <h2 className="text-4xl md:text-6xl font-bold mb-6 leading-tight">
-              Готовы начать обучение?
+              Готовы начать обучение? <br>
             </h2>
             
             <p className="text-xl md:text-2xl text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed">
