@@ -130,41 +130,6 @@ const CoursesPage = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        {/* Stats Overview */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <Card className="p-4">
-            <CardHeader className="pb-2 p-0">
-              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Активных курсов</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 pt-2">
-              <div className="text-xl sm:text-2xl font-bold">{user?.stats?.activeCourses || 0}</div>
-            </CardContent>
-          </Card>
-          <Card className="p-4">
-            <CardHeader className="pb-2 p-0">
-              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Завершено модулей</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 pt-2">
-              <div className="text-xl sm:text-2xl font-bold">{user?.stats?.completedModules || 0}</div>
-            </CardContent>
-          </Card>
-          <Card className="p-4">
-            <CardHeader className="pb-2 p-0">
-              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Средний прогресс</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 pt-2">
-              <div className="text-xl sm:text-2xl font-bold">{user?.stats?.averageProgress || 0}%</div>
-            </CardContent>
-          </Card>
-          <Card className="p-4">
-            <CardHeader className="pb-2 p-0">
-              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Достижения</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 pt-2">
-              <div className="text-xl sm:text-2xl font-bold">{user?.stats?.achievements || 0}</div>
-            </CardContent>
-          </Card>
-        </div>
 
         {/* Personalized Course */}
         {user?.personalizedCourse && (
