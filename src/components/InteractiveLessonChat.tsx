@@ -391,24 +391,12 @@ const InteractiveLessonChat = ({
           setMessages([firstPortionMessage]);
           currentPortionRef.current = 1; // Mark first portion as shown
           
-          // Auto-speak first portion
-          console.log('✅ Lesson initialized - auto-playing first portion');
-          console.log('📄 TTS Text:');
+          // Lesson initialized - waiting for user to press button to hear TTS
+          console.log('✅ Lesson initialized - ready for user to press play button');
+          console.log('📄 First portion content:');
           console.log(portions[0]);
           console.log('---');
-          
-          // Give a small delay for the component to fully render
-          setTimeout(() => {
-            if (typeof OpenAITTS !== 'undefined' && OpenAITTS.speak) {
-              try {
-                console.log('🎤 Auto-reading first portion...');
-                speakSentenceBySentence(portions[0]);
-                setIsPlaying(true);
-              } catch (error) {
-                console.error('❌ Error auto-speaking first portion:', error);
-              }
-            }
-          }, 500);
+          console.log('🎤 User can now click 🔊 button to hear this message');
           return;
         }
       }
@@ -422,27 +410,12 @@ const InteractiveLessonChat = ({
       };
       setMessages([welcomeMessage]);
       
-      // Auto-speak welcome message when lesson initializes
-      console.log('✅ Lesson initialized - auto-playing welcome message (no content)');
+      // Lesson initialized - waiting for user to press button
+      console.log('✅ Lesson initialized - ready for user to press play button');
       console.log('📝 Welcome message content:');
       console.log(welcomeMessage.content);
       console.log('---');
-      
-      // Give a small delay for the component to fully render
-      setTimeout(() => {
-        if (typeof OpenAITTS !== 'undefined' && OpenAITTS.speak) {
-          try {
-            console.log('🎤 Auto-reading welcome message...');
-            console.log('📄 TTS Text:');
-            console.log(welcomeMessage.content);
-            console.log('---');
-            speakSentenceBySentence(welcomeMessage.content);
-            setIsPlaying(true);
-          } catch (error) {
-            console.error('❌ Error auto-speaking welcome:', error);
-          }
-        }
-      }, 500);
+      console.log('🎤 User can now click 🔊 button to hear this message');
     };
 
     initializeLesson();
@@ -546,19 +519,12 @@ const InteractiveLessonChat = ({
         setIsLessonComplete(true);
       }
       
-      // Auto-speak the portion
-      if (typeof OpenAITTS !== 'undefined' && OpenAITTS.speak) {
-        try {
-          console.log('🎤 Auto-reading portion...');
-          console.log('📄 TTS Text:');
-          console.log(portion);
-          console.log('---');
-          await speakSentenceBySentence(portion);
-          setIsPlaying(true);
-        } catch (error) {
-          console.error('❌ Error speaking portion:', error);
-        }
-      }
+      // Portion displayed - waiting for user to click play button
+      console.log('✅ Next portion displayed - ready for user to press play button');
+      console.log('📄 Portion content:');
+      console.log(portion);
+      console.log('---');
+      console.log('🎤 User can now click 🔊 button to hear this message');
       return;
     }
 
