@@ -90,15 +90,6 @@ const Header = () => {
 
           {/* Правая часть - Личный кабинет */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="text-right hidden sm:block">
-              <p className="text-xs sm:text-sm font-medium">Добро пожаловать, {user?.name}!</p>
-              {user?.knowledgeLevel && (
-                <Badge variant="secondary" className="text-xs">
-                  {user.knowledgeLevel === 'beginner' ? 'Начинающий' :
-                   user.knowledgeLevel === 'intermediate' ? 'Средний' : 'Продвинутый'}
-                </Badge>
-              )}
-            </div>
             <Button
               variant="ghost"
               size="sm"
