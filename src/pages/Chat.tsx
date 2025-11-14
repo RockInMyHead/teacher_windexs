@@ -285,7 +285,38 @@ const TOPIC_OPTIONS_BY_CLUSTER: Record<GradeCluster, string[]> = {
   grade13: ['Профессиональный английский', 'Стратегические презентации', 'Формальные документы', 'Деловые переговоры', 'Продвинутая бизнес коммуникация']
 };
 
-const getTopicOptionsForCluster = (cluster: GradeCluster): string[] => {
+const getTopicOptionsForCluster = (cluster: GradeCluster, language: 'english' | 'russian' = 'english'): string[] => {
+  // Если выбран русский язык, берем темы из COURSE_PLANS
+  if (language === 'russian') {
+    // Определяем класс на основе кластера
+    let gradeNumber = 1;
+    switch (cluster) {
+      case 'grade1': gradeNumber = 1; break;
+      case 'grade2': gradeNumber = 2; break;
+      case 'grade3_4': gradeNumber = 3; break; // Можно выбрать 3 или 4
+      case 'grade5_6': gradeNumber = 5; break; // Можно выбрать 5 или 6
+      case 'grade7_8': gradeNumber = 7; break;
+      case 'grade9': gradeNumber = 9; break;
+      case 'grade10_11': gradeNumber = 10; break;
+      case 'grade12': gradeNumber = 12; break;
+      case 'grade13': gradeNumber = 13; break;
+      default: gradeNumber = 1;
+    }
+
+    // Ищем курс русского языка для этого класса
+    const russianCourse = COURSE_PLANS.find(course =>
+      course.title.toLowerCase().includes('русский') && course.grade === gradeNumber
+    );
+
+    if (russianCourse && russianCourse.lessons.length > 0) {
+      // Возвращаем темы уроков как варианты ответов
+      const topics = russianCourse.lessons.map(lesson => lesson.topic);
+      // Добавляем вариант "Все темы помню плохо" и "Ничего из перечисленного"
+      return [...topics, 'Все темы помню плохо', 'Ничего из перечисленного'];
+    }
+  }
+
+  // Для английского языка используем старые статические опции
   return TOPIC_OPTIONS_BY_CLUSTER[cluster] || TOPIC_OPTIONS_BY_CLUSTER['grade1'];
 };
 
@@ -300,7 +331,7 @@ const Chat = () => {
   
   // Adaptive assessment states
   const [isInAdaptiveMode, setIsInAdaptiveMode] = useState(false);
-  const [assessmentState, setAssessmentState] = useState<'initial' | 'collecting_grade' | 'collecting_topic' | 'interview_questions' | 'in_progress' | 'completed'>('initial');
+  const [assessmentState, setAssessmentState] = useState<'initial' | 'collecting_language' | 'collecting_grade' | 'collecting_topic' | 'interview_questions' | 'in_progress' | 'completed'>('initial');
   const [classGrade, setClassGrade] = useState('');
   const [lastTopic, setLastTopic] = useState('');
   const [currentAssessmentQuestion, setCurrentAssessmentQuestion] = useState<AssessmentQuestion | null>(null);
@@ -326,6 +357,7 @@ const Chat = () => {
   const [audioTaskText, setAudioTaskText] = useState('');
   const [isRecordingAudioTask, setIsRecordingAudioTask] = useState(false);
   const [isTestQuestionActive, setIsTestQuestionActive] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState<'english' | 'russian'>('english');
   const [testQuestionData, setTestQuestionData] = useState<{
     question: string;
     options: string[];
@@ -1539,18 +1571,15 @@ const Chat = () => {
     if (startParam === 'true' && messages.length === 0) {
       // Always start in testing mode
       setIsInAdaptiveMode(true);
-      setAssessmentState('collecting_grade');
-      setSelectedGradeCluster('grade1');
-      setGradeQuestionBank(GRADE_INTRO_QUESTIONS['grade1']);
-      setGradeQuestionIndex(0);
+      setAssessmentState('collecting_language');
 
-      // Start testing immediately without welcome message
+      // Start testing immediately without welcome message - first ask about language
       setTimeout(() => {
         showTestQuestion(
-          'В каком ты классе учишься?',
-          ['1-2 класс', '3-4 класс', '5-6 класс', '7-8 класс', '9-10 класс', '11 класс', 'Учусь в вузе', 'Окончил вуз'],
+          'Какой язык вы хотите изучать?',
+          ['Русский язык', 'Английский язык'],
           1,
-          getIntroTotalForCluster('grade1')
+          5 // Общее количество вопросов будет 5 (язык + класс + тема + 2 интервью)
         );
       }, 500);
     }
@@ -2030,8 +2059,39 @@ const Chat = () => {
     console.log('🧪 isTestQuestionActive:', isTestQuestionActive);
     console.log('🧪 assessmentState:', assessmentState);
 
+    // Handle language selection
+    if (isTestQuestionActive && testQuestionData?.currentQuestion === 1 && assessmentState === 'collecting_language') {
+      console.log('🧪 Handling language selection:', selectedAnswer);
+
+      // Set the selected language
+      if (selectedAnswer === 'Русский язык') {
+        setSelectedLanguage('russian');
+      } else if (selectedAnswer === 'Английский язык') {
+        setSelectedLanguage('english');
+      }
+
+      // Hide current test and show grade question
+      setIsTestQuestionActive(false);
+      setTestQuestionData(null);
+
+      // Show next question: "В каком ты классе учишься?"
+      setTimeout(() => {
+        showTestQuestion(
+          'В каком ты классе учишься?',
+          ['1-2 класс', '3-4 класс', '5-6 класс', '7-8 класс', '9-10 класс', '11 класс', 'Учусь в вузе', 'Окончил вуз'],
+          2,
+          5
+        );
+
+        // Update assessment state to collecting_grade
+        setAssessmentState('collecting_grade');
+      }, 500);
+
+      return;
+    }
+
     // Handle introductory test level selection
-    if (isTestQuestionActive && testQuestionData?.currentQuestion === 1 && assessmentState === 'collecting_grade') {
+    if (isTestQuestionActive && testQuestionData?.currentQuestion === 2 && assessmentState === 'collecting_grade') {
       console.log('🧪 Handling introductory test level selection');
 
       // Set the selected level
@@ -2054,14 +2114,14 @@ const Chat = () => {
       setIsTestQuestionActive(false);
       setTestQuestionData(null);
 
-      // Show next question: "What was the last thing you studied in English?"
+      // Show next question: "What was the last thing you studied?"
       setTimeout(() => {
-        const topicOptions = getTopicOptionsForCluster(cluster);
-        console.log('📚 Topic question - Cluster:', cluster, 'Options:', topicOptions);
+        const topicOptions = getTopicOptionsForCluster(cluster, selectedLanguage);
+        console.log('📚 Topic question - Cluster:', cluster, 'Language:', selectedLanguage, 'Options:', topicOptions);
         showTestQuestion(
-          'Что последним проходил(а) по английскому?',
+          selectedLanguage === 'russian' ? 'Что последним проходил(а) по русскому?' : 'Что последним проходил(а) по английскому?',
           topicOptions,
-          2,
+          3,
           totalQuestions
         );
 
@@ -2073,7 +2133,7 @@ const Chat = () => {
     }
 
     // Handle introductory test topic selection
-    if (isTestQuestionActive && testQuestionData?.currentQuestion === 2 && assessmentState === 'collecting_topic') {
+    if (isTestQuestionActive && testQuestionData?.currentQuestion === 3 && assessmentState === 'collecting_topic') {
       console.log('🧪 Handling introductory test topic selection');
 
       // Set the selected last topic
@@ -2441,11 +2501,11 @@ const Chat = () => {
       setTestQuestionData(null);
 
       setTimeout(() => {
-        const topicOptions = getTopicOptionsForCluster(cluster);
+        const topicOptions = getTopicOptionsForCluster(cluster, selectedLanguage);
         showTestQuestion(
-          'Что последним проходил(а) по английскому?',
+          selectedLanguage === 'russian' ? 'Что последним проходил(а) по русскому?' : 'Что последним проходил(а) по английскому?',
           topicOptions,
-          2,
+          3,
           totalQuestions
         );
         setAssessmentState('collecting_topic');
@@ -2454,7 +2514,7 @@ const Chat = () => {
     }
 
     // Handle skip for topic selection question
-    if (isInAdaptiveMode && assessmentState === 'collecting_topic' && testQuestionData?.currentQuestion === 2) {
+    if (isInAdaptiveMode && assessmentState === 'collecting_topic' && testQuestionData?.currentQuestion === 3) {
       console.log('🧪 Skipping topic selection, using default');
       // Set default topic and continue
       setLastTopic('Ничего из перечисленного');
@@ -2746,8 +2806,8 @@ const Chat = () => {
         setAssessmentState('collecting_topic');
 
         // Show topic question as interactive test instead of chat message
-        const topicOptions = getTopicOptionsForCluster(cluster);
-        showTestQuestion('Что последним проходил(а) по английскому?', topicOptions, 1, totalQuestions);
+        const topicOptions = getTopicOptionsForCluster(cluster, selectedLanguage);
+        showTestQuestion(selectedLanguage === 'russian' ? 'Что последним проходил(а) по русскому?' : 'Что последним проходил(а) по английскому?', topicOptions, 1, totalQuestions);
 
         setIsLoading(false);
         return;
