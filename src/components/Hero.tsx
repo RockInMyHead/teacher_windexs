@@ -71,7 +71,7 @@ const Hero = () => {
             </Button>
           </div>
           
-          <div className="grid grid-cols-3 gap-6 pt-16 max-w-3xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-16 max-w-3xl mx-auto">
             {[
               { value: "10K+", label: "Студентов", sublabel: "активно учатся" },
               { value: "50+", label: "Курсов", sublabel: "по всем направлениям" },
