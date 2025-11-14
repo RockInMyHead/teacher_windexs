@@ -1571,17 +1571,18 @@ const Chat = () => {
     const startParam = urlParams.get('start');
 
     if (startParam === 'true' && messages.length === 0) {
-      // Always start in testing mode
+      // Always start in testing mode with Russian language pre-selected
       setIsInAdaptiveMode(true);
-      setAssessmentState('collecting_language');
+      setSelectedLanguage('russian'); // Автоматически выбираем русский язык
+      setAssessmentState('collecting_grade');
 
-      // Start testing immediately without welcome message - first ask about language
+      // Start testing immediately without welcome message - skip language question and go to grade question
       setTimeout(() => {
         showTestQuestion(
-          'Какой язык вы хотите изучать?',
-          ['Русский язык', 'Английский язык'],
-          1,
-          5 // Общее количество вопросов будет 5 (язык + класс + тема + 2 интервью)
+          'В каком ты классе учишься?',
+          ['1-2 класс', '3-4 класс', '5-6 класс', '7-8 класс', '9-10 класс', '11 класс', 'Учусь в вузе', 'Окончил вуз'],
+          1, // Начинаем с 1 вместо 2, так как пропустили вопрос о языке
+          4 // Общее количество вопросов будет 4 (класс + тема + 2 интервью)
         );
       }, 500);
     }
@@ -2061,70 +2062,37 @@ const Chat = () => {
     console.log('🧪 isTestQuestionActive:', isTestQuestionActive);
     console.log('🧪 assessmentState:', assessmentState);
 
-    // Handle language selection
-    if (isTestQuestionActive && testQuestionData?.currentQuestion === 1 && assessmentState === 'collecting_language') {
-      console.log('🧪 Handling language selection:', selectedAnswer);
+    // Handle grade selection (first question now)
+    if (isTestQuestionActive && testQuestionData?.currentQuestion === 1 && assessmentState === 'collecting_grade') {
+      console.log('🧪 Handling grade selection:', selectedAnswer);
 
-      // Set the selected language
-      if (selectedAnswer === 'Русский язык') {
-        setSelectedLanguage('russian');
-      } else if (selectedAnswer === 'Английский язык') {
-        setSelectedLanguage('english');
-      }
+      // Set the selected grade based on answer
+      const gradeMap: { [key: string]: string } = {
+        '1-2 класс': '1',
+        '3-4 класс': '3',
+        '5-6 класс': '5',
+        '7-8 класс': '7',
+        '9-10 класс': '9',
+        '11 класс': '11',
+        'Учусь в вузе': '90', // Special grade for university students
+        'Окончил вуз': '100' // Special grade for graduates
+      };
 
-      // Hide current test and show grade question
-      setIsTestQuestionActive(false);
-      setTestQuestionData(null);
-
-      // Show next question: "В каком ты классе учишься?"
-      setTimeout(() => {
-        showTestQuestion(
-          'В каком ты классе учишься?',
-          ['1-2 класс', '3-4 класс', '5-6 класс', '7-8 класс', '9-10 класс', '11 класс', 'Учусь в вузе', 'Окончил вуз'],
-          2,
-          5
-        );
-
-        // Update assessment state to collecting_grade
-        setAssessmentState('collecting_grade');
-      }, 500);
-
-      return;
-    }
-
-    // Handle introductory test level selection
-    if (isTestQuestionActive && testQuestionData?.currentQuestion === 2 && assessmentState === 'collecting_grade') {
-      console.log('🧪 Handling introductory test level selection');
-
-      // Set the selected level
-      setClassGrade(selectedAnswer);
-      setLastTopic(''); // Reset last topic
-      const cluster = mapGradeToCluster(selectedAnswer);
-      console.log('🎯 Grade Selection Debug:', {
-        userInput: selectedAnswer,
-        detectedCluster: cluster,
-        questionsAvailable: GRADE_INTRO_QUESTIONS[cluster]?.length || 0,
-        fallbackUsed: !GRADE_INTRO_QUESTIONS[cluster]
-      });
-      setSelectedGradeCluster(cluster);
-      const clusterQuestions = GRADE_INTRO_QUESTIONS[cluster] || GRADE_INTRO_QUESTIONS['grade1'];
-      const totalQuestions = 2 + clusterQuestions.length;
-      setGradeQuestionBank(clusterQuestions);
-      setGradeQuestionIndex(0);
+      const selectedGrade = gradeMap[selectedAnswer] || '1';
+      setSelectedGrade(selectedGrade);
 
       // Hide current test and show topic question
       setIsTestQuestionActive(false);
       setTestQuestionData(null);
 
-      // Show next question: "What was the last thing you studied?"
+      // Show next question: topic selection based on selected language and grade
       setTimeout(() => {
-        const topicOptions = getTopicOptionsForCluster(cluster, selectedLanguage);
-        console.log('📚 Topic question - Cluster:', cluster, 'Language:', selectedLanguage, 'Options:', topicOptions);
+        const topicOptions = getTopicOptionsForCluster(selectedGrade, 'russian');
         showTestQuestion(
-          selectedLanguage === 'russian' ? 'Что последним проходил(а) по русскому?' : 'Что последним проходил(а) по английскому?',
+          'Какую тему ты хочешь изучить?',
           topicOptions,
-          3,
-          totalQuestions
+          2,
+          4
         );
 
         // Update assessment state to collecting_topic
@@ -2135,7 +2103,7 @@ const Chat = () => {
     }
 
     // Handle introductory test topic selection
-    if (isTestQuestionActive && testQuestionData?.currentQuestion === 3 && assessmentState === 'collecting_topic') {
+    if (isTestQuestionActive && testQuestionData?.currentQuestion === 2 && assessmentState === 'collecting_topic') {
       console.log('🧪 Handling introductory test topic selection');
 
       // Set the selected last topic
@@ -2157,9 +2125,9 @@ const Chat = () => {
           completeIntroAssessment();
         } else {
           setAssessmentState('interview_questions');
-          setQuestionCount(3);
+          setQuestionCount(2);
           const firstQuestion = clusterQuestions[0];
-          showTestQuestion(firstQuestion.question, firstQuestion.options, 3, totalQuestions);
+          showTestQuestion(firstQuestion.question, firstQuestion.options, 2, totalQuestions);
         }
       }, 500);
 
@@ -2180,9 +2148,9 @@ const Chat = () => {
         const nextIndex = currentIndex + 1;
         if (nextIndex < gradeQuestionBank.length) {
           setGradeQuestionIndex(nextIndex);
-          setQuestionCount(3 + nextIndex);
+          setQuestionCount(2 + nextIndex);
           const nextQuestion = gradeQuestionBank[nextIndex];
-          showTestQuestion(nextQuestion.question, nextQuestion.options, 3 + nextIndex, totalQuestions);
+          showTestQuestion(nextQuestion.question, nextQuestion.options, 2 + nextIndex, totalQuestions);
         } else {
           // Finish interview and start assessment
           completeIntroAssessment();
