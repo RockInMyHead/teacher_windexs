@@ -610,10 +610,21 @@ const CourseDetail = () => {
                     </div>
                   </div>
                 </div>
+                  <div className="flex gap-3">
                   <Button size="lg" onClick={handleStartAssessment} className="flex items-center gap-2">
                   <Play className="w-5 h-5" />
                   Начать обучение
                 </Button>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      onClick={() => navigate('/chat')}
+                      className="flex items-center gap-2 border-2 hover:bg-primary hover:text-primary-foreground"
+                    >
+                      <MessageSquare className="w-5 h-5" />
+                      Online-урок
+                    </Button>
+                  </div>
               </div>
             </CardContent>
           </Card>

@@ -270,9 +270,8 @@ export const TestQuestionPanel = React.memo(
       <Dialog open={isActive} onOpenChange={open => !open && onClose?.()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Контрольный вопрос</DialogTitle>
+            <DialogTitle></DialogTitle>
             <DialogDescription>
-              Вопрос {questionData.currentQuestion} из {questionData.totalQuestions}
             </DialogDescription>
           </DialogHeader>
 

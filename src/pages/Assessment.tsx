@@ -22,7 +22,7 @@ interface Question {
 
 
 interface AssessmentStep {
-  id: 'level_selection' | 'goal_setting' | 'testing';
+  id: 'level_selection' | 'goal_setting' | 'testing' | 'completed';
   title: string;
   description: string;
 }
@@ -34,16 +34,27 @@ const Assessment = () => {
   const courseId = parseInt(searchParams.get('courseId') || '0');
   const [questions, setQuestions] = useState<Question[]>([]);
 
-  // New assessment flow states
-  const [currentStep, setCurrentStep] = useState<AssessmentStep['id']>('level_selection');
+  // Skip all steps and go directly to completion
+  const [currentStep, setCurrentStep] = useState<AssessmentStep['id']>('completed');
   const [selectedLevel, setSelectedLevel] = useState<CEFRLevel | null>(null);
   const [learningGoal, setLearningGoal] = useState('');
+  const [isCompleting, setIsCompleting] = useState(true);
 
   const assessmentSteps: AssessmentStep[] = [
     { id: 'level_selection', title: 'Выберите ваш уровень', description: 'Укажите ваш текущий уровень владения языком' },
     { id: 'goal_setting', title: 'Определите цель обучения', description: 'Расскажите, зачем вы изучаете язык' },
     { id: 'testing', title: 'Проверка уровня', description: 'Ответьте на вопросы для точной оценки' }
   ];
+
+  // Automatically complete assessment on component mount
+  useEffect(() => {
+    const completeAssessment = async () => {
+      setIsCompleting(true);
+      await handleTestCompletion();
+      setIsCompleting(false);
+    };
+    completeAssessment();
+  }, []);
 
   // Системные промпты для разных курсов
   const getSystemPrompt = (courseId: number): string => {
@@ -434,21 +445,35 @@ const Assessment = () => {
     setCurrentStep('goal_setting');
   };
 
-  const handleGoalSetting = (goal: string) => {
+  const handleGoalSetting = async (goal: string) => {
     setLearningGoal(goal);
-    setCurrentStep('testing');
+    // Skip testing and go directly to completion
+    await handleTestCompletion();
   };
 
   const handleTestCompletion = async (correctCount?: number) => {
-    const finalScore = correctCount ?? score;
-    const percentage = Math.round((finalScore / questions.length) * 100);
+    // If testing was skipped, use default values
+    const wasTestingSkipped = questions.length === 0;
+    const finalScore = wasTestingSkipped ? 75 : (correctCount ?? score);
+    const totalQuestions = wasTestingSkipped ? 10 : questions.length;
+    const percentage = Math.round((finalScore / totalQuestions) * 100);
     const cefrResult = getCEFRScore(percentage);
 
     setFinalScore(cefrResult.score);
     setFinalCEFRLevel(cefrResult.level);
 
-    // Collect detailed assessment data
-    const assessmentData = {
+    // Collect assessment data
+    const assessmentData = wasTestingSkipped ? {
+      questions: [],
+      userAnswers: [],
+      correctAnswers: [],
+      score: finalScore,
+      totalQuestions: totalQuestions,
+      selectedLevel: selectedLevel,
+      learningGoal: learningGoal,
+      finalCEFRLevel: cefrResult.level,
+      finalScore: cefrResult.score
+    } : {
       questions: questions,
       userAnswers: answers,
       correctAnswers: questions.map(q => q.correctAnswer),
@@ -460,30 +485,31 @@ const Assessment = () => {
       finalScore: cefrResult.score
     };
 
-    // Determine weak topics based on incorrect answers
+    // Determine weak topics
     const weakTopics: string[] = [];
-    const incorrectQuestions: any[] = [];
+    if (!wasTestingSkipped) {
+      const incorrectQuestions: any[] = [];
+      answers.forEach((answer, index) => {
+        if (answer !== questions[index].correctAnswer) {
+          incorrectQuestions.push({
+            question: questions[index].question,
+            userAnswer: questions[index].options[answer] || 'Не ответил',
+            correctAnswer: questions[index].options[questions[index].correctAnswer],
+            explanation: questions[index].explanation,
+            topic: getQuestionTopic(questions[index])
+          });
 
-    answers.forEach((answer, index) => {
-      if (answer !== questions[index].correctAnswer) {
-        incorrectQuestions.push({
-          question: questions[index].question,
-          userAnswer: questions[index].options[answer] || 'Не ответил',
-          correctAnswer: questions[index].options[questions[index].correctAnswer],
-          explanation: questions[index].explanation,
-          topic: getQuestionTopic(questions[index])
-        });
-
-        const topic = getQuestionTopic(questions[index]);
-        if (!weakTopics.includes(topic)) {
-          weakTopics.push(topic);
+          const topic = getQuestionTopic(questions[index]);
+          if (!weakTopics.includes(topic)) {
+            weakTopics.push(topic);
+          }
         }
-      }
-    });
+      });
+    }
 
     // Update user assessment result with detailed data
     setIsGeneratingCourse(true);
-    await updateAssessmentResult(finalScore, questions.length, weakTopics, assessmentData);
+    await updateAssessmentResult(finalScore, totalQuestions, weakTopics, assessmentData);
     setIsGeneratingCourse(false);
 
     // Navigate directly to personalized course after completion
@@ -1624,6 +1650,26 @@ const Assessment = () => {
     }
   };
 
+  // Show loading while completing assessment
+  if (isCompleting) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background flex items-center justify-center">
+        <Card className="w-full max-w-md text-center">
+          <CardContent className="p-8">
+            <Brain className="w-12 h-12 mx-auto mb-4 text-muted-foreground animate-pulse" />
+            <h2 className="text-xl font-semibold mb-2">Создание персонального курса</h2>
+            <p className="text-muted-foreground mb-4">
+              Анализируем ваши предпочтения и создаем индивидуальную программу обучения...
+            </p>
+            <div className="flex justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // Show different UI based on current step
   if (currentStep === 'level_selection') {
     return (
@@ -2040,7 +2086,6 @@ const Assessment = () => {
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-3">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                 <span className="text-sm text-muted-foreground">
-                  Вопрос {currentQuestionIndex + 1} из {questions.length}
                 </span>
                 <Badge className={`${getDifficultyColor(currentQuestion.difficulty)} flex items-center gap-1 w-fit`}>
                   {getDifficultyIcon(currentQuestion.difficulty)}

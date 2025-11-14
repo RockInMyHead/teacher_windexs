@@ -16,8 +16,7 @@ import {
   Brain,
   Star,
   CheckCircle,
-  Play,
-  Gamepad2
+  Play
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -134,6 +133,20 @@ const availableCourses = [
     features: ["Древний мир", "Средние века", "Новое время", "История России"],
     price: "Бесплатно",
     modules: 4
+  },
+  {
+    id: 8,
+    icon: Users,
+    title: "Обществознание",
+    description: "Изучение общества, человека и социальных отношений. Психология, социология, право, экономика и философия",
+    level: "Все уровни",
+    duration: "7 месяцев",
+    students: "4.9K",
+    rating: 4.6,
+    color: "from-indigo-500 to-indigo-600",
+    features: ["Социология", "Психология", "Право", "Экономика", "Философия"],
+    price: "Бесплатно",
+    modules: 5
   }
 ];
 
@@ -345,10 +358,6 @@ const AvailableCourses = () => {
             Присоединяйтесь к тысячам студентов, которые уже улучшают свои знания с помощью нашего AI-ассистента
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" onClick={() => navigate('/duolingo-assessment')}>
-              <Gamepad2 className="w-5 h-5 mr-2" />
-              Duolingo тест английского
-            </Button>
             <Button size="lg" onClick={() => navigate('/chat')}>
               <Brain className="w-5 h-5 mr-2" />
               Начать чат с AI

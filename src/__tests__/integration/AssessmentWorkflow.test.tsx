@@ -23,72 +23,19 @@ describe('Assessment Workflow Integration Test', () => {
     vi.clearAllMocks()
   })
 
-  it('should show level selection step', () => {
+  it('should show loading and complete assessment automatically', async () => {
     renderWithProviders(<Assessment />)
 
-    // Should show level selection initially
-    expect(screen.getByText('Выберите ваш уровень владения языком')).toBeInTheDocument()
+    // Should show loading screen initially
+    expect(screen.getByText('Создание персонального курса')).toBeInTheDocument()
+    expect(screen.getByText('Анализируем ваши предпочтения и создаем индивидуальную программу обучения...')).toBeInTheDocument()
 
-    // Should have CEFR level options
-    expect(screen.getByText('Элементарный (A1)')).toBeInTheDocument()
-    expect(screen.getByText('Базовый (A2)')).toBeInTheDocument()
-    expect(screen.getByText('Средний (B1)')).toBeInTheDocument()
+    // Should navigate to personalized course automatically
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/personalized-course')
+    })
   })
 
-  it('should navigate to goal setting after level selection', async () => {
-    const user = userEvent.setup()
-
-    renderWithProviders(<Assessment />)
-
-    // Select A2 level
-    const a2Radio = screen.getByRole('radio', { name: /базовый \(a2\)/i })
-    await user.click(a2Radio)
-
-    const continueButton = screen.getByRole('button', { name: /продолжить/i })
-    await user.click(continueButton)
-
-    // Should move to goal setting
-    await waitFor(() => {
-      expect(screen.getByText('Расскажите о ваших целях')).toBeInTheDocument()
-    })
-
-    // Should have goal input field
-    expect(screen.getByRole('textbox')).toBeInTheDocument()
-  }) // Increase timeout for this integration test
-
-  it('should allow goal input and navigation to testing', async () => {
-    const user = userEvent.setup()
-
-    renderWithProviders(<Assessment />)
-
-    // Select level first
-    const b1Radio = screen.getByRole('radio', { name: /средний \(b1\)/i })
-    await user.click(b1Radio)
-
-    const continueButton = screen.getByRole('button', { name: /продолжить/i })
-    await user.click(continueButton)
-
-    // Should be in goal setting
-    await waitFor(() => {
-      expect(screen.getByText('Расскажите о ваших целях')).toBeInTheDocument()
-    })
-
-    // Input goal and continue
-    const goalTextarea = screen.getByRole('textbox')
-    await user.type(goalTextarea, 'Для работы в IT')
-
-    const startTestingButton = screen.getByRole('button', { name: /начать тестирование/i })
-    expect(startTestingButton).not.toBeDisabled()
-
-    await user.click(startTestingButton)
-
-    // Should attempt to start testing (may show loading or questions)
-    await waitFor(() => {
-      // Either shows loading or questions (depending on API response)
-      const loadingText = screen.queryByText(/AI создает персональный тест/i)
-      const questionText = screen.queryByText(/Какое/i)
-
-      expect(loadingText || questionText).toBeTruthy()
-    }, { timeout: 3000 })
+  // All assessment steps are now skipped - assessment completes automatically
   })
 })

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,15 +16,102 @@ import {
   ChevronRight,
   Star
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const PersonalizedCoursePage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [currentModule, setCurrentModule] = useState(0);
+  const [activeLesson, setActiveLesson] = useState<string | null>(null);
+
+  // Function to translate concept keys to Russian names
+  const translateConcept = (concept: string): string => {
+    const conceptLabels: Record<string, string> = {
+      greetings_basic: 'Приветствия',
+      greetings_simple: 'Простые приветствия',
+      numbers_1_5: 'Числа 1–5',
+      numbers_1_20: 'Числа 1–20',
+      numbers_basic: 'Базовые числа',
+      colors_basic: 'Основные цвета',
+      alphabet_A_G: 'Алфавит A–G',
+      alphabet_basic: 'Базовый алфавит',
+      full_alphabet: 'Полный алфавит',
+      animals_basic: 'Животные',
+      verbs_basic: 'Базовые глаголы',
+      family_basic: 'Семья и друзья',
+      school_basic: 'Школа и учеба',
+      food_basic: 'Еда и напитки',
+      days_basic: 'Дни недели',
+      weather_basic: 'Погода',
+      time_basic: 'Время',
+      pronouns_basic: 'Местоимения',
+      phonics_basic: 'Произношение',
+      classroom_objects: 'Предметы в классе',
+      emotions_basic: 'Эмоции',
+      hobbies_basic: 'Хобби и увлечения',
+      present_simple: 'Present Simple',
+      past_simple_regular: 'Past Simple (правильные глаголы)',
+      present_continuous: 'Present Continuous',
+      have_got: 'Have Got',
+      prepositions_place: 'Предлоги места',
+      to_be_full: 'To Be (полная форма)',
+      reading_2_3_sent: 'Чтение простых предложений',
+      present_perfect: 'Present Perfect',
+      phrasal_verbs: 'Фразовые глаголы',
+      comparative: 'Сравнительная степень',
+      comparative_superlative: 'Сравнительные степени',
+      health_sports: 'Здоровье и спорт',
+      technology_gadgets: 'Технологии и гаджеты',
+      conditionals: 'Условные предложения',
+      passive_voice: 'Пассивный залог',
+      passive_present: 'Пассивный залог (Present)',
+      complex_times: 'Сложные времена',
+      speaking_discussions: 'Говорение и дискуссии',
+      academic_texts: 'Академические тексты',
+      complex_grammar: 'Сложная грамматика',
+      essay_writing: 'Написание эссе',
+      oral_presentations: 'Устные презентации',
+      exam_preparation: 'Подготовка к экзаменам',
+      academic_writing: 'Академическое письмо',
+      perfect_continuous: 'Perfect Continuous',
+      english_idioms: 'Английские идиомы',
+      discussions_arguments: 'Дискуссии и аргументация',
+      ege_ielts_prep: 'Подготовка к ЕГЭ/IELTS',
+      future_perfect: 'Future Perfect',
+      academic_vocab: 'Академическая лексика',
+      passive_voice_advanced: 'Сложный пассив',
+      reported_speech: 'Косвенная речь',
+      cohesive_devices: 'Связующие элементы текста',
+      business_english: 'Бизнес-английский',
+      negotiations_language: 'Лексика переговоров',
+      emails_formal: 'Формальные письма',
+      idioms_advanced: 'Продвинутые идиомы',
+      presentation_skills: 'Навыки презентаций',
+      modals_basic: 'Модальные глаголы',
+      zero_conditional: 'Условные предложения (тип 0)'
+    };
+
+    return conceptLabels[concept] || concept;
+  };
 
   const courseId = user?.personalizedCourse?.id || 'personalized';
   const completedLessons = new Set(user?.completedLessons || []);
+
+  // Read URL parameters to highlight current lesson
+  useEffect(() => {
+    const courseParam = searchParams.get('course');
+    const currentParam = searchParams.get('current');
+
+    if (currentParam) {
+      setActiveLesson(currentParam);
+      // Parse module and lesson indices
+      const [moduleIndex, lessonIndex] = currentParam.split('_').map(Number);
+      if (!isNaN(moduleIndex)) {
+        setCurrentModule(moduleIndex);
+      }
+    }
+  }, [searchParams]);
 
   if (!user?.personalizedCourse) {
     return (
@@ -163,7 +250,7 @@ const PersonalizedCoursePage = () => {
             <div className="flex flex-wrap gap-2">
               {course.topics.map((topic, index) => (
                 <Badge key={index} variant="outline" className="text-sm">
-                  {topic}
+                  {translateConcept(topic)}
                 </Badge>
               ))}
             </div>
@@ -237,16 +324,23 @@ const PersonalizedCoursePage = () => {
                   {module.lessons.map((lesson, index) => {
                     const lessonKey = `${courseId}-${currentModule}-${index}`;
                     const isCompleted = completedLessons.has(lessonKey);
+                    const isActive = activeLesson === `${currentModule}_${index}`;
 
                     return (
                       <div key={index} className={`flex items-center gap-4 p-4 border rounded-lg transition-colors ${
-                        isCompleted ? 'border-green-200 bg-green-50 dark:bg-green-950/20' : 'border-border/50 hover:bg-muted/50'
+                        isCompleted ? 'border-green-200 bg-green-50 dark:bg-green-950/20' :
+                        isActive ? 'border-blue-300 bg-blue-50 dark:bg-blue-950/20' :
+                        'border-border/50 hover:bg-muted/50'
                       }`}>
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                          isCompleted ? 'bg-green-500 text-white' : 'bg-primary/10 text-primary'
+                          isCompleted ? 'bg-green-500 text-white' :
+                          isActive ? 'bg-blue-500 text-white' :
+                          'bg-primary/10 text-primary'
                         }`}>
                           {isCompleted ? (
                             <CheckCircle className="w-4 h-4" />
+                          ) : isActive ? (
+                            <Play className="w-4 h-4" />
                           ) : (
                             <span className="text-sm font-medium">{index + 1}</span>
                           )}
@@ -265,7 +359,8 @@ const PersonalizedCoursePage = () => {
                           onClick={() => {
                               navigate(`/lesson/${courseId}/${currentModule}/${index}?type=notes`);
                           }}
-                          variant={isCompleted ? "outline" : "default"}
+                          variant={isCompleted ? "outline" : isActive ? "default" : "outline"}
+                          disabled={!isActive && !isCompleted}
                           className="flex items-center gap-2"
                         >
                             <BookOpen className="w-3 h-3" />
@@ -277,6 +372,7 @@ const PersonalizedCoursePage = () => {
                               navigate(`/lesson/${courseId}/${currentModule}/${index}?type=test`);
                             }}
                             variant="outline"
+                            disabled={!isActive && !isCompleted}
                             className="flex items-center gap-2"
                           >
                             <CheckCircle className="w-3 h-3" />

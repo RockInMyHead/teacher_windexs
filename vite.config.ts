@@ -6,7 +6,7 @@ import path from "path";
 export default defineConfig(() => ({
   server: {
     host: "::",
-    port: process.env.VITE_DEV_PORT ? parseInt(process.env.VITE_DEV_PORT) : 1032,
+    port: process.env.VITE_DEV_PORT ? parseInt(process.env.VITE_DEV_PORT) : 5173,
     // HMR конфигурация для разных сценариев
     hmr: process.env.NODE_ENV === 'production' 
       ? {
@@ -25,7 +25,7 @@ export default defineConfig(() => ({
           ? (process.env.PROXY_PORT === '1031'
               ? 'http://localhost:1031'  // Single-port режим
               : 'https://teacher.windexs.ru')  // Normal production
-          : `http://localhost:${process.env.PROXY_PORT || 1038}`,
+          : `http://localhost:${process.env.PROXY_PORT || 1031}`, // Development: используем 1031 (single-port)
         changeOrigin: true,
         secure: process.env.NODE_ENV === 'production'
           ? (process.env.PROXY_PORT === '1031' ? false : true)  // HTTP для single-port, HTTPS для normal

@@ -56,6 +56,8 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import InteractiveLessonChat from '@/components/InteractiveLessonChat';
+import Header from '@/components/Header';
 import {
   Brain,
   ArrowLeft,
@@ -442,11 +444,9 @@ const InteractiveTest = ({ lesson, onComplete }: InteractiveTestProps) => {
 
 // Animated Sphere Component for Lesson Communication
 const AnimatedSphere = ({
-  onStartChat,
-  onStartVoiceChat
+  onStartChat
 }: {
   onStartChat: () => void;
-  onStartVoiceChat: () => void;
 }) => (
   <div className="h-full bg-gradient-to-br from-background via-secondary/30 to-background flex flex-col items-center justify-center p-6">
     <div className="relative w-full max-w-sm flex-1 flex flex-col items-center justify-center">
@@ -492,18 +492,9 @@ const AnimatedSphere = ({
           </p>
           <div className="space-y-2">
             <Button
-              onClick={onStartVoiceChat}
+              onClick={onStartChat}
               size="lg"
               className="w-full font-medium shadow-lg"
-            >
-              <MessageCircle className="w-5 h-5 mr-2" />
-              Начать
-            </Button>
-            <Button
-              onClick={onStartChat}
-              variant="outline"
-              size="lg"
-              className="w-full font-medium"
             >
               💬 Чат
             </Button>
@@ -1797,7 +1788,7 @@ const Lesson = () => {
   };
 
   // Функция генерации персонализированного контента урока
-  const generateLessonContent = async (topic: string, userLevel: string, weakTopics: string[] = []) => {
+  const generateLessonContent = async (topic: string, userLevel: string, weakTopics: string[] = [], aspects: string = '') => {
     // Определяем название курса для промпта
     let courseName = courseInfo.courseName;
     if (user?.personalizedCourse && courseId === user.personalizedCourse.id) {
@@ -1806,6 +1797,13 @@ const Lesson = () => {
     }
 
     try {
+      const aspectsSection = aspects ? `
+
+ОБЯЗАТЕЛЬНЫЕ АСПЕКТЫ ДЛЯ РАССМОТРЕНИЯ В ЭТОМ УРОКЕ:
+${aspects}
+
+КРИТИЧНО: Урок ДОЛЖЕН включать ВСЕ перечисленные выше аспекты. Структурируй урок так, чтобы каждый аспект был рассмотрен подробно с примерами и упражнениями.` : '';
+
       const prompt = `Ты - опытный преподаватель ${courseName}. Создай подробный урок по теме "${topic}" для ученика уровня "${userLevel}".
 
 ВАЖНЫЕ ИНСТРУКЦИИ:
@@ -1819,7 +1817,7 @@ const Lesson = () => {
   * Для научных тем: расчеты, анализ, применение формул
   * Для творческих тем: проекты, создание контента
 
-${weakTopics.length > 0 ? `Ученик имеет слабые места в следующих темах: ${weakTopics.join(', ')}. Уделите особое внимание этим аспектам.` : ''}
+${weakTopics.length > 0 ? `Ученик имеет слабые места в следующих темах: ${weakTopics.join(', ')}. Уделите особое внимание этим аспектам.` : ''}${aspectsSection}
 
 Структура урока должна включать:
 
@@ -1902,7 +1900,33 @@ ${topic.toLowerCase().includes('тестирование') || topic.toLowerCase(
       }
 
       const data = await response.json();
-      const generatedContent = JSON.parse(data.choices[0].message.content.replace(/```json\n?|\n?```/g, ''));
+      console.log('🔍 AI Response:', data.choices[0].message.content);
+
+      let generatedContent;
+      try {
+        // Попробуем спарсить как JSON, очищая от лишних символов
+        let jsonContent = data.choices[0].message.content.trim();
+
+        // Удаляем markdown обертки
+        jsonContent = jsonContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+
+        // Удаляем возможные пробелы и переносы строк в начале/конце
+        jsonContent = jsonContent.trim();
+
+        generatedContent = JSON.parse(jsonContent);
+        console.log('✅ Parsed JSON successfully');
+      } catch (jsonError) {
+        console.warn('⚠️ AI returned text instead of JSON, using fallback:', jsonError);
+        // Если AI вернул текст, создаем базовую структуру
+        generatedContent = {
+          title: baseLesson?.title || lessonTopic,
+          topic: lessonTopic,
+          content: data.choices[0].message.content, // Используем ответ AI как есть
+          examples: [],
+          exercises: [],
+          summary: 'Урок сгенерирован на основе ответа AI'
+        };
+      }
 
       // Сохраняем в localStorage для кеширования
       const cacheKey = `lesson_${lessonKey}_${user?.id || 'guest'}`;
@@ -1949,11 +1973,15 @@ ${topic.toLowerCase().includes('тестирование') || topic.toLowerCase(
           }
         }
 
-        // Генерируем новый контент
+        // Генерируем новый контент с учетом aspects из плана урока
+        const lessonAspects = baseLesson?.aspects || '';
+        console.log('📚 Generating lesson content with aspects:', lessonAspects);
+        
         const generatedContent = await generateLessonContent(
           lessonTopic,
           user?.knowledgeLevel || 'beginner',
-          user?.assessmentResult?.weakTopics || []
+          user?.assessmentResult?.weakTopics || [],
+          lessonAspects
         );
 
         setLessonData(generatedContent);
@@ -2428,9 +2456,52 @@ ${currentLesson.theory}
     );
   }
 
+  // Используем интерактивный чат для персонализированных курсов
+  const useInteractiveMode = searchParams.get('interactive') === 'true' || (user?.personalizedCourse && courseId === user.personalizedCourse.id);
+  
+  if (useInteractiveMode && lessonTopic) {
+    // Stop any ongoing TTS from previous page
+    if (typeof OpenAITTS !== 'undefined' && OpenAITTS.stop) {
+      try {
+        OpenAITTS.stop();
+        console.log('🔇 TTS stopped - entering interactive lesson mode');
+      } catch (error) {
+        console.error('Error stopping TTS:', error);
+      }
+    }
+
+    // Get lesson details from the lesson content if available
+    const lessonDetails = baseLesson || { title: lessonTopic, topic: 'Новая тема', aspects: 'Общий материал' };
+    
+    // Use generated lesson content if available
+    const lessonContentForChat = lessonData && lessonData.theory ? {
+      title: lessonData.title || lessonDetails.title,
+      theory: lessonData.theory,
+      examples: lessonData.examples
+    } : undefined;
+    
+    return (
+      <InteractiveLessonChat
+        lessonTitle={lessonDetails.title || lessonTopic}
+        lessonTopic={lessonDetails.topic || 'Новая тема'}
+        lessonAspects={lessonDetails.aspects || 'Основной материал для изучения'}
+        lessonContent={lessonContentForChat}
+        onComplete={() => {
+          completeLesson(courseId || '1', moduleId || '0', lessonId || '0');
+          setTimeout(() => {
+            navigate('/personalized-course');
+          }, 1000);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
-      {/* Header */}
+      {/* Navigation Header */}
+      <Header />
+
+      {/* Lesson Header */}
       <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -2438,7 +2509,21 @@ ${currentLesson.theory}
             <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
-                onClick={() => navigate('/personalized-course')}
+                onClick={() => {
+                  // Stop TTS before navigation
+                  console.log('🔙 Back to course - stopping TTS');
+                  try {
+                    if (typeof window !== 'undefined' && (window as any).OpenAITTS?.stop) {
+                      (window as any).OpenAITTS.stop();
+                    }
+                    if (typeof window !== 'undefined' && window.speechSynthesis) {
+                      window.speechSynthesis.cancel();
+                    }
+                  } catch (error) {
+                    console.error('Error stopping TTS on back navigation:', error);
+                  }
+                  navigate('/personalized-course');
+                }}
                 className="flex items-center gap-2"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -2478,7 +2563,12 @@ ${currentLesson.theory}
             lesson={currentLesson}
             onComplete={() => {
               completeLesson(moduleIndex, lessonIndex);
-              navigate('/personalized-course');
+              // Сохраняем данные урока для новой страницы
+              localStorage.setItem(`lesson_${courseId}_${moduleId}_${lessonId}`, JSON.stringify({
+                title: currentLesson.title,
+                content: currentLesson.content
+              }));
+              navigate(`/lesson-complete/${courseId}/${moduleId}/${lessonId}`);
             }}
           />
         ) : (
@@ -2690,10 +2780,6 @@ ${currentLesson.theory}
                 <AnimatedSphere
                   onStartChat={() => {
                     setAutoStartVoice(false);
-                    setShowChat(true);
-                  }}
-                  onStartVoiceChat={() => {
-                    setAutoStartVoice(true);
                     setShowChat(true);
                   }}
                 />

@@ -160,8 +160,10 @@ interface AuthContextType {
   stopCourse: (courseId: string) => void;
   updateAchievementProgress: (achievementId: string, newProgress: number) => void;
   checkAchievements: () => void;
+  setPersonalizedCourse: (course: PersonalizedCourse) => void;
   logout: () => void;
   isAuthenticated: boolean;
+  isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -233,6 +235,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Check for existing session on mount
   useEffect(() => {
@@ -245,6 +248,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('user');
       }
     }
+    // Set loading to false after checking localStorage
+    setIsLoading(false);
   }, []);
 
   const getInitialStats = (): UserStats => ({
@@ -569,6 +574,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           parsedUser.stats = getInitialStats();
         }
         setUser(parsedUser);
+        setIsLoading(false);
         // Check achievements on login to unlock initial achievements
         setTimeout(() => {
           checkAchievements();
@@ -591,6 +597,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           familyMembers: []
         };
         setUser(mockUser);
+        setIsLoading(false);
         localStorage.setItem('user', JSON.stringify(mockUser));
       }
       return true;
@@ -620,6 +627,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           familyMembers: []
         };
       setUser(mockUser);
+      setIsLoading(false);
       localStorage.setItem('user', JSON.stringify(mockUser));
       // Check achievements for new user
       setTimeout(() => checkAchievements(), 100);
@@ -1106,6 +1114,7 @@ ${context.errorPatterns.flatMap((pattern: any) => pattern.examples).slice(0, 5).
 
   const logout = () => {
     setUser(null);
+    setIsLoading(false);
     localStorage.removeItem('user');
   };
 
@@ -1318,6 +1327,18 @@ ${context.errorPatterns.flatMap((pattern: any) => pattern.examples).slice(0, 5).
     checkAchievements();
   };
 
+  const setPersonalizedCourse = (course: PersonalizedCourse): void => {
+    if (!user) return;
+
+    const updatedUser = {
+      ...user,
+      personalizedCourse: course
+    };
+
+    setUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+  };
+
   const checkAchievements = (): void => {
     if (!user) return;
 
@@ -1431,8 +1452,10 @@ ${context.errorPatterns.flatMap((pattern: any) => pattern.examples).slice(0, 5).
     stopCourse,
     updateAchievementProgress,
     checkAchievements,
+    setPersonalizedCourse,
     logout,
-    isAuthenticated: !!user
+    isAuthenticated: !!user,
+    isLoading
   };
 
   return (

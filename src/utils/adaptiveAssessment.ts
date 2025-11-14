@@ -1,6 +1,6 @@
 // Adaptive Assessment System for Personalized Learning
 
-export type GradeCluster = 'grade1' | 'grade2' | 'grade3_4' | 'grade5_6' | 'grade7_8' | 'grade9' | 'grade10_11';
+export type GradeCluster = 'grade1' | 'grade2' | 'grade3_4' | 'grade5_6' | 'grade7_8' | 'grade9' | 'grade10_11' | 'grade12' | 'grade13';
 
 export interface ConceptScore {
   concept: string;
@@ -58,18 +58,25 @@ export function mapGradeToCluster(grade: string): GradeCluster {
   if (gradeLower.includes('девятый') || gradeLower.includes('9')) return 'grade9';
   if (gradeLower.includes('десятый') || gradeLower.includes('10')) return 'grade10_11';
   if (gradeLower.includes('одиннадцатый') || gradeLower.includes('11')) return 'grade10_11';
+  if (gradeLower.includes('окончил') || gradeLower.includes('выпускник') || gradeLower.includes('после вуза') || gradeLower.includes('карьера') || gradeLower.includes('работаю') || gradeLower.includes('graduate')) return 'grade13';
+  if (gradeLower.includes('вуз') || gradeLower.includes('университет') || gradeLower.includes('универ') || gradeLower.includes('студент') || gradeLower.includes('бакалавр') || gradeLower.includes('магистр') || gradeLower.includes('college')) return 'grade12';
 
-  // Extract number using regex as fallback
-  const numberMatch = grade.match(/\d+/);
-  if (numberMatch) {
-    const g = parseInt(numberMatch[0]);
-    if (g === 1) return 'grade1';
-    if (g === 2) return 'grade2';
-    if (g === 3 || g === 4) return 'grade3_4';
-    if (g === 5 || g === 6) return 'grade5_6';
-    if (g === 7 || g === 8) return 'grade7_8';
-    if (g === 9) return 'grade9';
-    return 'grade10_11';
+  // Extract number using regex - improved to handle ranges like "10-11"
+  const numberMatches = grade.match(/\d+/g);
+  if (numberMatches && numberMatches.length > 0) {
+    // If we have multiple numbers (like "10-11"), take the highest
+    const numbers = numberMatches.map(n => parseInt(n)).sort((a, b) => b - a);
+    const highestGrade = numbers[0];
+
+    if (highestGrade === 1) return 'grade1';
+    if (highestGrade === 2) return 'grade2';
+    if (highestGrade === 3 || highestGrade === 4) return 'grade3_4';
+    if (highestGrade === 5 || highestGrade === 6) return 'grade5_6';
+    if (highestGrade === 7 || highestGrade === 8) return 'grade7_8';
+    if (highestGrade === 9) return 'grade9';
+    if (highestGrade === 10 || highestGrade === 11) return 'grade10_11';
+    if (highestGrade === 12) return 'grade12';
+    return 'grade13';
   }
 
   // Default to grade1 if nothing matches
@@ -469,6 +476,107 @@ const GRADE9_QUESTIONS: AssessmentQuestion[] = [
   },
 ];
 
+const GRADE12_QUESTIONS: AssessmentQuestion[] = [
+  {
+    id: 'g12_future_perfect',
+    concept: 'future_perfect',
+    difficulty: 'advanced',
+    prompt: 'Выберите правильную форму: "By next semester, she ___ her master\'s thesis."',
+    options: ['will have completed', 'has completed', 'will complete', 'will be completing'],
+    correctAnswer: 'will have completed'
+  },
+  {
+    id: 'g12_academic_vocab',
+    concept: 'academic_vocab',
+    difficulty: 'advanced',
+    prompt: 'Какое слово лучше всего завершает предложение: "The professor emphasized the ___ implications of the theory."',
+    options: ['practical', 'theoretical', 'occasional', 'random'],
+    correctAnswer: 'theoretical'
+  },
+  {
+    id: 'g12_passive_advanced',
+    concept: 'passive_voice_advanced',
+    difficulty: 'advanced',
+    prompt: 'Выберите корректный вариант пассивного залога: "The data ___ before publication."',
+    options: ['were thoroughly reviewed', 'have thoroughly reviewing', 'thoroughly reviewed', 'were thoroughly review'],
+    correctAnswer: 'were thoroughly reviewed'
+  },
+  {
+    id: 'g12_reported_speech',
+    concept: 'reported_speech',
+    difficulty: 'advanced',
+    prompt: 'Преобразуйте в косвенную речь: "I am preparing for the conference," she said.',
+    options: [
+      'She said that she was preparing for the conference.',
+      'She said she is preparing for the conference.',
+      'She said that she had preparing for the conference.',
+      'She said that she will prepare for the conference.'
+    ],
+    correctAnswer: 'She said that she was preparing for the conference.'
+  },
+  {
+    id: 'g12_linking_words',
+    concept: 'cohesive_devices',
+    difficulty: 'advanced',
+    prompt: 'Выберите наиболее подходящий союз: "___ the lack of funding, the research continued."',
+    options: ['Despite', 'Because', 'Although', 'Unless'],
+    correctAnswer: 'Despite'
+  }
+];
+
+const GRADE13_QUESTIONS: AssessmentQuestion[] = [
+  {
+    id: 'g13_business_english',
+    concept: 'business_english',
+    difficulty: 'advanced',
+    prompt: 'Что означает выражение "to touch base" в деловом контексте?',
+    options: ['Связаться и обсудить обновления', 'Прекратить сотрудничество', 'Подписать контракт', 'Договориться о цене'],
+    correctAnswer: 'Связаться и обсудить обновления'
+  },
+  {
+    id: 'g13_negotiations',
+    concept: 'negotiations_language',
+    difficulty: 'advanced',
+    prompt: 'Выберите наиболее подходящую фразу для начала переговоров:',
+    options: [
+      'Let\'s outline our objectives first.',
+      'I disagree completely.',
+      'We refuse your offer.',
+      'This is unacceptable.'
+    ],
+    correctAnswer: 'Let\'s outline our objectives first.'
+  },
+  {
+    id: 'g13_email_formal',
+    concept: 'emails_formal',
+    difficulty: 'advanced',
+    prompt: 'Какое завершение письма наиболее уместно для формального делового письма?',
+    options: ['Best regards,', 'Cheers,', 'See ya,', 'Take care,'],
+    correctAnswer: 'Best regards,'
+  },
+  {
+    id: 'g13_idioms',
+    concept: 'idioms_advanced',
+    difficulty: 'advanced',
+    prompt: 'Что означает идиома "to read between the lines"?',
+    options: ['Понять скрытый смысл', 'Прочитать вслух', 'Пропустить абзац', 'Сделать выводы из статистики'],
+    correctAnswer: 'Понять скрытый смысл'
+  },
+  {
+    id: 'g13_presentation',
+    concept: 'presentation_skills',
+    difficulty: 'advanced',
+    prompt: 'Выберите наиболее подходящую фразу для перехода между разделами презентации:',
+    options: [
+      'Let\'s move on to the next point.',
+      'I forgot the next slide.',
+      'This isn\'t important.',
+      'You already know this.'
+    ],
+    correctAnswer: 'Let\'s move on to the next point.'
+  }
+];
+
 // Load question bank by cluster
 export function loadQuestionBank(cluster: GradeCluster, lastTopic?: string): AssessmentQuestion[] {
   let bank: AssessmentQuestion[] = [];
@@ -494,6 +602,12 @@ export function loadQuestionBank(cluster: GradeCluster, lastTopic?: string): Ass
       break;
     case 'grade10_11':
       bank = GRADE9_QUESTIONS; // Use grade 9 questions for now
+      break;
+    case 'grade12':
+      bank = GRADE12_QUESTIONS;
+      break;
+    case 'grade13':
+      bank = GRADE13_QUESTIONS;
       break;
   }
 
@@ -699,10 +813,14 @@ export async function runAdaptiveAssessment(
     else if (cluster === 'grade5_6') finalCluster = 'grade7_8';
     else if (cluster === 'grade7_8') finalCluster = 'grade9';
     else if (cluster === 'grade9') finalCluster = 'grade10_11';
+    else if (cluster === 'grade10_11') finalCluster = 'grade12';
+    else if (cluster === 'grade12') finalCluster = 'grade13';
     console.log('  🎉 Excellent performance! Moving up to:', finalCluster);
   } else if (successRate <= 0.1) {
     // Very low success rate (<=10%) - move down significantly
-    if (cluster === 'grade10_11') finalCluster = 'grade3_4';
+    if (cluster === 'grade13') finalCluster = 'grade7_8';
+    else if (cluster === 'grade12') finalCluster = 'grade5_6';
+    else if (cluster === 'grade10_11') finalCluster = 'grade3_4';
     else if (cluster === 'grade9') finalCluster = 'grade3_4';
     else if (cluster === 'grade7_8') finalCluster = 'grade2';
     else if (cluster === 'grade5_6') finalCluster = 'grade1';
@@ -712,7 +830,9 @@ export async function runAdaptiveAssessment(
     console.log('  📉 Very poor performance! Moving down significantly to:', finalCluster);
   } else if (successRate <= 0.3) {
     // Low success rate (11-30%) - move down moderately
-    if (cluster === 'grade10_11') finalCluster = 'grade7_8';
+    if (cluster === 'grade13') finalCluster = 'grade10_11';
+    else if (cluster === 'grade12') finalCluster = 'grade7_8';
+    else if (cluster === 'grade10_11') finalCluster = 'grade7_8';
     else if (cluster === 'grade9') finalCluster = 'grade5_6';
     else if (cluster === 'grade7_8') finalCluster = 'grade3_4';
     else if (cluster === 'grade5_6') finalCluster = 'grade2';
@@ -722,7 +842,9 @@ export async function runAdaptiveAssessment(
     console.log('  📉 Poor performance! Moving down to:', finalCluster);
   } else if (successRate <= 0.5) {
     // Below average (31-50%) - move down slightly
-    if (cluster === 'grade10_11') finalCluster = 'grade9';
+    if (cluster === 'grade13') finalCluster = 'grade12';
+    else if (cluster === 'grade12') finalCluster = 'grade10_11';
+    else if (cluster === 'grade10_11') finalCluster = 'grade9';
     else if (cluster === 'grade9') finalCluster = 'grade7_8';
     else if (cluster === 'grade7_8') finalCluster = 'grade5_6';
     else if (cluster === 'grade5_6') finalCluster = 'grade3_4';
@@ -771,7 +893,7 @@ export async function runAdaptiveAssessment(
 }
 
 // Build 2-week plan
-function buildTwoWeekPlan(profile: MicroProfile[], cluster: GradeCluster): SessionPlan[] {
+export function buildTwoWeekPlan(profile: MicroProfile[], cluster: GradeCluster): SessionPlan[] {
   const weak = profile.filter(c => c.p < 0.7).map(c => c.concept);
   const review = profile.filter(c => c.p >= 0.7).map(c => c.concept);
   const profiled = profile.map(p => p.concept);

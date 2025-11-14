@@ -35,3 +35,11 @@ dist-ssr
 # Dependencies
 node_modules
 package-lock.json
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Backup files
+*.backup
