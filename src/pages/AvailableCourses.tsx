@@ -234,10 +234,6 @@ const AvailableCourses = () => {
                     <div className={`w-16 h-16 bg-gradient-to-br ${course.color} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
                       <Icon className="w-8 h-8 text-white" />
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                      <span className="text-sm font-medium">{course.rating}</span>
-                    </div>
                   </div>
 
                   <CardTitle className="text-2xl mb-2 group-hover:text-primary transition-colors">
