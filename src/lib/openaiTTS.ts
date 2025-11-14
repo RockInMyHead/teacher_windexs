@@ -48,13 +48,13 @@ export class OpenAITTS {
 
   static async speakText(text: string, options: TTSOptions = {}): Promise<void> {
     try {
+      // Проверяем доступность TTS
+      if (!isTTSAvailable()) {
+        throw new Error('TTS not available: missing API key or browser does not support Audio API');
+      }
+
       // Останавливаем текущее воспроизведение
       this.stop();
-
-      // Проверяем поддержку Audio API
-      if (typeof Audio === 'undefined') {
-        throw new Error('Audio API not supported in this browser');
-      }
 
       // Генерируем речь
       const audioBuffer = await this.generateSpeech(text, options);
@@ -111,5 +111,13 @@ export class OpenAITTS {
 
 // Функция для проверки доступности TTS
 export function isTTSAvailable(): boolean {
-  return !!import.meta.env.VITE_OPENAI_API_KEY;
+  // Проверяем наличие API ключа
+  const hasApiKey = !!import.meta.env.VITE_OPENAI_API_KEY;
+
+  // Проверяем поддержку Audio API в браузере
+  const hasAudioSupport = typeof Audio !== 'undefined' &&
+                         typeof AudioContext !== 'undefined' &&
+                         typeof window !== 'undefined';
+
+  return hasApiKey && hasAudioSupport;
 }
