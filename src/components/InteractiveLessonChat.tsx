@@ -15,7 +15,7 @@ import {
   Mic,
   MicOff,
   Loader,
-  WaveformIcon
+  Activity
 } from 'lucide-react';
 import { OpenAITTS } from '@/lib/openaiTTS';
 import { VoiceComm, VoiceUtils } from '@/lib/voiceComm';
@@ -857,7 +857,7 @@ ${lessonAspects}
                 {/* Voice indication display */}
                 {isListening && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-3">
-                    <WaveformIcon className="w-5 h-5 text-blue-600 animate-pulse" />
+                    <Activity className="w-5 h-5 text-blue-600 animate-pulse" />
                     <div className="flex-1">
                       <p className="text-sm font-medium text-blue-900">Слушаю вас...</p>
                       {interimTranscript && (
