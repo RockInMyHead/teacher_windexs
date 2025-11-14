@@ -250,18 +250,6 @@ const AvailableCourses = () => {
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-                  {/* Features */}
-                  <div className="space-y-2">
-                    <h4 className="font-medium text-sm">Что вы изучите:</h4>
-                    <div className="flex flex-wrap gap-1">
-                      {course.features.map((feature, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs">
-                          {feature}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-
                   {/* Action Button */}
                       <Button
                         className="w-full group-hover:bg-primary/90 transition-colors"
