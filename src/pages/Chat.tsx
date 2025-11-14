@@ -367,6 +367,7 @@ const Chat = () => {
     totalQuestions: number;
   } | null>(null);
   const [isLearningPlanActive, setIsLearningPlanActive] = useState(false);
+  const [selectedGrade, setSelectedGrade] = useState<string>('1');
   const [selectedGradeCluster, setSelectedGradeCluster] = useState<GradeCluster>('grade1');
   const [gradeQuestionBank, setGradeQuestionBank] = useState<IntroTestQuestion[]>(GRADE_INTRO_QUESTIONS['grade1']);
   const [gradeQuestionIndex, setGradeQuestionIndex] = useState(0);
