@@ -2523,6 +2523,18 @@ ${currentLesson.theory}
             navigate('/personalized-course');
           }, 1000);
         }}
+        onToggleOnlineLesson={() => {
+          if (isOnlineLesson) {
+            // Из онлайн режима в оффлайн (чат)
+            setIsOnlineLesson(false);
+            navigate('/chat');
+          } else {
+            // Из оффлайн режима в онлайн урок
+            setIsOnlineLesson(true);
+            setShowChat(false); // Скрываем обычный чат
+          }
+        }}
+        isOnlineLesson={isOnlineLesson}
       />
     );
   }

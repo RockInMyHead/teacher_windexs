@@ -15,7 +15,8 @@ import {
   Mic,
   MicOff,
   Loader,
-  Activity
+  Activity,
+  Play
 } from 'lucide-react';
 import { OpenAITTS } from '@/lib/openaiTTS';
 import { VoiceComm, VoiceUtils } from '@/lib/voiceComm';
@@ -89,6 +90,8 @@ interface InteractiveLessonChatProps {
   lessonAspects: string;
   lessonContent?: LessonContent;
   onComplete: () => void;
+  onToggleOnlineLesson?: () => void;
+  isOnlineLesson?: boolean;
 }
 
 // Simple Markdown renderer component
@@ -232,7 +235,9 @@ const InteractiveLessonChat = ({
   lessonTopic,
   lessonAspects,
   lessonContent,
-  onComplete
+  onComplete,
+  onToggleOnlineLesson,
+  isOnlineLesson = false
 }: InteractiveLessonChatProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -779,6 +784,18 @@ ${lessonAspects}
               >
                 <Volume2 className={`w-5 h-5 ${isPlaying ? 'text-primary' : ''}`} />
               </Button>
+              {onToggleOnlineLesson && (
+                <Button
+                  variant={isOnlineLesson ? "destructive" : "default"}
+                  size="sm"
+                  onClick={onToggleOnlineLesson}
+                  className="flex items-center gap-2"
+                  title={isOnlineLesson ? "Перейти в оффлайн режим" : "Перейти в онлайн урок"}
+                >
+                  <Play className="w-4 h-4" />
+                  {isOnlineLesson ? "Оффлайн" : "Онлайн урок"}
+                </Button>
+              )}
             </div>
           </div>
           
