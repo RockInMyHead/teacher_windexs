@@ -5,6 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Brain,
   ArrowLeft,
   Play,
@@ -14,6 +19,7 @@ import {
   Target,
   MessageSquare,
   ChevronRight,
+  ChevronDown,
   Star
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -24,6 +30,7 @@ const PersonalizedCoursePage = () => {
   const [searchParams] = useSearchParams();
   const [currentModule, setCurrentModule] = useState(0);
   const [activeLesson, setActiveLesson] = useState<string | null>(null);
+  const [modulesCollapsed, setModulesCollapsed] = useState(true);
 
   // Function to translate concept keys to Russian names
   const translateConcept = (concept: string): string => {
@@ -262,43 +269,55 @@ const PersonalizedCoursePage = () => {
           {/* Modules Sidebar */}
           <div className="lg:col-span-1">
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Модули курса</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {course.modules.map((mod, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setCurrentModule(index)}
-                    className={`w-full text-left p-3 rounded-lg transition-colors ${
-                      index === currentModule
-                        ? 'bg-primary/10 border border-primary/20'
-                        : 'hover:bg-muted'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                        index === currentModule ? 'bg-primary text-white' : 'bg-muted'
-                      }`}>
-                        {index + 1}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium truncate ${
-                          index === currentModule ? 'text-primary' : ''
-                        }`}>
-                          {mod.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {mod.lessons.length} уроков
-                        </p>
-                      </div>
-                      {index === currentModule && (
-                        <ChevronRight className="w-4 h-4 text-primary" />
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </CardContent>
+              <Collapsible open={!modulesCollapsed} onOpenChange={() => setModulesCollapsed(!modulesCollapsed)}>
+                <CardHeader className="pb-2">
+                  <CollapsibleTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-between p-0 h-auto hover:bg-transparent"
+                    >
+                      <CardTitle className="text-lg">Модули курса</CardTitle>
+                      <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${modulesCollapsed ? '-rotate-90' : ''}`} />
+                    </Button>
+                  </CollapsibleTrigger>
+                </CardHeader>
+                <CollapsibleContent className="space-y-0">
+                  <CardContent className="pt-0 space-y-2">
+                    {course.modules.map((mod, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setCurrentModule(index)}
+                        className={`w-full text-left p-3 rounded-lg transition-colors ${
+                          index === currentModule
+                            ? 'bg-primary/10 border border-primary/20'
+                            : 'hover:bg-muted'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                            index === currentModule ? 'bg-primary text-white' : 'bg-muted'
+                          }`}>
+                            {index + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium truncate ${
+                              index === currentModule ? 'text-primary' : ''
+                            }`}>
+                              {mod.title}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {mod.lessons.length} уроков
+                            </p>
+                          </div>
+                          {index === currentModule && (
+                            <ChevronRight className="w-4 h-4 text-primary" />
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </CardContent>
+                </CollapsibleContent>
+              </Collapsible>
             </Card>
           </div>
 
