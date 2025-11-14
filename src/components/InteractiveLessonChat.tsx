@@ -13,10 +13,62 @@ import {
   CheckCircle,
   Volume2,
   Mic,
-  Loader
+  MicOff,
+  Loader,
+  WaveformIcon
 } from 'lucide-react';
 import { OpenAITTS } from '@/lib/openaiTTS';
+import { VoiceComm, VoiceUtils } from '@/lib/voiceComm';
 import Header from '@/components/Header';
+
+// Speech Recognition Interface
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onstart: ((event: Event) => void) | null;
+  onend: ((event: Event) => void) | null;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+}
+
+interface SpeechRecognitionEvent extends Event {
+  readonly resultIndex: number;
+  readonly results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+  readonly length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  readonly length: number;
+  readonly isFinal: boolean;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  readonly transcript: string;
+  readonly confidence: number;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  readonly error: string;
+  readonly message: string;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: typeof SpeechRecognition;
+    webkitSpeechRecognition?: typeof SpeechRecognition;
+  }
+}
 
 interface Message {
   id: string;
@@ -189,7 +241,11 @@ const InteractiveLessonChat = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [stage, setStage] = useState<'intro' | 'content' | 'practice' | 'complete'>('intro');
   const [isLessonComplete, setIsLessonComplete] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeechRecognitionAvailable, setIsSpeechRecognitionAvailable] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
   const [contentStage, setContentStage] = useState(0); // 0: intro, 1: theory, 2: examples, 3: practice
   const messageCountRef = useRef(1); // Track message count
   const contentPortionsRef = useRef<string[]>([]); // Store content portions
@@ -201,6 +257,67 @@ const InteractiveLessonChat = ({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Initialize Speech Recognition and Voice Communication
+  useEffect(() => {
+    console.log('🎤 Initializing Voice Communication...');
+    
+    // Инициализируем VoiceComm с коллбеками
+    const isVoiceAvailable = VoiceComm.init(
+      {
+        language: 'ru-RU',
+        ttsVoice: 'nova',
+        ttsSpeed: 1.0,
+        continuous: false
+      },
+      {
+        onListeningStart: () => {
+          console.log('🎙️ Listening started');
+          setIsListening(true);
+          setInterimTranscript('');
+        },
+        onListeningEnd: () => {
+          console.log('🛑 Listening ended');
+          setIsListening(false);
+        },
+        onTranscript: (text: string, isFinal: boolean) => {
+          if (isFinal) {
+            console.log('✅ Final transcript:', text);
+            setInputMessage(text);
+            setInterimTranscript('');
+          } else {
+            console.log('🔄 Interim transcript:', text);
+            setInterimTranscript(text);
+          }
+        },
+        onError: (error: string) => {
+          console.error('❌ Voice error:', error);
+          setIsListening(false);
+          // Можно показать уведомление пользователю
+        },
+        onPlayStart: () => {
+          console.log('🎤 TTS started');
+        },
+        onPlayEnd: () => {
+          console.log('🎤 TTS ended');
+        }
+      }
+    );
+
+    if (isVoiceAvailable) {
+      setIsSpeechRecognitionAvailable(true);
+      console.log('✅ Voice Communication initialized');
+    } else {
+      console.warn('⚠️ Voice Communication not available');
+      setIsSpeechRecognitionAvailable(false);
+    }
+
+    // Cleanup при размонтировании компонента
+    return () => {
+      console.log('🧹 Cleaning up Voice Communication');
+      VoiceComm.cleanup();
+    };
+  }, []);
 
   // Split lesson content into portions for sequential display
   const splitContentIntoPortion = (content: LessonContent | undefined): string[] => {
@@ -244,19 +361,13 @@ const InteractiveLessonChat = ({
 
   // Initialize lesson with welcome message
   useEffect(() => {
-    // Stop any ongoing TTS before starting the lesson - comprehensive cleanup
-    console.log('🧹 Initializing lesson - stopping any existing TTS');
+    // Stop any ongoing voice communication before starting the lesson
+    console.log('🧹 Initializing lesson - stopping any existing voice communication');
     try {
-      if (typeof OpenAITTS !== 'undefined' && OpenAITTS.stop) {
-        OpenAITTS.stop();
-        console.log('🔇 Existing TTS stopped via OpenAITTS.stop()');
-      }
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        console.log('🔇 Existing TTS stopped via speechSynthesis.cancel()');
-      }
+      VoiceComm.reset();
+      console.log('🔇 Existing voice communication stopped');
     } catch (error) {
-      console.error('❌ Error stopping existing TTS:', error);
+      console.error('❌ Error stopping existing voice communication:', error);
     }
 
     const initializeLesson = async () => {
@@ -336,21 +447,17 @@ const InteractiveLessonChat = ({
 
     initializeLesson();
 
-    // Cleanup: Stop TTS when component unmounts
+    // Cleanup: Stop all voice communication when component unmounts
     return () => {
-      console.log('🧹 InteractiveLessonChat unmounting - stopping all TTS');
+      console.log('🧹 InteractiveLessonChat unmounting - stopping all voice communication');
 
-      // Stop all TTS immediately
-      const stopAllTTS = () => {
+      // Stop all voice communication immediately
+      const stopAllVoiceComm = () => {
         try {
-          if (typeof OpenAITTS !== 'undefined' && OpenAITTS.stop) {
-            OpenAITTS.stop();
-            console.log('🔇 TTS stopped via OpenAITTS.stop()');
-          }
-          if (window.speechSynthesis) {
-            window.speechSynthesis.cancel();
-            console.log('🔇 TTS stopped via speechSynthesis.cancel()');
-          }
+          VoiceComm.stopSpeaking();
+          VoiceComm.stopListening();
+          console.log('🔇 Voice communication stopped');
+
           // Try to stop any audio elements
           const audioElements = document.querySelectorAll('audio');
           audioElements.forEach(audio => {
@@ -359,68 +466,41 @@ const InteractiveLessonChat = ({
           });
           console.log('🔇 All audio elements stopped');
         } catch (error) {
-          console.error('❌ Error stopping TTS on unmount:', error);
+          console.error('❌ Error stopping voice communication on unmount:', error);
         }
       };
 
-      stopAllTTS();
+      stopAllVoiceComm();
       setIsPlaying(false);
 
-      // Also add beforeunload listener to stop TTS if user navigates away
+      // Also add beforeunload listener to stop voice communication if user navigates away
       const handleBeforeUnload = () => {
-        stopAllTTS();
+        stopAllVoiceComm();
       };
 
       window.addEventListener('beforeunload', handleBeforeUnload);
 
-      // Note: cleanup function for beforeunload would be handled by browser
-      // when page unloads, but we add it for completeness
+      // Cleanup beforeunload listener
+      return () => {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+      };
     };
   }, [lessonTitle, lessonTopic, lessonContent]);
 
-  // Function to speak text sentence by sentence
+  // Function to speak text sentence by sentence using VoiceComm
   const speakSentenceBySentence = async (text: string) => {
     console.log('🎤 Starting sentence-by-sentence TTS...');
 
-    // Split text into sentences (basic splitting)
-    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0).map(s => s.trim() + '.');
-
-    // Additional check to stop if TTS was disabled while preparing
-    if (!isPlaying) {
-      console.log('🛑 TTS was stopped before starting sentence-by-sentence');
-      return;
+    try {
+      await VoiceComm.speakText(text, {
+        language: 'ru-RU',
+        ttsVoice: 'nova',
+        ttsSpeed: 1.0
+      });
+      console.log('✅ Text speaking completed');
+    } catch (error) {
+      console.error('❌ Error speaking text:', error);
     }
-
-    console.log(`📝 Found ${sentences.length} sentences to speak`);
-
-    // Speak each sentence sequentially
-    for (let i = 0; i < sentences.length; i++) {
-      const sentence = sentences[i];
-      if (sentence.trim().length < 5) continue; // Skip very short sentences
-
-      console.log(`🎵 Speaking sentence ${i + 1}/${sentences.length}: "${sentence.substring(0, 50)}..."`);
-
-      try {
-        // Check if TTS is still enabled
-        if (!isPlaying) {
-          console.log('🛑 TTS stopped by user');
-          break;
-        }
-
-        await OpenAITTS.speak(sentence);
-        console.log(`✅ Sentence ${i + 1} completed`);
-
-        // Small pause between sentences (except last one)
-        if (i < sentences.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
-      } catch (error) {
-        console.error(`❌ Error speaking sentence ${i + 1}:`, error);
-        // Continue with next sentence
-      }
-    }
-
-    console.log('🎤 Sentence-by-sentence TTS completed');
   };
 
   const sendMessage = async () => {
@@ -601,33 +681,27 @@ ${lessonAspects}
     }, 0);
   };
 
-  // Function to speak text sentence by sentence
+  // Function to toggle TTS for last assistant message
   const toggleTTS = async () => {
-    if (typeof OpenAITTS === 'undefined') {
-      console.warn('🔇 TTS not available');
-      return;
-    }
-
     if (isPlaying) {
       console.log('🔇 Stopping TTS');
-      if (OpenAITTS.stop) {
-        OpenAITTS.stop();
-      }
+      VoiceComm.stopSpeaking();
       setIsPlaying(false);
     } else {
       console.log('🔊 Starting TTS - Looking for assistant messages');
-      setIsPlaying(true);
-      // Speak the last assistant message
+      
+      // Get the last assistant message
       const lastMessage = messages.filter(m => m.role === 'assistant').pop();
       console.log('📝 Last assistant message (preview):', lastMessage?.content.substring(0, 100) + '...');
 
-      if (lastMessage && OpenAITTS.speak) {
+      if (lastMessage) {
         try {
           console.log('🎤 Reading message to user sentence by sentence...');
           console.log('📄 TTS Text:');
           console.log(lastMessage.content);
           console.log('---');
 
+          setIsPlaying(true);
           // Use sentence-by-sentence speaking
           await speakSentenceBySentence(lastMessage.content);
           console.log('✅ TTS finished');
@@ -637,7 +711,7 @@ ${lessonAspects}
           setIsPlaying(false);
         }
       } else {
-        console.warn('⚠️ No assistant message found or OpenAITTS.speak not available');
+        console.warn('⚠️ No assistant message found');
         setIsPlaying(false);
       }
     }
@@ -646,19 +720,14 @@ ${lessonAspects}
   const handleComplete = () => {
     console.log('🎉 Completing lesson...');
 
-    // Stop TTS immediately when completing - multiple methods
-    console.log('🧹 Stopping all TTS before lesson completion');
+    // Stop all voice communication
+    console.log('🧹 Stopping all voice communication before lesson completion');
     try {
-      if (typeof OpenAITTS !== 'undefined' && OpenAITTS.stop) {
-        OpenAITTS.stop();
-        console.log('🔇 TTS stopped via OpenAITTS.stop()');
-      }
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        console.log('🔇 TTS stopped via speechSynthesis.cancel()');
-      }
+      VoiceComm.stopSpeaking();
+      VoiceComm.stopListening();
+      console.log('🔇 All voice communication stopped');
     } catch (error) {
-      console.error('❌ Error stopping TTS on complete:', error);
+      console.error('❌ Error stopping voice communication on complete:', error);
     }
     setIsPlaying(false);
 
@@ -696,19 +765,13 @@ ${lessonAspects}
     setTimeout(() => {
       console.log('📍 Redirecting to course page...');
 
-      // Final TTS cleanup before navigation
-      console.log('🧹 Final TTS cleanup before navigation');
+      // Final voice communication cleanup before navigation
+      console.log('🧹 Final voice communication cleanup before navigation');
       try {
-        if (typeof OpenAITTS !== 'undefined' && OpenAITTS.stop) {
-          OpenAITTS.stop();
-          console.log('🔇 Final TTS stop via OpenAITTS.stop()');
-        }
-        if (window.speechSynthesis) {
-          window.speechSynthesis.cancel();
-          console.log('🔇 Final TTS stop via speechSynthesis.cancel()');
-        }
+        VoiceComm.cleanup();
+        console.log('🔇 Final voice communication cleanup completed');
       } catch (error) {
-        console.error('❌ Error in final TTS cleanup:', error);
+        console.error('❌ Error in final voice communication cleanup:', error);
       }
 
       onComplete();
@@ -825,9 +888,22 @@ ${lessonAspects}
           <div className="border-t border-border p-4 space-y-3">
             {stage !== 'complete' ? (
               <>
+                {/* Voice indication display */}
+                {isListening && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-3">
+                    <WaveformIcon className="w-5 h-5 text-blue-600 animate-pulse" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-blue-900">Слушаю вас...</p>
+                      {interimTranscript && (
+                        <p className="text-sm text-blue-700 italic">{interimTranscript}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Введите вопрос или напишите что-то..."
+                    placeholder={isListening ? "Говорите сейчас..." : "Введите вопрос или напишите что-то..."}
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
                     onKeyPress={(e) => {
@@ -835,9 +911,34 @@ ${lessonAspects}
                         sendMessage();
                       }
                     }}
-                    disabled={isLoading}
+                    disabled={isLoading || isListening}
                     className="flex-1"
                   />
+                  
+                  {/* Microphone button */}
+                  {isSpeechRecognitionAvailable && (
+                    <Button
+                      onClick={() => {
+                        if (isListening) {
+                          VoiceComm.stopListening();
+                          setIsListening(false);
+                        } else {
+                          VoiceComm.startListening();
+                        }
+                      }}
+                      variant={isListening ? "destructive" : "outline"}
+                      size="icon"
+                      title={isListening ? "Остановить запись" : "Начать запись"}
+                      className="gap-2"
+                    >
+                      {isListening ? (
+                        <MicOff className="w-4 h-4" />
+                      ) : (
+                        <Mic className="w-4 h-4" />
+                      )}
+                    </Button>
+                  )}
+
                   <Button
                     onClick={sendMessage}
                     disabled={isLoading || !inputMessage.trim()}

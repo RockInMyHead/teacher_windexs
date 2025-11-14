@@ -58,6 +58,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import InteractiveLessonChat from '@/components/InteractiveLessonChat';
 import Header from '@/components/Header';
+import { COURSE_PLANS, LessonPlan, CoursePlan } from '@/utils/coursePlans';
 import {
   Brain,
   ArrowLeft,
@@ -1562,12 +1563,41 @@ const Lesson = () => {
   const ttsContinueRef = useRef<boolean>(true);
 
   const lessonKey = `${courseId}-${moduleId}-${lessonId}`;
-  const baseLesson = lessonContent[lessonKey];
-
+  
   // Проверяем валидность параметров
   const moduleIndex = parseInt(moduleId || '0');
   const lessonIndex = parseInt(lessonId || '0');
   const isValidParams = !isNaN(moduleIndex) && !isNaN(lessonIndex) && moduleIndex >= 0 && lessonIndex >= 0;
+
+  // Получаем урок из COURSE_PLANS
+  const getLessonFromCoursePlans = (): LessonPlan | null => {
+    const gradeParam = searchParams.get('grade');
+    let gradeNumber = 1; // По умолчанию 1 класс
+    
+    if (gradeParam) {
+      const parsedGrade = parseInt(gradeParam);
+      if (!isNaN(parsedGrade)) gradeNumber = parsedGrade;
+    }
+    
+    // Находим курс по классу
+    const course = COURSE_PLANS.find(c => c.grade === gradeNumber);
+    if (!course || !course.lessons) {
+      console.warn(`❌ Курс для класса ${gradeNumber} не найден`);
+      return null;
+    }
+    
+    // Получаем урок из плана
+    if (lessonIndex >= 0 && lessonIndex < course.lessons.length) {
+      console.log(`📚 Урок из COURSE_PLANS для класса ${gradeNumber}, номер ${lessonIndex + 1}:`, course.lessons[lessonIndex]);
+      return course.lessons[lessonIndex];
+    }
+    
+    console.warn(`❌ Урок ${lessonIndex} не найден в плане для класса ${gradeNumber}`);
+    return null;
+  };
+
+  // Получаем урок из плана или из старого lessonContent
+  const baseLesson = getLessonFromCoursePlans() || lessonContent[lessonKey];
 
   // Получаем информацию о курсе и модуле
   const courseInfo = getCourseAndModuleInfo(moduleIndex.toString(), lessonIndex.toString());
