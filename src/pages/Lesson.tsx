@@ -1558,6 +1558,7 @@ const Lesson = () => {
   const [isListening, setIsListening] = useState(false);
   const [isLessonPlaying, setIsLessonPlaying] = useState(false); // Озвучка урока
   const [generatedImages, setGeneratedImages] = useState<{[key: string]: string}>({});
+  const [isOnlineLesson, setIsOnlineLesson] = useState(false); // Режим онлайн урока
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const ttsContinueRef = useRef<boolean>(true);
@@ -2564,15 +2565,49 @@ ${currentLesson.theory}
             {/* Center - Lesson title */}
             <div className="text-center">
               <h1 className="text-lg font-semibold">
-                {lessonType === 'test' ? 'Интерактивный тест' : currentLesson.title}
+                {isOnlineLesson ? currentLesson.title : lessonType === 'test' ? 'Интерактивный тест' : currentLesson.title}
               </h1>
               <p className="text-sm text-muted-foreground">
-                {lessonType === 'test' ? 'Практика и закрепление' : `Урок ${parseInt(lessonId || '0') + 1}`}
+                {isOnlineLesson ? 'Тема: Знакомство с предметом' : lessonType === 'test' ? 'Практика и закрепление' : `Урок ${parseInt(lessonId || '0') + 1}`}
               </p>
+              {isOnlineLesson && (
+                <div className="mt-2">
+                  <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-xs font-medium">
+                    Онлайн урок
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Right side - Actions */}
             <div className="flex items-center gap-2">
+              <Button
+                onClick={() => {
+                  if (isOnlineLesson) {
+                    // Из онлайн режима в оффлайн (чат)
+                    setIsOnlineLesson(false);
+                    navigate('/chat');
+                  } else {
+                    // Из оффлайн режима в онлайн урок
+                    setIsOnlineLesson(true);
+                    setShowChat(false); // Скрываем обычный чат
+                  }
+                }}
+                variant={isOnlineLesson ? "destructive" : "default"}
+                size="sm"
+              >
+                {isOnlineLesson ? (
+                  <>
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    Оффлайн урок
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4 mr-2" />
+                    {currentLesson.title}
+                  </>
+                )}
+              </Button>
               <Button
                 onClick={() => setShowChat(!showChat)}
                 variant={showChat ? "default" : "outline"}
@@ -2588,7 +2623,84 @@ ${currentLesson.theory}
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-6">
-        {lessonType === 'test' ? (
+        {isOnlineLesson ? (
+          /* Online Lesson Mode - Constant listening */
+          <div className="max-w-2xl mx-auto">
+            <Card className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/20 dark:to-blue-950/20 border-green-200 dark:border-green-800">
+              <CardHeader className="text-center">
+                <CardTitle className="text-2xl text-green-700 dark:text-green-300">
+                  {currentLesson.title}
+                </CardTitle>
+                <CardDescription className="text-lg text-green-600 dark:text-green-400">
+                  Тема: Знакомство с предметом
+                </CardDescription>
+                <div className="mt-4">
+                  <div className="inline-flex items-center px-3 py-1 rounded-full bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-sm font-medium">
+                    Онлайн урок активен
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Progress Bar */}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Прогресс урока</span>
+                    <span>0%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="bg-green-500 h-2 rounded-full transition-all duration-300" style={{ width: '0%' }}></div>
+                  </div>
+                </div>
+
+                {/* Voice Listening Interface */}
+                <div className="text-center space-y-4">
+                  <div className="w-24 h-24 mx-auto bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                    {isListening ? (
+                      <div className="space-y-2">
+                        <div className="w-8 h-8 bg-white rounded-full animate-pulse"></div>
+                        <div className="text-white text-xs font-medium">СЛУШАЮ</div>
+                      </div>
+                    ) : (
+                      <Mic className="w-8 h-8 text-white" />
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-lg font-medium text-gray-700 dark:text-gray-300">
+                      {isListening ? 'Говорите, учитель слушает...' : 'Нажмите для начала прослушивания'}
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Задавайте вопросы по теме "{currentLesson.title}"
+                    </p>
+                  </div>
+
+                  <div className="flex justify-center gap-3">
+                    <Button
+                      onClick={() => {
+                        if (isVoiceChatActive) {
+                          stopVoiceChat();
+                        } else {
+                          startVoiceChat();
+                        }
+                      }}
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      size="lg"
+                    >
+                      {isVoiceChatActive ? 'Остановить прослушивание' : 'Начать прослушивание'}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Next Step */}
+                <div className="text-center pt-4 border-t border-green-200 dark:border-green-800">
+                  <Button variant="outline" className="text-green-700 dark:text-green-300 border-green-300 dark:border-green-700">
+                    Далее ➜
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : lessonType === 'test' ? (
           <InteractiveTest
             lesson={currentLesson}
             onComplete={() => {
