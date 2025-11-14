@@ -3168,7 +3168,6 @@ const Chat = () => {
                   )}
                 </div>
             </ScrollArea>
-            )}
 
             {/* Camera Interface */}
             {isCameraActive && (
@@ -3286,8 +3285,7 @@ const Chat = () => {
                     </div>
                   </div>
                 </div>
-            )}
-            ) : isLearningPlanActive && learningPlanText ? (
+            )} : isLearningPlanActive && learningPlanText ? (
               <div className="flex flex-col items-center justify-center space-y-4 py-8">
                 <div className="text-center max-w-4xl">
                   <div className="bg-white rounded-lg p-8 border border-emerald-200 shadow-lg">
@@ -3302,7 +3300,7 @@ const Chat = () => {
               </div>
             ) : (
             <div></div>
-            )}
+            )
 
             {/* Online Communication Status */}
             {isOnlineCommunication && (
