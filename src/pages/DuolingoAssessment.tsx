@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Brain, ArrowLeft, CheckCircle, XCircle, Clock, Target, Volume2, Shuffle } from 'lucide-react';
+import Header from '@/components/Header';
 
 interface DuolingoQuestion {
   id: number;
@@ -299,18 +300,7 @@ const DuolingoAssessment = () => {
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
-        <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-primary to-accent rounded-xl flex items-center justify-center">
-                  <Brain className="w-5 h-5 text-white" />
-                </div>
-                <h1 className="text-lg font-semibold">Duolingo Тест</h1>
-              </div>
-            </div>
-          </div>
-        </header>
+        <Header />
 
         <main className="container mx-auto px-4 py-8 max-w-2xl">
           <Card className="text-center">
@@ -497,29 +487,7 @@ const DuolingoAssessment = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
-      <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                onClick={() => navigate('/available-courses')}
-                className="flex items-center gap-2"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Назад к курсам
-              </Button>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-primary to-accent rounded-xl flex items-center justify-center">
-                <Brain className="w-5 h-5 text-white" />
-              </div>
-              <h1 className="text-lg font-semibold">Duolingo Тест</h1>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <main className="container mx-auto px-4 py-8 max-w-2xl">
         <div className="mb-8">

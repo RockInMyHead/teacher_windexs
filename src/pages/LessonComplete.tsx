@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, BookOpen, CheckCircle, Brain } from 'lucide-react';
 import { logger } from '@/utils/logger';
+import Header from '@/components/Header';
 
 interface LessonCompleteProps {}
 
@@ -92,30 +93,7 @@ const LessonComplete: React.FC<LessonCompleteProps> = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
       {/* Header */}
-      <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleBackToCourse}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Назад к курсу
-              </Button>
-            </div>
-
-            <div className="text-center">
-              <h1 className="text-2xl font-bold text-primary">{lessonTitle}</h1>
-              <p className="text-sm text-muted-foreground">Основной материал урока</p>
-            </div>
-
-            <div className="w-24"></div> {/* Spacer for centering */}
-          </div>
-        </div>
-      </header>
+      <Header />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">

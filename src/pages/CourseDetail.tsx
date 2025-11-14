@@ -26,6 +26,7 @@ import {
   TestTube,
   Lock
 } from 'lucide-react';
+import Header from '@/components/Header';
 
 const courseDetails = {
   0: {
@@ -523,31 +524,7 @@ const CourseDetail = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
       {/* Header */}
-      <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            {/* Left side - Back button */}
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                onClick={() => navigate('/available-courses')}
-                className="flex items-center gap-2"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Назад к курсам
-              </Button>
-            </div>
-
-            {/* Right side - Logo */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-primary to-accent rounded-xl flex items-center justify-center">
-                <Brain className="w-5 h-5 text-white" />
-              </div>
-              <h1 className="text-lg font-semibold">Windexs-Учитель</h1>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">

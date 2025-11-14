@@ -40,6 +40,7 @@ import {
   User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import Header from '@/components/Header';
 
 interface Achievement {
   id: string;
@@ -910,59 +911,7 @@ const Achievements = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
       {/* Header */}
-      <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                onClick={() => navigate('/courses')}
-                className="flex items-center gap-2"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Назад
-              </Button>
-              <div className="w-10 h-10 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-xl flex items-center justify-center">
-                <Trophy className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-semibold">Достижения</h1>
-                <p className="text-sm text-muted-foreground">
-                  {unlockedAchievements} из {totalAchievements} получено • {totalPoints} очков
-                </p>
-              </div>
-            </div>
-
-            {/* Личный кабинет */}
-            <Button
-              variant="outline"
-              className="flex items-center gap-2"
-              onClick={() => navigate('/account')}
-            >
-              <User className="w-4 h-4" />
-              Личный кабинет
-            </Button>
-
-            {/* Статистика */}
-            <div className="hidden md:flex items-center gap-6">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-primary">{unlockedAchievements}</div>
-                <div className="text-xs text-muted-foreground">Получено</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-yellow-600">{totalPoints}</div>
-                <div className="text-xs text-muted-foreground">Очков</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">
-                  {Math.round((unlockedAchievements / totalAchievements) * 100)}%
-                </div>
-                <div className="text-xs text-muted-foreground">Прогресс</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">

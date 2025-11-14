@@ -11,6 +11,7 @@ import { OpenAITTS, isTTSAvailable } from '@/lib/openaiTTS';
 import { runAdaptiveAssessment, AssessmentResult, AssessmentQuestion, mapGradeToCluster, buildTwoWeekPlan, GradeCluster } from '@/utils/adaptiveAssessment';
 import { LessonContextManager, LessonContext, LessonBlock } from '@/utils/lessonContextManager';
 import { getCourseRecommendation, CourseRecommendation } from '@/utils/coursePlans';
+import Header from '@/components/Header';
 
 // Global types for Speech Recognition API
 interface SpeechRecognitionEvent extends Event {
@@ -3050,25 +3051,7 @@ const Chat = () => {
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
 
       {/* Header */}
-      <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between gap-2">
-            {/* Left side - Logo */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-                <div className="w-8 h-8 bg-gradient-to-r from-primary to-accent rounded-xl flex items-center justify-center">
-                  <Brain className="w-4 h-4 text-white" />
-                </div>
-                <h1 className="text-sm sm:text-lg font-semibold hidden sm:block">Windexs-Учитель</h1>
-            </div>
-
-            {/* Right side - Title */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-                <MessageCircle className="w-5 h-5 text-primary" />
-                <h2 className="text-sm sm:text-lg font-medium hidden sm:block">AI Учитель</h2>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       {/* Chat Container */}
       <div className="container mx-auto px-4 py-6 max-w-4xl">

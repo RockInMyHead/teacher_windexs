@@ -28,6 +28,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import Header from '@/components/Header';
 
 const PersonalAccount = () => {
   const { user, updateSubscription, addFamilyMember, removeFamilyMember, logout } = useAuth();
@@ -75,36 +76,7 @@ const PersonalAccount = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
       {/* Header */}
-      <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Button
-                variant="ghost"
-                onClick={() => navigate('/courses')}
-                className="flex items-center gap-2 px-2"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span className="hidden sm:inline">Назад</span>
-              </Button>
-              <div className="w-8 h-8 bg-gradient-to-r from-primary to-accent rounded-xl flex items-center justify-center">
-                <User className="w-4 h-4 text-white" />
-              </div>
-              <h1 className="text-sm sm:text-lg font-semibold hidden sm:block">Личный кабинет</h1>
-            </div>
-
-            {/* Logout Button */}
-            <Button
-              variant="outline"
-              onClick={handleLogout}
-              className="flex items-center gap-1 sm:gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 px-2 sm:px-4"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Выйти</span>
-            </Button>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <div className="container mx-auto px-4 py-8">
         <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">

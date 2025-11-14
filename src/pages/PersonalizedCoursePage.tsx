@@ -23,6 +23,7 @@ import {
   Star
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import Header from '@/components/Header';
 
 const PersonalizedCoursePage = () => {
   const { user } = useAuth();
@@ -186,36 +187,7 @@ const PersonalizedCoursePage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
       {/* Header */}
-      <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            {/* Left side - Back button */}
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                onClick={() => navigate('/courses')}
-                className="flex items-center gap-2"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Назад в кабинет
-              </Button>
-            </div>
-
-            {/* Right side - Progress */}
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-sm font-medium">Прогресс курса</p>
-                <p className="text-xs text-muted-foreground">
-                  {currentModule + 1} из {course.modules.length} модулей
-                </p>
-              </div>
-              <div className="w-20">
-                <Progress value={progress} className="h-2" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
