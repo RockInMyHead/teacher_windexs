@@ -315,25 +315,6 @@ const AvailableCourses = () => {
             );
           })}
         </div>
-
-        {/* CTA Section */}
-        <div className="text-center bg-gradient-to-r from-primary/10 to-accent/10 rounded-3xl p-8 border border-primary/20">
-          <h2 className="text-3xl font-bold mb-4">
-            Готовы начать обучение?
-          </h2>
-          <p className="text-lg text-muted-foreground mb-6 max-w-2xl mx-auto">
-            Присоединяйтесь к тысячам студентов, которые уже улучшают свои знания с помощью нашего AI-ассистента
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" onClick={() => navigate('/chat')}>
-              <Brain className="w-5 h-5 mr-2" />
-              Начать чат с AI
-            </Button>
-            <Button size="lg" variant="outline" onClick={() => navigate('/auth')}>
-              Зарегистрироваться
-            </Button>
-          </div>
-        </div>
       </main>
     </div>
   );
