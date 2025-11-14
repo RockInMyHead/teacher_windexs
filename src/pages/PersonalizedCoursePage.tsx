@@ -337,120 +337,30 @@ const PersonalizedCoursePage = () => {
               </CardHeader>
 
               <CardContent>
-                {/* Lessons List */}
-                <div className="space-y-4 mb-8">
-                  <h4 className="font-semibold text-lg mb-4">Уроки модуля:</h4>
-                  {module.lessons.map((lesson, index) => {
-                    const lessonKey = `${courseId}-${currentModule}-${index}`;
-                    const isCompleted = completedLessons.has(lessonKey);
-                    const isActive = activeLesson === `${currentModule}_${index}`;
+                <div className="text-center">
+                  {(() => {
+                    // Найти первый незавершенный урок
+                    const firstIncompleteLessonIndex = module.lessons.findIndex((lesson, index) => {
+                      const lessonKey = `${courseId}-${currentModule}-${index}`;
+                      return !completedLessons.has(lessonKey);
+                    });
+
+                    const currentLessonIndex = firstIncompleteLessonIndex >= 0 ? firstIncompleteLessonIndex : 0;
+                    const currentLesson = module.lessons[currentLessonIndex];
 
                     return (
-                      <div key={index} className={`flex items-center gap-4 p-4 border rounded-lg transition-colors ${
-                        isCompleted ? 'border-green-200 bg-green-50 dark:bg-green-950/20' :
-                        isActive ? 'border-blue-300 bg-blue-50 dark:bg-blue-950/20' :
-                        'border-border/50 hover:bg-muted/50'
-                      }`}>
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                          isCompleted ? 'bg-green-500 text-white' :
-                          isActive ? 'bg-blue-500 text-white' :
-                          'bg-primary/10 text-primary'
-                        }`}>
-                          {isCompleted ? (
-                            <CheckCircle className="w-4 h-4" />
-                          ) : isActive ? (
-                            <Play className="w-4 h-4" />
-                          ) : (
-                            <span className="text-sm font-medium">{index + 1}</span>
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className={`font-medium ${isCompleted ? 'line-through text-muted-foreground' : ''}`}>
-                            {lesson}
-                          </p>
-                          {isCompleted && (
-                            <p className="text-xs text-green-600 mt-1">✓ Завершено</p>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
+                      <>
+                        <h3 className="text-xl font-semibold mb-4">{currentLesson}</h3>
                         <Button
-                          size="sm"
-                          onClick={() => {
-                              navigate(`/lesson/${courseId}/${currentModule}/${index}?type=notes`);
-                          }}
-                          variant={isCompleted ? "outline" : isActive ? "default" : "outline"}
-                          disabled={!isActive && !isCompleted}
+                          onClick={() => navigate(`/lesson/${courseId}/${currentModule}/${currentLessonIndex}`)}
                           className="flex items-center gap-2"
                         >
-                            <BookOpen className="w-3 h-3" />
-                            Конспект
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              navigate(`/lesson/${courseId}/${currentModule}/${index}?type=test`);
-                            }}
-                            variant="outline"
-                            disabled={!isActive && !isCompleted}
-                            className="flex items-center gap-2"
-                          >
-                            <CheckCircle className="w-3 h-3" />
-                            Тест
+                          <Play className="w-4 h-4" />
+                          Начать урок
                         </Button>
-                        </div>
-                      </div>
+                      </>
                     );
-                  })}
-                </div>
-
-                {/* Module Actions */}
-                <div className="border-t pt-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <BookOpen className="w-4 h-4" />
-                        {module.lessons.length} уроков
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Target className="w-4 h-4" />
-                        Интерактивное обучение
-                      </div>
-                    </div>
-
-                    <div className="flex gap-3">
-                      {currentModule > 0 && (
-                        <Button
-                          variant="outline"
-                          onClick={() => setCurrentModule(currentModule - 1)}
-                        >
-                          Предыдущий модуль
-                        </Button>
-                      )}
-
-                      <Button
-                        onClick={() => {
-                          const firstIncompleteLesson = module.lessons.findIndex((lesson, index) => {
-                            const lessonKey = `${courseId}-${currentModule}-${index}`;
-                            return !completedLessons.has(lessonKey);
-                          });
-                          const lessonIndex = firstIncompleteLesson >= 0 ? firstIncompleteLesson : 0;
-                          navigate(`/lesson/${courseId}/${currentModule}/${lessonIndex}`);
-                        }}
-                        className="flex items-center gap-2"
-                      >
-                        <Play className="w-4 h-4" />
-                        Начать обучение в этом модуле
-                      </Button>
-
-                      {currentModule < course.modules.length - 1 && (
-                        <Button
-                          onClick={() => setCurrentModule(currentModule + 1)}
-                        >
-                          Следующий модуль
-                        </Button>
-                      )}
-                    </div>
-                  </div>
+                  })()}
                 </div>
               </CardContent>
             </Card>
