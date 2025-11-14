@@ -356,6 +356,7 @@ const Chat = () => {
   const [isAudioTaskActive, setIsAudioTaskActive] = useState(false);
   const [audioTaskText, setAudioTaskText] = useState('');
   const [isRecordingAudioTask, setIsRecordingAudioTask] = useState(false);
+  const [isOnlineCommunication, setIsOnlineCommunication] = useState(false);
   const [isTestQuestionActive, setIsTestQuestionActive] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<'english' | 'russian'>('english');
   const [testQuestionData, setTestQuestionData] = useState<{
@@ -3351,6 +3352,47 @@ const Chat = () => {
             <div></div>
             )}
 
+            {/* Online Communication Status */}
+            {isOnlineCommunication && (
+              <div className="px-4 py-2 border-t bg-green-50 dark:bg-green-950/20">
+                <div className="flex items-center justify-between text-sm text-green-700 dark:text-green-300">
+                  <div className="flex items-center gap-2">
+                    {isListening ? (
+                      <>
+                        <Mic className="w-4 h-4 animate-pulse text-green-600" />
+                        <span>🎤 Учитель слушает - говорите ваш вопрос...</span>
+                      </>
+                    ) : isVoiceChatActive ? (
+                      <>
+                        <MessageCircle className="w-4 h-4 animate-pulse text-green-600" />
+                        <span>💬 Онлайн общение активно - учитель думает...</span>
+                      </>
+                    ) : (
+                      <>
+                        <MessageCircle className="w-4 h-4 text-green-600" />
+                        <span>🎯 Онлайн общение готово - нажмите для начала</span>
+                      </>
+                    )}
+                  </div>
+                  <Button
+                    onClick={() => {
+                      setIsOnlineCommunication(false);
+                      setIsVoiceChatActive(false);
+                      setIsListening(false);
+                      if (recognitionRef.current) {
+                        recognitionRef.current.stop();
+                      }
+                    }}
+                    variant="outline"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    Завершить
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Input Area - show only when assessment is not started */}
             {!isLearningPlanActive && assessmentState === 'initial' ? (
                 <div className="flex flex-wrap gap-2 pt-4 border-t">
@@ -3382,6 +3424,36 @@ const Chat = () => {
                   className={isCameraActive ? "animate-pulse" : ""}
                 >
                   <Camera className="w-4 h-4" />
+                </Button>
+
+                {/* Online Communication Button */}
+                <Button
+                  variant={isOnlineCommunication ? "destructive" : "outline"}
+                  size="icon"
+                  onClick={() => {
+                    if (isOnlineCommunication) {
+                      // Stop online communication
+                      setIsOnlineCommunication(false);
+                      setIsVoiceChatActive(false);
+                      setIsListening(false);
+                      if (recognitionRef.current) {
+                        recognitionRef.current.stop();
+                      }
+                    } else {
+                      // Start online communication
+                      setIsOnlineCommunication(true);
+                      setShowChat(true); // Show chat interface
+                      // Auto-start voice chat
+                      setTimeout(() => {
+                        startVoiceChat();
+                      }, 500);
+                    }
+                  }}
+                  disabled={isLoading}
+                  title={isOnlineCommunication ? "Завершить онлайн общение" : "Начать онлайн общение с учителем"}
+                  className={isOnlineCommunication ? "animate-pulse" : ""}
+                >
+                  <MessageCircle className="w-4 h-4" />
                 </Button>
 
                 {isAudioTaskActive ? (
