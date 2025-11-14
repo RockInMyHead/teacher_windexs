@@ -232,7 +232,7 @@ const AvailableCourses = () => {
                 <CardHeader className="pb-4">
                   <div className="flex items-start justify-between mb-4">
                     <div className={`w-16 h-16 bg-gradient-to-br ${course.color} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
-                      <Icon className="w-8 h-8 text-white" />
+                      {Icon && <Icon className="w-8 h-8 text-white" />}
                     </div>
                   </div>
 
