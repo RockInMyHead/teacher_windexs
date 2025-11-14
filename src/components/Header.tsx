@@ -22,7 +22,7 @@ const Header = () => {
           <div className="flex items-center gap-2 flex-shrink-0">
             <div
               className="w-8 h-8 bg-gradient-to-r from-primary to-accent rounded-xl flex items-center justify-center cursor-pointer hover:scale-105 transition-transform duration-200"
-              onClick={() => window.history.back()}
+              onClick={() => navigate('/available-courses')}
             >
               <Brain className="w-4 h-4 text-white" />
             </div>
