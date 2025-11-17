@@ -928,7 +928,7 @@ ${lessonContext}
             },
             { role: 'user', content: generationPrompt }
           ],
-          max_tokens: 3000,
+          max_completion_tokens: 3000,
           temperature: 0.7,
         }),
       });

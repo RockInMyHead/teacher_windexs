@@ -174,7 +174,7 @@ export class ChatService {
     return {
       model,
       messages,
-      max_tokens: maxTokens,
+      max_completion_tokens: maxTokens,
       temperature,
     };
   }

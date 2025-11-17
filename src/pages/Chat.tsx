@@ -332,7 +332,7 @@ const Chat = () => {
           model: 'gpt-5.1',
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.7,
-          max_tokens: 2000
+          max_completion_tokens: 2000
         })
       });
 
@@ -779,7 +779,7 @@ const Chat = () => {
           model: 'gpt-5.1',
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.8,
-          max_tokens: 4000
+          max_completion_tokens: 4000
         })
       });
 
@@ -1651,7 +1651,7 @@ const Chat = () => {
                 content: userMessage.content,
             },
           ],
-          max_tokens: 8000,
+          max_completion_tokens: 8000,
           temperature: 0.7,
         }),
       });

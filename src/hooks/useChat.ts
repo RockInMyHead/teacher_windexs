@@ -88,7 +88,7 @@ export const useChat = (options: UseChatOptions = {}): UseChatReturn => {
         const request: ChatCompletionRequest = {
           model,
           messages: chatMessages as any,
-          max_tokens: 2000,
+          max_completion_tokens: 2000,
           temperature: 0.7,
         };
 

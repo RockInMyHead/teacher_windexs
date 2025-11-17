@@ -604,7 +604,7 @@ ${lessonAspects}
           ],
           model: 'gpt-5.1',
           temperature: 0.7,
-          max_tokens: 800
+          max_completion_tokens: 800
         })
       });
 
