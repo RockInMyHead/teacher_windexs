@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth, SUBSCRIPTION_PLANS } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,9 +40,25 @@ const PersonalAccount = () => {
     courses: [] as string[]
   });
 
+  // Перенаправляем на /auth если пользователь не авторизован
+  useEffect(() => {
+    if (!user) {
+      navigate('/auth');
+    }
+  }, [user, navigate]);
+
+  // Показываем loading пока проверяем авторизацию
   if (!user) {
-    navigate('/auth');
-    return null;
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
+        <Header />
+        <main className="container mx-auto px-4 py-8">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <p className="text-muted-foreground text-lg">Проверка авторизации...</p>
+          </div>
+        </main>
+      </div>
+    );
   }
 
   const handleAddFamilyMember = async () => {

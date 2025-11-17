@@ -45,10 +45,10 @@ export const validateFile = (
 export const extractTextFromPDF = async (file: File): Promise<string> => {
   try {
     // This requires pdfjs-dist which is already in dependencies
-    const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.js');
+    const { getDocument } = await import('pdfjs-dist/legacy/build/pdf');
 
     // Set up worker
-    const pdfjsWorker = await import('pdfjs-dist/legacy/build/pdf.worker.entry');
+    const pdfjsWorker = await import('pdfjs-dist/legacy/build/pdf.worker.mjs');
     const pdfjsDistPath = '/node_modules/pdfjs-dist/legacy/build';
 
     const fileData = await file.arrayBuffer();

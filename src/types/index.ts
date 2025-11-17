@@ -329,9 +329,14 @@ export interface UseVoiceChatReturn {
 export interface UseChatReturn {
   messages: Message[];
   isLoading: boolean;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, systemPrompt?: string, model?: string) => Promise<void>;
+  addMessage: (message: Message) => void;
   clearMessages: () => void;
+  updateMessage: (id: string, updates: Partial<Message>) => void;
+  getLastMessage: () => Message | null;
+  getContext: (limit?: number) => Message[];
   error: AppError | null;
+  streamingMessage: Message | null;
 }
 
 export interface UseTextToSpeechReturn {

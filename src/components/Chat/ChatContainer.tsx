@@ -4,76 +4,39 @@
 
 import React, { useEffect, useCallback } from 'react';
 import { Card } from '@/components/ui/card';
-import { useChat, useTextToSpeech, useVoiceRecognition, useFileProcessing } from '@/hooks';
+import { useChat } from '@/hooks';
 import { runAdaptiveAssessment } from '@/utils/adaptiveAssessment';
 import { getSystemPrompt } from '@/utils/prompts';
 import { logger } from '@/utils/logger';
-import { ArrowLeft, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ChatContainerProps } from './types';
 import type { AssessmentQuestion } from '@/types';
 import ChatMessages from './ChatMessages';
 import ChatInput from './ChatInput';
-import VoiceChatControls from './VoiceChatControls';
-import TTSControls from './TTSControls';
-import FileUploadArea from './FileUploadArea';
 import { AssessmentPanel, AudioTaskPanel, TestQuestionPanel } from './ChatPanels';
 
-export const ChatContainer = React.memo(
+export const ChatContainer = React.forwardRef<any, ChatContainerProps>(
   ({
     initialSystemPrompt = '',
     maxMessages = 100,
     onChatStart,
     onChatEnd,
-  }: ChatContainerProps) => {
+  }: ChatContainerProps, ref) => {
     // State management
-    const { messages, isLoading, sendMessage: sendChatMessage, error: chatError } = useChat({
+    const { messages, isLoading, sendMessage: sendChatMessage, error: chatError, addMessage, streamingMessage } = useChat({
       maxMessages,
     });
 
-    const {
-      isSpeaking,
-      currentSentence,
-      totalSentences,
-      speak,
-      stop: stopSpeaking,
-    } = useTextToSpeech({
-      onStart: () => logger.debug('TTS started'),
-      onEnd: () => logger.debug('TTS ended'),
-    });
+    // Expose addMessage via ref for external use
+    React.useImperativeHandle(ref, () => ({
+      addMessage,
+    }), [addMessage]);
 
-    const {
-      isListening,
-      finalTranscript,
-      startListening: startVoiceRecognition,
-      stopListening: stopVoiceRecognition,
-      clearTranscripts,
-    } = useVoiceRecognition({
-      language: 'ru-RU',
-      onTranscript: (transcript, isFinal) => {
-        if (isFinal) {
-          logger.debug('Final transcript received', { length: transcript.length });
-        }
-      },
-    });
 
-    const {
-      processedFiles,
-      processSingleFile,
-      getCombinedText: getCombinedText,
-      clearFiles: clearProcessedFiles,
-    } = useFileProcessing({
-      fileProcessingOptions: {
-        maxSize: 10 * 1024 * 1024,
-        compressImages: true,
-      },
-    });
+
 
     // Local state
-    const [isVoiceChatActive, setIsVoiceChatActive] = React.useState(false);
-    const [isTtsEnabled, setIsTtsEnabled] = React.useState(false);
-    const [uploadedFiles, setUploadedFiles] = React.useState<File[]>([]);
-    const [speakingMessageId, setSpeakingMessageId] = React.useState<string | null>(null);
 
     // Assessment state
     const [isInAssessment, setIsInAssessment] = React.useState(false);
@@ -101,99 +64,18 @@ export const ChatContainer = React.memo(
         try {
           logger.debug('Sending message from input', { length: content.length });
 
-          // Include file contents if files are uploaded
-          let messageContent = content;
-          if (processedFiles.length > 0) {
-            const fileContents = getCombinedText();
-            messageContent += `\n\n--- Файлы ---\n${fileContents}`;
-            clearProcessedFiles();
-            setUploadedFiles([]);
-          }
+          const messageContent = content;
 
           // Send message to AI
           await sendChatMessage(messageContent, systemPrompt);
-
-          // If TTS is enabled, speak the response
-          if (isTtsEnabled && messages.length > 0) {
-            const lastMessage = messages[messages.length - 1];
-            if (lastMessage?.role === 'assistant') {
-              setSpeakingMessageId(lastMessage.id);
-              await speak(lastMessage.content);
-              setSpeakingMessageId(null);
-            }
-          }
         } catch (error) {
           logger.error('Failed to send message', error as Error);
         }
       },
-      [sendChatMessage, speak, isTtsEnabled, messages, processedFiles, getCombinedText, clearProcessedFiles, systemPrompt]
+      [sendChatMessage, systemPrompt]
     );
 
-    /**
-     * Handle file selection
-     */
-    const handleFilesSelected = useCallback(
-      async (files: File[]) => {
-        try {
-          logger.debug('Files selected', { count: files.length });
-          setUploadedFiles(prev => [...prev, ...files]);
 
-          // Process files
-          for (const file of files) {
-            await processSingleFile(file);
-          }
-        } catch (error) {
-          logger.error('Failed to process files', error as Error);
-        }
-      },
-      [processSingleFile]
-    );
-
-    /**
-     * Handle voice chat toggle
-     */
-    const handleToggleVoiceChat = useCallback(() => {
-      if (isVoiceChatActive) {
-        logger.debug('Disabling voice chat');
-        setIsVoiceChatActive(false);
-        stopVoiceRecognition();
-        clearTranscripts();
-      } else {
-        logger.debug('Enabling voice chat');
-        setIsVoiceChatActive(true);
-        onChatStart?.();
-      }
-    }, [isVoiceChatActive, stopVoiceRecognition, clearTranscripts, onChatStart]);
-
-    /**
-     * Handle TTS toggle
-     */
-    const handleToggleTts = useCallback(() => {
-      logger.debug('Toggling TTS', { enabled: !isTtsEnabled });
-      setIsTtsEnabled(!isTtsEnabled);
-    }, [isTtsEnabled]);
-
-    /**
-     * Handle message speak
-     */
-    const handleMessageSpeak = useCallback(
-      async (message: any) => {
-        try {
-          if (speakingMessageId === message.id) {
-            stopSpeaking();
-            setSpeakingMessageId(null);
-          } else {
-            setSpeakingMessageId(message.id);
-            await speak(message.content);
-            setSpeakingMessageId(null);
-          }
-        } catch (error) {
-          logger.error('Failed to speak message', error as Error);
-          setSpeakingMessageId(null);
-        }
-      },
-      [speak, stopSpeaking, speakingMessageId]
-    );
 
     /**
      * Start assessment
@@ -242,25 +124,12 @@ export const ChatContainer = React.memo(
       });
     }, [classGrade]);
 
-    /**
-     * Handle back button
-     */
-    const handleBack = useCallback(() => {
-      logger.debug('Going back');
-      if (isVoiceChatActive) {
-        handleToggleVoiceChat();
-      }
-      onChatEnd?.();
-    }, [isVoiceChatActive, handleToggleVoiceChat, onChatEnd]);
 
     return (
       <div className="space-y-4 rounded-lg bg-background p-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Чат с AI</h1>
-          <Button variant="ghost" size="icon" onClick={handleBack}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
         </div>
 
         {/* Error display */}
@@ -280,39 +149,7 @@ export const ChatContainer = React.memo(
         <ChatMessages
           messages={messages}
           isLoading={isLoading}
-          onMessageSpeak={handleMessageSpeak}
-          isSpeakingId={speakingMessageId}
-        />
-
-        {/* Voice Chat Controls */}
-        <VoiceChatControls
-          isActive={isVoiceChatActive}
-          isListening={isListening}
-          isSpeaking={isSpeaking}
-          onToggle={handleToggleVoiceChat}
-          onStartListening={startVoiceRecognition}
-          onStopListening={stopVoiceRecognition}
-          disabled={isLoading || isInAssessment}
-        />
-
-        {/* TTS Controls */}
-        <TTSControls
-          isEnabled={isTtsEnabled}
-          isSpeaking={isSpeaking}
-          currentSentence={currentSentence}
-          totalSentences={totalSentences}
-          onToggle={handleToggleTts}
-          onStop={stopSpeaking}
-          disabled={isLoading}
-        />
-
-        {/* File Upload */}
-        <FileUploadArea
-          onFilesSelected={handleFilesSelected}
-          uploadedFiles={uploadedFiles}
-          onFileRemove={(index) => setUploadedFiles(prev => prev.filter((_, i) => i !== index))}
-          isProcessing={false}
-          disabled={isLoading || isInAssessment}
+          streamingMessage={streamingMessage}
         />
 
         {/* Assessment Panel */}
@@ -335,9 +172,7 @@ export const ChatContainer = React.memo(
         {/* Chat Input */}
         <ChatInput
           onSendMessage={handleSendMessage}
-          onFileSelected={handleFilesSelected}
-          isLoading={isLoading || isSpeaking}
-          uploadedFilesCount={uploadedFiles.length}
+          isLoading={isLoading}
           disabled={isInAssessment}
         />
 

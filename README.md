@@ -15,7 +15,7 @@ npm install
 npm run start:single-port
 ```
 
-**Приложение будет доступно на:** `http://localhost:1031`
+**Приложение будет доступно на:** `https://teacher.windexs.ru`
 
 ### ✨ Новое: Встроенная SQLite База Данных
 Проект теперь включает **профессиональную SQLite базу данных** с 8 таблицами и REST API:

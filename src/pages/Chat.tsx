@@ -1,51 +1,56 @@
+declare global {
+  interface Window {
+    _assessmentResolver?: ((answer: string) => void) | null;
+  }
+}
+
 import React, { useState, useRef, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Brain, Send, User, MessageCircle, Upload, FileText, Image, File, X, Camera, Volume2, VolumeX, Mic, MicOff, ArrowLeft } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { Brain, Send, User, MessageCircle, Volume2, VolumeX, CheckCircle, X, BookOpen, Target, ArrowLeft, Phone } from 'lucide-react';
 import { OpenAITTS, isTTSAvailable } from '@/lib/openaiTTS';
-import { runAdaptiveAssessment, AssessmentResult, AssessmentQuestion, mapGradeToCluster, buildTwoWeekPlan, GradeCluster } from '@/utils/adaptiveAssessment';
-import { LessonContextManager, LessonContext, LessonBlock } from '@/utils/lessonContextManager';
-import { getCourseRecommendation, CourseRecommendation, COURSE_PLANS } from '@/utils/coursePlans';
-import Header from '@/components/Header';
-
-// Global types for Speech Recognition API
-interface SpeechRecognitionEvent extends Event {
-  resultIndex: number;
-  results: SpeechRecognitionResultList;
+import { COURSE_TEST_QUESTIONS, TestQuestion, COURSE_PLANS } from '@/utils/coursePlans';
+import { AssessmentResults } from '@/components/AssessmentResults';
+import { createPersonalizedCourseData } from '@/utils/assessmentAnalyzer';
+import { ChatContainer } from '@/components/Chat';
+import { VoiceTeacherChat } from '@/components/VoiceTeacherChat';
+import LessonDisplay from '@/components/LessonDisplay';
+// Stub for lesson context manager
+interface LessonBlock {
+  id: number;
+  title: string;
+  content: string;
+  type: string;
 }
 
-interface SpeechRecognitionResultList {
-  [index: number]: SpeechRecognitionResult;
-  length: number;
+interface LessonContext {
+  currentTopic?: string;
 }
 
-interface SpeechRecognitionResult {
-  [index: number]: SpeechRecognitionAlternative;
-  length: number;
-  isFinal: boolean;
+class LessonContextManager {
+  getCurrentContext() {
+    return null;
+  }
+  getSystemPrompt() {
+    return '';
+  }
+  startLesson(data: any) {
+    // stub
+  }
+  updateCurrentBlock(block: LessonBlock, blockIndex?: number, totalBlocks?: number) {
+    // stub
+  }
+  endLesson() {
+    // stub
+  }
 }
+import { Header } from '@/components/Header';
 
-interface SpeechRecognitionAlternative {
-  transcript: string;
-  confidence: number;
-}
 
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start(): void;
-  stop(): void;
-  onstart: ((event: Event) => void) | null;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: any) => void) | null;
-  onend: ((event: Event) => void) | null;
-}
 
 
 
@@ -62,330 +67,85 @@ interface IntroTestQuestion {
   options: string[];
 }
 
-declare global {
-  interface Window {
-    _assessmentResolver?: ((answer: string) => void) | null;
-  }
-}
-
-const GRADE_INTRO_QUESTIONS: Record<GradeCluster, IntroTestQuestion[]> = {
-  grade1: [
-    {
-      question: 'Что значит "Good morning"?',
-      options: ['Доброе утро', 'Добрый вечер', 'Спокойной ночи']
-    },
-    {
-      question: 'Как переводится слово "Dog"?',
-      options: ['собака', 'кот', 'птица']
-    },
-    {
-      question: 'Как сказать "Меня зовут..." по-английски?',
-      options: ['My name is', 'I have', 'I like']
-    },
-    {
-      question: 'Выберите слово, которое подходит: This is my ___.',
-      options: ['book', 'blue', 'five']
-    },
-    {
-      question: 'Что значит "Thank you"?',
-      options: ['Спасибо', 'Пожалуйста', 'Привет']
-    }
-  ],
-  grade2: [
-    {
-      question: 'Выберите правильный ответ: They ___ at school now.',
-      options: ['are', 'is', 'be']
-    },
-    {
-      question: 'Как переводится слово "often"?',
-      options: ['часто', 'редко', 'никогда']
-    },
-    {
-      question: 'Заполните пропуск: We ___ to the park on Sundays.',
-      options: ['go', 'goes', 'going']
-    },
-    {
-      question: 'Что значит выражение "How much is it?"',
-      options: ['Сколько это стоит?', 'Где это?', 'Когда это?']
-    },
-    {
-      question: 'Выберите слово, обозначающее "вчера":',
-      options: ['yesterday', 'today', 'tomorrow']
-    }
-  ],
-  grade3_4: [
-    {
-      question: 'Как задать вопрос: ___ you like pizza?',
-      options: ['Do', 'Does', 'Are']
-    },
-    {
-      question: 'Выберите верное продолжение: There ___ three books on the table.',
-      options: ['are', 'is', 'be']
-    },
-    {
-      question: 'Как переводится слово "winter"?',
-      options: ['зима', 'весна', 'осень']
-    },
-    {
-      question: 'Complete the sentence: She ___ homework every day.',
-      options: ['does', 'do', 'doing']
-    },
-    {
-      question: 'Выберите правильное слово: My friend is taller ___ me.',
-      options: ['than', 'then', 'that']
-    }
-  ],
-  grade5_6: [
-    {
-      question: 'Выберите верный вариант: I have never ___ to London.',
-      options: ['been', 'was', 'be']
-    },
-    {
-      question: 'Как сказать "Он сейчас читает книгу"?',
-      options: ['He is reading a book now', 'He read a book now', 'He reads a book now']
-    },
-    {
-      question: 'Выберите фразовый глагол со значением "поднять":',
-      options: ['pick up', 'run out', 'give in']
-    },
-    {
-      question: 'Complete the sentence: If it rains, we ___ at home.',
-      options: ['will stay', 'stayed', 'stay']
-    },
-    {
-      question: 'Как переводится выражение "to be good at"?',
-      options: ['хорошо уметь', 'быть рядом', 'нравиться']
-    }
-  ],
-  grade7_8: [
-    {
-      question: 'Выберите верное продолжение: She has been studying English ___ 2019.',
-      options: ['since', 'for', 'from']
-    },
-    {
-      question: 'Какой вариант в пассивном залоге? The letter ___ yesterday.',
-      options: ['was sent', 'sent', 'has sent']
-    },
-    {
-      question: 'Выберите правильный условный тип: If I ___ enough money, I would travel more.',
-      options: ['had', 'have', 'will have']
-    },
-    {
-      question: 'Что значит выражение "make up one\'s mind"?',
-      options: ['принять решение', 'придумать историю', 'потерять сознание']
-    },
-    {
-      question: 'Complete the sentence: The film was ___ interesting that I watched it twice.',
-      options: ['so', 'such', 'too']
-    }
-  ],
-  grade9: [
-    {
-      question: 'Выберите верное слово: The results were beyond our ___.',
-      options: ['expectations', 'expecting', 'expected']
-    },
-    {
-      question: 'Как переводится выражение "in terms of"?',
-      options: ['в плане', 'вместо', 'вокруг']
-    },
-    {
-      question: 'Complete the sentence: Had I known about the traffic, I ___ earlier.',
-      options: ['would have left', 'will leave', 'left']
-    },
-    {
-      question: 'Страдательный залог с модальным глаголом: The project ___ next week.',
-      options: ['must be finished', 'must finish', 'must have finished']
-    },
-    {
-      question: 'Выберите синоним к слову "significant":',
-      options: ['important', 'simple', 'distant']
-    }
-  ],
-  grade10_11: [
-    {
-      question: 'Выберите верную форму: It\'s high time we ___ the report.',
-      options: ['submitted', 'submit', 'had submitted']
-    },
-    {
-      question: 'Как переводится идиома "break the ice"?',
-      options: ['растопить лёд в общении', 'буквально ломать лёд', 'устроить драку']
-    },
-    {
-      question: 'Complete the sentence: Not only ___ the presentation, but she also led the discussion.',
-      options: ['did she prepare', 'she prepared', 'prepared she']
-    },
-    {
-      question: 'Выберите подходящее слово: The theory remains purely ___ at this stage.',
-      options: ['hypothetical', 'historic', 'hospitable']
-    },
-    {
-      question: 'Что означает фраза "regardless of"?',
-      options: ['несмотря на', 'из-за', 'вместо']
-    }
-  ],
-  grade12: [
-    {
-      question: 'Выберите правильную форму: "By next semester, I ___ my thesis."',
-      options: ['will have finished', 'have finished', 'will finish', 'will be finish']
-    },
-    {
-      question: 'Как лучше завершить предложение: "The lecturer highlighted the ___ significance of the findings."',
-      options: ['theoretical', 'casual', 'random']
-    },
-    {
-      question: 'Что означает выражение "critical thinking"?',
-      options: ['критическое мышление', 'критикующий взгляд', 'жесткая критика']
-    },
-    {
-      question: 'Выберите академическую вводную фразу:',
-      options: ['Firstly, it is essential to note...', 'Guys, let me tell you...', 'You know what...']
-    },
-    {
-      question: 'Как сказать "обобщить результаты" по-английски?',
-      options: ['to summarize findings', 'to forget findings', 'to hide findings']
-    }
-  ],
-  grade13: [
-    {
-      question: 'Выберите фразу для начала делового совещания:',
-      options: ['Let\'s align on today\'s agenda.', 'Hey folks, what\'s up?', 'Skip the agenda.']
-    },
-    {
-      question: 'Что означает выражение "value proposition"?',
-      options: ['ценностное предложение', 'ценовая монополия', 'скидочное предложение']
-    },
-    {
-      question: 'Как корректно перевести: "Он возглавляет отдел стратегии."',
-      options: ['He leads the strategy department.', 'He follow strategy depart.', 'He leave the strategic department.']
-    },
-    {
-      question: 'Какая фраза уместна для обсуждения рисков:',
-      options: ['Let\'s assess potential risks before moving forward.', 'Ignore the risks for now.', 'Hope nothing goes wrong.']
-    },
-    {
-      question: 'Как завершить официальное письмо-предложение?',
-      options: ['We look forward to your feedback.', 'Catch you later!', 'Let me know, maybe.']
-    }
-  ]
-};
-
-const getIntroTotalForCluster = (cluster: GradeCluster): number => {
-  const bank = GRADE_INTRO_QUESTIONS[cluster] || GRADE_INTRO_QUESTIONS['grade1'];
-  return 2 + bank.length;
-};
-
-const TOPIC_OPTIONS_BY_CLUSTER: Record<GradeCluster, string[]> = {
-  grade1: ['Знакомство с предметом', 'Числа (1–5)', 'Основные цвета', 'Простые приветствия', 'Ничего из перечисленного'],
-  grade2: ['Расширенный алфавит', 'Семья и личное', 'Животные и природа', 'Школа и учеба', 'Все темы помню плохо'],
-  grade3_4: ['Времена и события', 'Путешествия и места', 'Еда и напитки', 'Спорт и игры', 'Все темы помню плохо'],
-  grade5_6: ['Прошедшие события', 'Здоровье и тело', 'Технологии', 'Сравнения и описания', 'Все темы помню плохо'],
-  grade7_8: ['Модальные глаголы', 'Пассивный залог', 'Сложные времена', 'Условные предложения', 'Все темы помню плохо'],
-  grade9: ['Косвенная речь', 'Академические тексты', 'Эссе и аргументация', 'Сложные конструкции', 'Подготовка к ОГЭ'],
-  grade10_11: ['Perfect Continuous', 'Английские идиомы', 'Академическое письмо', 'Дискуссии и дебаты', 'Подготовка к ЕГЭ'],
-  grade12: ['Бизнес-английский', 'Презентации на английском', 'Деловая переписка', 'Переговоры и совещания', 'TOEFL/IELTS Speaking'],
-  grade13: ['Профессиональный английский', 'Стратегические презентации', 'Формальные документы', 'Деловые переговоры', 'Продвинутая бизнес коммуникация']
-};
-
-const getTopicOptionsForCluster = (cluster: GradeCluster, language: 'english' | 'russian' = 'english'): string[] => {
-  // Если выбран русский язык, берем темы из COURSE_PLANS
-  if (language === 'russian') {
-    // Определяем класс на основе кластера
-    let gradeNumber = 1;
-    switch (cluster) {
-      case 'grade1': gradeNumber = 1; break;
-      case 'grade2': gradeNumber = 2; break;
-      case 'grade3_4': gradeNumber = 3; break; // Можно выбрать 3 или 4
-      case 'grade5_6': gradeNumber = 5; break; // Можно выбрать 5 или 6
-      case 'grade7_8': gradeNumber = 7; break;
-      case 'grade9': gradeNumber = 9; break;
-      case 'grade10_11': gradeNumber = 10; break;
-      case 'grade12': gradeNumber = 12; break;
-      case 'grade13': gradeNumber = 13; break;
-      default: gradeNumber = 1;
-    }
-
-    // Ищем курс русского языка для этого класса
-    const russianCourse = COURSE_PLANS.find(course =>
-      course.title.toLowerCase().includes('русский') && course.grade === gradeNumber
-    );
-
-    if (russianCourse && russianCourse.lessons.length > 0) {
-      // Возвращаем темы уроков как варианты ответов
-      const topics = russianCourse.lessons.map(lesson => lesson.topic);
-      // Добавляем вариант "Все темы помню плохо" и "Ничего из перечисленного"
-      return [...topics, 'Все темы помню плохо', 'Ничего из перечисленного'];
-    }
-  }
-
-  // Для английского языка используем старые статические опции
-  return TOPIC_OPTIONS_BY_CLUSTER[cluster] || TOPIC_OPTIONS_BY_CLUSTER['grade1'];
-};
-
-
 const Chat = () => {
-  const { isAuthenticated, user, setPersonalizedCourse } = useAuth();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const chatContainerRef = useRef<any>(null);
+  const isNavigatingRef = useRef(false);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  
-  // Adaptive assessment states
-  const [isInAdaptiveMode, setIsInAdaptiveMode] = useState(false);
-  const [assessmentState, setAssessmentState] = useState<'initial' | 'collecting_language' | 'collecting_grade' | 'collecting_topic' | 'interview_questions' | 'in_progress' | 'completed'>('initial');
-  const [classGrade, setClassGrade] = useState('');
-  const [lastTopic, setLastTopic] = useState('');
-  const [currentAssessmentQuestion, setCurrentAssessmentQuestion] = useState<AssessmentQuestion | null>(null);
-  const [assessmentResult, setAssessmentResult] = useState<AssessmentResult | null>(null);
-  const [learningPlanText, setLearningPlanText] = useState<string>('');
-  const [courseRecommendation, setCourseRecommendation] = useState<CourseRecommendation | null>(null);
-  const [questionCount, setQuestionCount] = useState(0);
-  const [isProcessingFile, setIsProcessingFile] = useState(false);
-  const [isCameraActive, setIsCameraActive] = useState(false);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [isTtsEnabled, setIsTtsEnabled] = useState(false);
-  const [isVoiceChatActive, setIsVoiceChatActive] = useState(false);
-  const [isListening, setIsListening] = useState(false);
   const [apiKeyStatus, setApiKeyStatus] = useState<'checking' | 'valid' | 'invalid' | 'error'>('checking');
   const [ttsInterrupted, setTtsInterrupted] = useState(false);
   const [currentSentence, setCurrentSentence] = useState<number>(0);
   const [totalSentences, setTotalSentences] = useState<number>(0);
   const [isGeneratingTTS, setIsGeneratingTTS] = useState(false);
-  const [showSphere, setShowSphere] = useState(false);
-  const [isAudioTaskActive, setIsAudioTaskActive] = useState(false);
-  const [audioTaskText, setAudioTaskText] = useState('');
-  const [isRecordingAudioTask, setIsRecordingAudioTask] = useState(false);
-  const [isOnlineCommunication, setIsOnlineCommunication] = useState(false);
-  const [isTestQuestionActive, setIsTestQuestionActive] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState<'english' | 'russian'>('english');
-  const [testQuestionData, setTestQuestionData] = useState<{
-    question: string;
-    options: string[];
-    currentQuestion: number;
-    totalQuestions: number;
-  } | null>(null);
-  const [isLearningPlanActive, setIsLearningPlanActive] = useState(false);
-  const [selectedGrade, setSelectedGrade] = useState<string>('1');
-  const [selectedGradeCluster, setSelectedGradeCluster] = useState<GradeCluster>('grade1');
-  const [gradeQuestionBank, setGradeQuestionBank] = useState<IntroTestQuestion[]>(GRADE_INTRO_QUESTIONS['grade1']);
-  const [gradeQuestionIndex, setGradeQuestionIndex] = useState(0);
 
-  // Lesson context management
-  const [lessonContextManager] = useState(() => new LessonContextManager());
+  // Assessment testing states
+  const [isAssessmentMode, setIsAssessmentMode] = useState(false);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [assessmentQuestions, setAssessmentQuestions] = useState<TestQuestion[]>([]);
+  const [assessmentResults, setAssessmentResults] = useState<{question: string, userAnswer: string, correctAnswer: string, isCorrect: boolean}[]>([]);
+  const [assessmentCompleted, setAssessmentCompleted] = useState(false);
+  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
+  const [selectedGrade, setSelectedGrade] = useState<number | null>(null);
+  const [personalizedCourseData, setPersonalizedCourseData] = useState<any>(null);
+  const [currentLesson, setCurrentLesson] = useState<any>(null);
+  const [lessonProgress, setLessonProgress] = useState(0);
   const [isLessonMode, setIsLessonMode] = useState(false);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const recognitionRef = useRef<any>(null);
+
+  // Lesson plan and interactive lesson states
+  const [lessonPlan, setLessonPlan] = useState<any>(null);
+  const [currentLessonStep, setCurrentLessonStep] = useState(0);
+  const [lessonContent, setLessonContent] = useState<string>('');
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [generationStep, setGenerationStep] = useState<string>('');
+  const [generationError, setGenerationError] = useState<string>('');
+  const [isGeneratingContent, setIsGeneratingContent] = useState(false);
+  const [lessonStarted, setLessonStarted] = useState(false);
+
+  // Lesson sections for interactive learning
+  const [currentLessonSections, setCurrentLessonSections] = useState<any[]>([]);
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+  const [currentSectionTask, setCurrentSectionTask] = useState<any>(null);
+  const [waitingForAnswer, setWaitingForAnswer] = useState(false);
+  const [thinkingDots, setThinkingDots] = useState('');
+  const [showVideoCall, setShowVideoCall] = useState(false);
+
+  // Auto-scroll to video call when it opens
+  useEffect(() => {
+    if (showVideoCall) {
+      setTimeout(() => {
+        const videoCallElement = document.querySelector('[data-video-call]');
+        if (videoCallElement) {
+          videoCallElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+        }
+      }, 100);
+    }
+  }, [showVideoCall]);
   const ttsContinueRef = useRef<boolean>(true);
   const audioContextRef = useRef<AudioContext | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const soundIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const interruptionCheckIntervalsRef = useRef<Set<NodeJS.Timeout>>(new Set());
+
+  // Effect for thinking dots animation
+  useEffect(() => {
+    if (isGeneratingPlan) {
+      const interval = setInterval(() => {
+        setThinkingDots(prev => prev.length >= 3 ? '' : prev + '.');
+      }, 500);
+      return () => clearInterval(interval);
+    } else {
+      setThinkingDots('');
+    }
+  }, [isGeneratingPlan]);
 
   // Audio feedback functions
   const initAudioContext = () => {
@@ -461,57 +221,893 @@ const Chat = () => {
     }
   }, [messages, isTtsEnabled]);
 
-  // Initialize Speech Recognition
-  useEffect(() => {
-    console.log('🎤 Initializing Speech Recognition...');
 
-    // Try different ways to access Speech Recognition API
-    let SpeechRecognitionConstructor: any = null;
-
-    if ((window as any).SpeechRecognition) {
-      SpeechRecognitionConstructor = (window as any).SpeechRecognition;
-      console.log('✅ Found SpeechRecognition');
-    } else if ((window as any).webkitSpeechRecognition) {
-      SpeechRecognitionConstructor = (window as any).webkitSpeechRecognition;
-      console.log('✅ Found webkitSpeechRecognition');
-    } else if ((window as any).mozSpeechRecognition) {
-      SpeechRecognitionConstructor = (window as any).mozSpeechRecognition;
-      console.log('✅ Found mozSpeechRecognition');
-    } else if ((window as any).msSpeechRecognition) {
-      SpeechRecognitionConstructor = (window as any).msSpeechRecognition;
-      console.log('✅ Found msSpeechRecognition');
-    }
-
-    if (SpeechRecognitionConstructor) {
-      try {
-        recognitionRef.current = new SpeechRecognitionConstructor();
-        recognitionRef.current.continuous = false;
-        recognitionRef.current.interimResults = false;
-        recognitionRef.current.lang = 'ru-RU';
-        console.log('✅ Speech Recognition initialized successfully');
-      } catch (error) {
-        console.error('❌ Error initializing Speech Recognition:', error);
-      }
-    } else {
-      console.log('❌ No Speech Recognition API found');
-    }
-  }, []);
-
-  // Cleanup camera, TTS and speech recognition on unmount
+  // Cleanup TTS on unmount
   useEffect(() => {
     return () => {
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
-      }
       // Stop TTS
       OpenAITTS.stop();
-      // Stop speech recognition
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
     };
-  }, [cameraStream]);
+  }, []);
 
+  // Initialize lesson mode and load data
+  useEffect(() => {
+    const mode = searchParams.get('mode');
+    const isLessonModeParam = mode === 'lesson';
+    setIsLessonMode(isLessonModeParam);
+
+    // Load current lesson data from localStorage
+    if (isLessonModeParam) {
+      const storedLesson = localStorage.getItem('currentLesson');
+      const storedCourseInfo = localStorage.getItem('courseInfo');
+
+      if (storedLesson) {
+        try {
+          const lessonData = JSON.parse(storedLesson);
+          setCurrentLesson(lessonData);
+          console.log('Loaded lesson data for lesson mode:', lessonData);
+        } catch (error) {
+          console.error('Failed to parse lesson data:', error);
+        }
+      }
+
+      if (storedCourseInfo) {
+        try {
+          const courseInfo = JSON.parse(storedCourseInfo);
+          // Create minimal personalizedCourseData structure for lesson mode
+          setPersonalizedCourseData({
+            courseInfo: courseInfo,
+            lessons: [JSON.parse(storedLesson || '{}')]
+          });
+        } catch (error) {
+          console.error('Failed to parse course info:', error);
+        }
+      }
+    }
+
+    // For regular chat mode (not lesson mode), don't load course context
+    if (!isLessonModeParam) {
+      console.log('Regular chat mode - not loading course context for universal teacher');
+      // Clear any existing lesson context
+      setCurrentLesson(null);
+      setPersonalizedCourseData(null);
+    }
+  }, [searchParams]);
+
+  // Generate lesson plan using AI
+  const generateLessonPlan = async () => {
+    console.log('🎯 generateLessonPlan called');
+    console.log('Current lesson:', currentLesson);
+
+    if (!currentLesson) {
+      console.error('❌ No current lesson found!');
+      return;
+    }
+
+    setIsGeneratingPlan(true);
+    setGenerationStep('Анализирую тему урока...');
+
+    // Simulate thinking steps with delays
+    setTimeout(() => setGenerationStep('Изучаю тему и учебный материал...'), 600);
+    setTimeout(() => setGenerationStep('Анализирую уровень сложности и возраст ученика...'), 1200);
+    setTimeout(() => setGenerationStep('Определяю учебные цели и задачи...'), 1800);
+    setTimeout(() => setGenerationStep('Структурирую содержание урока...'), 2400);
+    setTimeout(() => setGenerationStep('Создаю практические задания и упражнения...'), 3000);
+    setTimeout(() => setGenerationStep('Формирую итоговый план обучения...'), 3600);
+
+    try {
+      const prompt = `Создай урок для ученика по теме: "${currentLesson.title}" (${currentLesson.topic}).
+
+Тема урока: ${currentLesson.aspects || currentLesson.description}
+
+Создай урок в формате JSON со следующей структурой:
+{
+  "title": "Название урока",
+  "objective": "Цель урока (1-2 предложения)",
+  "duration": "Продолжительность урока в минутах",
+  "materials": ["список необходимых материалов"],
+  "content": "Полный конспект урока для ученика с объяснениями, примерами и упражнениями",
+  "practice": [
+    {
+      "type": "exercise|question|task",
+      "description": "Описание упражнения или задания",
+      "example": "Пример выполнения"
+    }
+  ],
+  "assessment": "Вопросы для проверки понимания или тест"
+}
+
+Урок должен быть написан для ученика, а не для учителя. Включи полные объяснения, примеры и практические задания.`;
+
+      setGenerationStep('🚀 Отправляю запрос к ИИ...');
+      console.log('📤 Sending API request for lesson plan...');
+      console.log('Prompt length:', prompt.length);
+
+      const response = await fetch('/api/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-5.1',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7,
+          max_tokens: 2000
+        })
+      });
+
+      setGenerationStep('📥 Обрабатываю ответ от ИИ...');
+
+      console.log('📥 API response status:', response.status);
+
+      if (!response.ok) {
+        // Handle specific API key error
+        if (response.status === 500) {
+          const errorData = await response.json().catch(() => ({}));
+          if (errorData.message && errorData.message.includes('OpenAI API key not properly configured')) {
+            throw new Error('OpenAI API ключ не настроен. Пожалуйста, настройте правильный API ключ в файле .env');
+          }
+        }
+        throw new Error(`API request failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('📦 API response data:', data);
+
+      const planText = data.choices[0].message.content;
+      console.log('📝 Plan text from AI:', planText);
+
+      // Parse JSON from response
+      const jsonMatch = planText.match(/```json\s*([\s\S]*?)\s*```/) || planText.match(/\{[\s\S]*\}/);
+      const planJson = jsonMatch ? jsonMatch[1] || jsonMatch[0] : planText;
+      console.log('🔧 Extracted JSON:', planJson);
+
+      try {
+        const plan = JSON.parse(planJson);
+        console.log('✅ Successfully parsed lesson plan:', plan);
+
+        // Convert new format to steps-based format for compatibility
+        const steps = [];
+
+        // Main content step
+        if (plan.content) {
+          steps.push({
+            step: 1,
+            type: "content",
+            title: "Основной материал",
+            description: plan.content,
+            duration: Math.floor(parseInt(plan.duration) * 0.6) || 30,
+            content: plan.content
+          });
+        }
+
+        // Practice steps
+        if (plan.practice && plan.practice.length > 0) {
+          plan.practice.forEach((practice: any, index: number) => {
+            steps.push({
+              step: steps.length + 1,
+              type: "practice",
+              title: `Практика ${index + 1}: ${practice.type}`,
+              description: practice.description,
+              duration: Math.floor(parseInt(plan.duration) * 0.2 / plan.practice.length) || 5,
+              content: `${practice.description}\n\nПример: ${practice.example}`
+            });
+          });
+        }
+
+        // Assessment step
+        if (plan.assessment) {
+          steps.push({
+            step: steps.length + 1,
+            type: "assessment",
+            title: "Проверка знаний",
+            description: plan.assessment,
+            duration: Math.floor(parseInt(plan.duration) * 0.2) || 10,
+            content: plan.assessment
+          });
+        }
+
+        // Validate we have at least one step
+        if (steps.length === 0) {
+          console.warn('⚠️ No steps generated, using fallback plan');
+          throw new Error('No steps could be generated from lesson plan');
+        }
+
+        // Validate steps array
+        console.log('✅ Steps array created:', {
+          length: steps.length,
+          steps: steps.map(s => ({ step: s.step, type: s.type, title: s.title }))
+        });
+
+        if (!Array.isArray(steps) || steps.length === 0) {
+          throw new Error('Invalid steps array or no steps generated');
+        }
+
+        // Create compatible plan structure
+        const compatiblePlan = {
+          ...plan,
+          steps: steps
+        };
+
+        console.log('🔄 Converted to compatible format with', steps.length, 'steps');
+        
+        // Verify steps are accessible
+        if (!compatiblePlan.steps || !Array.isArray(compatiblePlan.steps)) {
+          throw new Error('Steps array is missing or not an array in compatible plan');
+        }
+
+        console.log('📊 Total steps in plan:', compatiblePlan.steps.length);
+        console.log('🔍 First step details:', {
+          exists: !!compatiblePlan.steps[0],
+          title: compatiblePlan.steps[0]?.title,
+          type: compatiblePlan.steps[0]?.type
+        });
+
+        setGenerationStep('✨ Завершаю подготовку урока...');
+
+        // Store plan in state
+        console.log('💾 Setting lessonPlan in state...');
+        setLessonPlan(compatiblePlan);
+
+        // Auto-start lesson with first step
+        console.log('🚀 Auto-starting lesson...');
+        setLessonStarted(true);
+        setCurrentLessonStep(0);
+
+        // Generate content for first step
+        const firstStep = compatiblePlan.steps[0];
+        console.log('📝 First step object:', firstStep);
+        
+        if (!firstStep) {
+          throw new Error('First step is not defined or is null');
+        }
+
+        console.log('📝 Generating content for first step:', firstStep.title);
+        await generateStepContent(0, firstStep, compatiblePlan);
+      } catch (parseError) {
+        console.error('❌ Failed to parse lesson plan JSON:', parseError);
+        console.error('Raw plan text:', planText);
+        
+        // Fallback: create basic plan
+        const basicPlan = {
+          title: currentLesson.title,
+          objective: `Изучить тему: ${currentLesson.topic}`,
+          duration: 45,
+          materials: ["Текстовый материал", "Упражнения"],
+          steps: [
+            {
+              step: 1,
+              type: "introduction",
+              title: "Введение в тему",
+              description: "Знакомство с новой темой",
+              duration: 10,
+              content: currentLesson.aspects || currentLesson.description
+            },
+            {
+              step: 2,
+              type: "explanation",
+              title: "Объяснение материала",
+              description: "Подробное объяснение темы",
+              duration: 20,
+              content: "Основной учебный материал будет предоставлен интерактивно"
+            },
+            {
+              step: 3,
+              type: "practice",
+              title: "Практика",
+              description: "Закрепление изученного материала",
+              duration: 10,
+              content: "Практические задания"
+            },
+            {
+              step: 4,
+              type: "assessment",
+              title: "Проверка понимания",
+              description: "Тест на усвоение материала",
+              duration: 5,
+              content: "Вопросы для проверки"
+            }
+          ]
+        };
+        
+        console.log('🔄 Using fallback plan with', basicPlan.steps.length, 'steps');
+        setGenerationStep('✨ Завершаю подготовку урока...');
+        setLessonPlan(basicPlan);
+        setLessonStarted(true);
+        setCurrentLessonStep(0);
+        
+        const firstStep = basicPlan.steps[0];
+        if (firstStep) {
+          console.log('📝 Generating content for fallback first step:', firstStep.title);
+          await generateStepContent(0, firstStep, basicPlan);
+        }
+      }
+      } catch (error) {
+      console.error('Failed to generate lesson plan:', error);
+      setGenerationError(error instanceof Error ? error.message : 'Неизвестная ошибка при генерации плана урока');
+    } finally {
+      setIsGeneratingPlan(false);
+      setGenerationStep('');
+    }
+  };
+
+  // Move to next lesson step
+  const nextLessonStep = async () => {
+    console.log('📚 Next lesson step called, current step:', currentLessonStep, 'total steps:', lessonPlan?.steps?.length);
+
+    if (!lessonPlan || currentLessonStep >= lessonPlan.steps.length - 1) {
+      // Lesson completed
+      const completionMessage: Message = {
+        id: `lesson-complete-${Date.now()}`,
+        role: 'assistant',
+        content: `🎉 **Урок завершен!**\n\nПоздравляю! Вы успешно прошли урок "${currentLesson?.title}".\n\n📊 **Результаты:**\n- Изучено: ${currentLesson?.topic}\n- Продолжительность: ${lessonPlan?.duration} минут\n- Шагов пройдено: ${lessonPlan?.steps?.length}\n\nХотите перейти к следующему уроку или повторить материал?`,
+        timestamp: new Date(),
+        ttsPlayed: false
+      };
+      setMessages(prev => [...prev, completionMessage]);
+      return;
+    }
+
+    const nextStepIndex = currentLessonStep + 1;
+    const nextStep = lessonPlan.steps[nextStepIndex];
+    setCurrentLessonStep(nextStepIndex);
+
+    // Reset section index for new lesson step
+    setCurrentSectionIndex(0);
+
+    await generateStepContent(nextStepIndex, nextStep, lessonPlan);
+  };
+
+  // Handle answer to lesson task
+  const handleLessonTaskAnswer = async (answer: string) => {
+    console.log('📝 Handling lesson task answer:', answer);
+
+    // Add user answer to chat
+    const userMessage: Message = {
+      id: `user-answer-${Date.now()}`,
+      role: 'user',
+      content: answer,
+      timestamp: new Date(),
+      ttsPlayed: false
+    };
+
+    if (chatContainerRef.current?.addMessage) {
+      chatContainerRef.current.addMessage(userMessage);
+    } else {
+      setMessages(prev => [...prev, userMessage]);
+    }
+
+    // Move to next section or complete lesson step
+    const nextSectionIndex = currentSectionIndex + 1;
+    if (nextSectionIndex < currentLessonSections.length) {
+      // Show next section
+      const nextSection = currentLessonSections[nextSectionIndex];
+      let sectionContent = `🎓 **${nextSection.title}**\n\n${nextSection.content}`;
+
+      // Add examples if they exist
+      if (nextSection.examples && nextSection.examples.length > 0) {
+        nextSection.examples.forEach((example, idx) => {
+          sectionContent += `\n\n📝 Пример ${idx + 1}: ${example.example}\n`;
+          if (example.explanation) {
+            sectionContent += `💡 ${example.explanation}`;
+          }
+        });
+      }
+
+      // Add practice inside if it exists
+      if (nextSection.practiceInside) {
+        sectionContent += `\n\n💪 Практическое задание: ${nextSection.practiceInside.instruction}`;
+        if (nextSection.practiceInside.hint) {
+          sectionContent += `\n💡 Подсказка: ${nextSection.practiceInside.hint}`;
+        }
+      }
+
+      // Add mistakes if they exist
+      if (nextSection.mistakes && nextSection.mistakes.length > 0) {
+        nextSection.mistakes.forEach((mistake) => {
+          sectionContent += `\n\n⚠️ Ошибка: ${mistake.mistake}\n`;
+          sectionContent += `💡 ${mistake.explanation}`;
+        });
+      }
+
+      // Add tasks if they exist
+      if (nextSection.tasks && nextSection.tasks.length > 0) {
+        sectionContent += `\n\n📋 Практические упражнения:`;
+        nextSection.tasks.forEach((task, idx) => {
+          sectionContent += `\n\n${idx + 1}. ${task.task}`;
+          if (task.hint) {
+            sectionContent += `\n💡 Подсказка: ${task.hint}`;
+          }
+        });
+      }
+
+      // Add summary if it exists
+      if (nextSection.summary) {
+        sectionContent += `\n\n📌 Резюме: ${nextSection.summary}`;
+      }
+
+      const teacherMessage: Message = {
+        id: `lesson-section-${nextSectionIndex}-${Date.now()}`,
+        role: 'assistant',
+        content: sectionContent,
+        timestamp: new Date(),
+        ttsPlayed: false
+      };
+
+      if (chatContainerRef.current?.addMessage) {
+        chatContainerRef.current.addMessage(teacherMessage);
+      } else {
+        setMessages(prev => [...prev, teacherMessage]);
+      }
+
+      // TTS for next section
+      if (isTTSAvailable() && isTtsEnabled) {
+        try {
+          await OpenAITTS.speak(sectionContent, teacherMessage.id);
+        } catch (ttsError) {
+          console.error('TTS error:', ttsError);
+        }
+      }
+
+      setCurrentSectionIndex(nextSectionIndex);
+      // For now, use the first task if available
+      const nextTask = nextSection.tasks && nextSection.tasks.length > 0 ? nextSection.tasks[0] : null;
+      setCurrentSectionTask(nextTask);
+      setWaitingForAnswer(!!nextTask);
+    } else {
+      // All sections completed - move to next lesson step
+      setWaitingForAnswer(false);
+      setCurrentSectionTask(null);
+      await nextLessonStep();
+    }
+  };
+
+  // Generate content for specific lesson step
+  const generateStepContent = async (stepIndex: number, step: any, plan?: any) => {
+    console.log('🎯 generateStepContent called with stepIndex:', stepIndex, 'step:', step);
+    console.log('📋 Params: plan provided=', !!plan, 'lessonPlan in state=', !!lessonPlan, 'currentLesson=', !!currentLesson);
+
+    const currentPlan = plan || lessonPlan;
+    console.log('🔍 Using plan:', {
+      planProvided: !!plan,
+      usingProvidedPlan: !!plan,
+      currentPlanExists: !!currentPlan,
+      currentPlanHasSteps: !!currentPlan?.steps,
+      stepsLength: currentPlan?.steps?.length
+    });
+
+    if (!currentPlan || !currentLesson) {
+      console.error('❌ Missing lessonPlan or currentLesson:', {
+        currentPlan: !!currentPlan,
+        currentLesson: !!currentLesson,
+        lessonPlan: !!lessonPlan
+      });
+      return;
+    }
+
+    // Debug logging for prompt variables
+    console.log('🔧 Debug prompt variables:', {
+      currentLessonTitle: currentLesson.title,
+      currentLessonTopic: currentLesson.topic,
+      stepDescription: step?.description,
+      stepDuration: step?.duration,
+      currentPlanObjective: currentPlan?.objective
+    });
+
+    setIsGeneratingContent(true);
+    try {
+      // Validate required variables
+      if (!currentLesson?.title || !currentLesson?.topic || !step?.description || !step?.duration || !currentPlan?.objective) {
+        console.error('❌ Missing required variables for prompt generation:', {
+          title: currentLesson?.title,
+          topic: currentLesson?.topic,
+          description: step?.description,
+          duration: step?.duration,
+          objective: currentPlan?.objective
+        });
+        setIsGeneratingContent(false);
+        return;
+      }
+
+      const prompt = `Создай ПОДРОБНЫЙ и РАЗВЕРНУТЫЙ урок для ученика по теме: "${currentLesson.title}" (${currentLesson.topic})
+
+Описание: ${step.description}
+Продолжительность: ${step.duration} минут
+Уровень: ${currentPlan.objective}
+
+СТРУКТУРА УРОКА (обязательно следи!):
+1. ОПРЕДЕЛЕНИЕ И ОСНОВЫ (большой блок с подробным объяснением, 3-5 абзацев)
+2. ПРИМЕРЫ (5-7 конкретных примеров с подробным разбором каждого)
+3. ПРАКТИЧЕСКИЙ ПРИМЕР В УРОКЕ (1 интерактивное задание внутри теории)
+4. ТИПИЧНЫЕ ОШИБКИ (2-3 частых ошибки с объяснением)
+5. ПРАКТИЧЕСКИЕ УПРАЖНЕНИЯ (3-4 задания для закрепления)
+6. РЕЗЮМЕ (краткое повторение ключевых моментов)
+
+Формат ответа ТОЛЬКО JSON:
+{
+  "sections": [
+    {
+      "title": "Определение и основы",
+      "content": "БОЛЬШОЙ блок текста (5-10 предложений минимум). Подробное объяснение что это такое, зачем это нужно, как это работает. Объясни все доступным языком, разжевывая каждую мелочь.",
+      "examples": [
+        {"example": "Пример 1", "explanation": "Подробное объяснение этого примера"},
+        {"example": "Пример 2", "explanation": "Подробное объяснение этого примера"}
+      ],
+      "practiceInside": {
+        "type": "exercise",
+        "instruction": "Что нужно сделать (для закрепления в процессе урока)",
+        "hint": "Подсказка"
+      }
+    },
+    {
+      "title": "Типичные ошибки",
+      "content": "Подробное объяснение ошибок (2-3 абзаца)",
+      "mistakes": [
+        {"mistake": "Ошибка 1", "explanation": "Почему это ошибка и как правильно"},
+        {"mistake": "Ошибка 2", "explanation": "Почему это ошибка и как правильно"}
+      ]
+    },
+    {
+      "title": "Практика и закрепление",
+      "tasks": [
+        {"type": "exercise", "task": "Задание 1", "hint": "Подсказка"},
+        {"type": "test", "question": "Вопрос", "options": ["A", "B", "C", "D"]}
+      ]
+    },
+    {
+      "title": "Резюме",
+      "summary": "Краткое резюме всего урока (5-7 предложений). Повтори самые важные моменты."
+    }
+  ]
+}
+
+ТРЕБОВАНИЯ К КОНТЕНТУ:
+- Подробность и ясность выше всего!
+- Каждый пример должен быть разобран детально
+- Объясни не только ЧТО, но и ПОЧЕМУ
+- Используй аналогии, сравнения
+- Напиши так, чтобы ученик ПОНЯЛ материал полностью`;
+
+      console.log('📝 Generated prompt:', prompt.substring(0, 200) + '...');
+
+      const response = await fetch('/api/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-5.1',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.8,
+          max_tokens: 4000
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('❌ API response error:', data);
+        throw new Error(`API Error: ${response.status} - ${data.message || 'Unknown error'}`);
+      }
+
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        console.error('❌ Invalid API response structure:', data);
+        throw new Error('Invalid API response structure');
+      }
+
+      const rawContent = data.choices[0].message.content;
+      console.log('📥 Raw AI response:', rawContent);
+
+      // Parse JSON response with sections
+      let lessonSections;
+      try {
+        const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          lessonSections = JSON.parse(jsonMatch[0]);
+          console.log('✅ Parsed lesson sections:', lessonSections);
+          
+          // Validate structure
+          if (!lessonSections.sections || !Array.isArray(lessonSections.sections)) {
+            throw new Error('Invalid structure: missing sections array');
+          }
+        } else {
+          throw new Error('No JSON found in response');
+        }
+      } catch (parseError) {
+        console.warn('❌ Failed to parse JSON response, using fallback format:', parseError);
+        // Fallback: create comprehensive section from raw text
+        lessonSections = {
+          sections: [{
+            title: "Теоретический материал",
+            content: rawContent,
+            examples: [],
+            tasks: [{
+              type: "question",
+              question: "Расскажи, что ты узнал(а) из этого урока?"
+            }]
+          }]
+        };
+      }
+
+      // Store sections for interactive display
+      setCurrentLessonSections(lessonSections.sections);
+      setCurrentSectionIndex(0);
+
+      // Start with first section
+      if (lessonSections.sections && lessonSections.sections.length > 0) {
+        const firstSection = lessonSections.sections[0];
+        let sectionContent = `🎓 **${firstSection.title}**\n\n${firstSection.content}`;
+
+        // Add examples if they exist
+        if (firstSection.examples && firstSection.examples.length > 0) {
+          firstSection.examples.forEach((example, idx) => {
+            sectionContent += `\n\n📝 Пример ${idx + 1}: ${example.example}\n`;
+            if (example.explanation) {
+              sectionContent += `💡 ${example.explanation}`;
+            }
+          });
+        }
+
+        // Add practice inside if it exists
+        if (firstSection.practiceInside) {
+          sectionContent += `\n\n💪 Практическое задание: ${firstSection.practiceInside.instruction}`;
+          if (firstSection.practiceInside.hint) {
+            sectionContent += `\n💡 Подсказка: ${firstSection.practiceInside.hint}`;
+          }
+        }
+
+        // Add mistakes if they exist
+        if (firstSection.mistakes && firstSection.mistakes.length > 0) {
+          firstSection.mistakes.forEach((mistake) => {
+            sectionContent += `\n\n⚠️ Ошибка: ${mistake.mistake}\n`;
+            sectionContent += `💡 ${mistake.explanation}`;
+          });
+        }
+
+        // Add tasks if they exist
+        if (firstSection.tasks && firstSection.tasks.length > 0) {
+          sectionContent += `\n\n📋 Практические упражнения:`;
+          firstSection.tasks.forEach((task, idx) => {
+            sectionContent += `\n\n${idx + 1}. ${task.task}`;
+            if (task.hint) {
+              sectionContent += `\n💡 Подсказка: ${task.hint}`;
+            }
+          });
+        }
+
+        // Add summary if it exists
+        if (firstSection.summary) {
+          sectionContent += `\n\n📌 Резюме: ${firstSection.summary}`;
+        }
+
+        setLessonContent(sectionContent);
+
+        // Add first section to chat
+        const teacherMessage: Message = {
+          id: `lesson-section-0-${Date.now()}`,
+          role: 'assistant',
+          content: sectionContent,
+          timestamp: new Date(),
+          ttsPlayed: false
+        };
+
+        console.log('💬 Adding first section to chat');
+
+        // Add message through ChatContainer ref if available, otherwise use state
+        if (chatContainerRef.current?.addMessage) {
+          chatContainerRef.current.addMessage(teacherMessage);
+        } else {
+          setMessages(prev => [...prev, teacherMessage]);
+        }
+
+        // Add TTS for the first section
+        if (isTTSAvailable() && isTtsEnabled) {
+          console.log('🔊 Playing TTS for first section...');
+          try {
+            await OpenAITTS.speak(sectionContent, teacherMessage.id);
+          } catch (ttsError) {
+            console.error('TTS error:', ttsError);
+          }
+        }
+
+        // Show task for first section
+        if (firstSection.task) {
+          setCurrentSectionTask(firstSection.task);
+          setWaitingForAnswer(true);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to generate step content:', error);
+
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error && error.message.includes('API key')
+        ? 'Не удалось сгенерировать контент урока: OpenAI API ключ не настроен. Обратитесь к администратору.'
+        : 'Не удалось сгенерировать контент урока. Используем резервный контент.';
+
+      // Fallback content
+      const fallbackContent = `Привет! Мы начинаем изучение темы "${currentLesson.title}". ${step.description}`;
+      setLessonContent(fallbackContent);
+
+      // Show error message to user
+      alert(errorMessage);
+
+      const teacherMessage: Message = {
+        id: `lesson-step-${stepIndex}-${Date.now()}`,
+        role: 'assistant',
+        content: `🎓 **Шаг ${step.step}: ${step.title}**\n\n${fallbackContent}`,
+        timestamp: new Date(),
+        ttsPlayed: false
+      };
+
+      setMessages(prev => [...prev, teacherMessage]);
+    } finally {
+      setIsGeneratingContent(false);
+    }
+  };
+
+  // Move to next lesson step
+  // Handle next section within current lesson step
+  const nextSection = async () => {
+    console.log('📍 Next section called, current:', currentSectionIndex, 'total sections:', currentLessonSections.length);
+
+    // Prevent double-click and concurrent navigation
+    if (isGeneratingContent || isNavigatingRef.current) {
+      console.log('⚠️ Already navigating or generating, ignoring click');
+      return;
+    }
+
+    // Set navigation flag
+    isNavigatingRef.current = true;
+
+    try {
+      // Check if we have more sections in current lesson step
+      if (currentSectionIndex < currentLessonSections.length - 1) {
+      // Move to next section within current step
+      const nextSectionIndex = currentSectionIndex + 1;
+      const nextSectionData = currentLessonSections[nextSectionIndex];
+
+      console.log('🔄 Moving to next section:', nextSectionIndex, nextSectionData.title);
+
+      let sectionContent = `🎓 **${nextSectionData.title}**\n\n${nextSectionData.content}`;
+
+      // Add examples if they exist
+      if (nextSectionData.examples && nextSectionData.examples.length > 0) {
+        nextSectionData.examples.forEach((example, idx) => {
+          sectionContent += `\n\n📝 Пример ${idx + 1}: ${example.example}\n`;
+          if (example.explanation) {
+            sectionContent += `💡 ${example.explanation}`;
+          }
+        });
+      }
+
+      // Add practice inside if it exists
+      if (nextSectionData.practiceInside) {
+        sectionContent += `\n\n💪 Практическое задание: ${nextSectionData.practiceInside.instruction}`;
+        if (nextSectionData.practiceInside.hint) {
+          sectionContent += `\n💡 Подсказка: ${nextSectionData.practiceInside.hint}`;
+        }
+      }
+
+      // Add mistakes if they exist
+      if (nextSectionData.mistakes && nextSectionData.mistakes.length > 0) {
+        nextSectionData.mistakes.forEach((mistake) => {
+          sectionContent += `\n\n⚠️ Ошибка: ${mistake.mistake}\n`;
+          sectionContent += `💡 ${mistake.explanation}`;
+        });
+      }
+
+      // Add tasks if they exist
+      if (nextSectionData.tasks && nextSectionData.tasks.length > 0) {
+        sectionContent += `\n\n📋 Практические упражнения:`;
+        nextSectionData.tasks.forEach((task, idx) => {
+          sectionContent += `\n\n${idx + 1}. ${task.task}`;
+          if (task.hint) {
+            sectionContent += `\n💡 Подсказка: ${task.hint}`;
+          }
+        });
+      }
+
+      // Add summary if it exists
+      if (nextSectionData.summary) {
+        sectionContent += `\n\n📌 Резюме: ${nextSectionData.summary}`;
+      }
+
+      const teacherMessage: Message = {
+        id: `lesson-section-${nextSectionIndex}-${Date.now()}`,
+        role: 'assistant',
+        content: sectionContent,
+        timestamp: new Date(),
+        ttsPlayed: false
+      };
+
+      if (chatContainerRef.current?.addMessage) {
+        chatContainerRef.current.addMessage(teacherMessage);
+      } else {
+        setMessages(prev => [...prev, teacherMessage]);
+      }
+
+      // TTS for next section
+      if (isTTSAvailable() && isTtsEnabled) {
+        try {
+          await OpenAITTS.speak(sectionContent, teacherMessage.id);
+        } catch (ttsError) {
+          console.error('TTS error:', ttsError);
+        }
+      }
+
+      setCurrentSectionIndex(nextSectionIndex);
+      setLessonContent(sectionContent);
+
+      // Set next task if available
+      const nextTask = nextSectionData.tasks && nextSectionData.tasks.length > 0 ? nextSectionData.tasks[0] : null;
+      setCurrentSectionTask(nextTask);
+      setWaitingForAnswer(!!nextTask);
+      } else {
+        // All sections completed - move to next lesson step
+        await nextLessonStep();
+      }
+    } finally {
+      // Reset navigation flag
+      isNavigatingRef.current = false;
+    }
+  };
+
+  // Generate teacher system prompt based on course and lesson
+  const getTeacherSystemPrompt = () => {
+    let prompt = `Ты - опытный учитель английского языка. `;
+
+    // Special prompt for interactive lesson mode
+    if (isLessonMode && lessonPlan) {
+      prompt = `Ты - интерактивный учитель, проводящий урок по теме "${currentLesson?.title}".
+
+Ты должен создавать урок непосредственно для ученика, а не план для учителя.
+Представляй материал ученику, задавай вопросы, проверяй понимание.
+
+Текущий шаг урока: ${lessonPlan.steps[currentLessonStep]?.title || 'Введение'}
+Тип шага: ${lessonPlan.steps[currentLessonStep]?.type || 'introduction'}
+
+Твоя задача:
+1. Проводить урок шаг за шагом
+2. Объяснять материал ясно и доступно
+3. Задавать вопросы для проверки понимания
+4. Исправлять ошибки и объяснять правила
+5. Делать урок увлекательным и интерактивным
+6. Переходить к следующему шагу только после подтверждения ученика
+
+Отвечай на русском языке, но используй английские термины и примеры в обучении где это уместно.`;
+      return prompt;
+    }
+
+    if (personalizedCourseData) {
+      prompt += `Ученик проходит персонализированный курс "${personalizedCourseData.courseInfo?.title || 'Английский язык'}" для ${personalizedCourseData.courseInfo?.grade ? `${personalizedCourseData.courseInfo.grade} класса` : 'соответствующего уровня'}. `;
+
+      if (personalizedCourseData.foundTopic) {
+        prompt += `Последняя изученная тема: "${personalizedCourseData.foundTopic.title}" (${personalizedCourseData.foundTopic.topic}). `;
+      } else if (personalizedCourseData.userDescription && personalizedCourseData.userDescription !== 'Не указано (пропущено)') {
+        prompt += `Ученик описал свою подготовку: "${personalizedCourseData.userDescription}". `;
+      }
+    }
+
+    if (currentLesson) {
+      prompt += `Сейчас изучается урок: "${currentLesson.title}" (${currentLesson.topic}). `;
+      prompt += `Тема урока: ${currentLesson.aspects}. `;
+    }
+
+    prompt += `
+Правила общения:
+- Будь дружелюбным, терпеливым и поддерживающим
+- Объясняй сложные концепции простыми словами
+- Используй примеры из реальной жизни
+- Задавай вопросы, чтобы проверить понимание
+- Корректируй ошибки мягко и объясняй почему
+- Поощряй прогресс ученика
+- Адаптируй сложность под уровень ученика
+- Используй разнообразные методы обучения (диалоги, игры, упражнения)
+
+Твой ответ должен быть на русском языке, но можешь использовать английские слова и фразы для обучения.`;
+
+    return prompt;
+  };
 
   // Function to split text into sentences
   const splitIntoSentences = (text: string): string[] => {
@@ -771,662 +1367,12 @@ const Chat = () => {
   };
 
   // Function to start voice chat
-  const startVoiceChat = async () => {
-    setShowSphere(true);
-    console.log('🚀 Starting voice chat...');
-    console.log('🔍 isTTSAvailable():', isTTSAvailable());
-    console.log('🔍 Speech Recognition available:', 'webkitSpeechRecognition' in window && 'SpeechRecognition' in window);
-    console.log('🔍 OpenAI API key:', import.meta.env.VITE_OPENAI_API_KEY ? 'present' : 'missing');
-    console.log('🔍 VITE_OPENAI_API_KEY value:', import.meta.env.VITE_OPENAI_API_KEY);
 
-    // No start sound - keeping it silent
 
-    if (!isTTSAvailable()) {
-      alert('OpenAI API ключ не настроен. Проверьте переменные окружения.');
-      console.log('❌ OpenAI API key not available');
-      return;
-    }
 
-    console.log('✅ OpenAI API key available');
 
-    console.log('🔍 Checking Speech Recognition support...');
-    console.log('webkitSpeechRecognition in window:', 'webkitSpeechRecognition' in window);
-    console.log('SpeechRecognition in window:', 'SpeechRecognition' in window);
-    console.log('navigator.userAgent:', navigator.userAgent);
-    console.log('location.protocol:', location.protocol);
 
-    if (!recognitionRef.current) {
-      const userAgent = navigator.userAgent;
-      const browserName = userAgent.includes('Firefox') ? 'Firefox' :
-                           userAgent.includes('Chrome') ? 'Chrome' :
-                           userAgent.includes('Safari') && !userAgent.includes('Chrome') ? 'Safari' :
-                           userAgent.includes('Edge') ? 'Edge' : 'неизвестный браузер';
 
-      const isHTTPS = location.protocol === 'https:';
-      const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-
-      let reason = '';
-      if (!isHTTPS && !isLocalhost) {
-        reason = '\n\nПричина: Web Speech API требует HTTPS соединения.';
-      } else if (browserName === 'Safari') {
-        reason = '\n\nПримечание: Safari может требовать дополнительных разрешений или обновления.';
-      }
-
-      const choice = confirm(`🎤 Ваш браузер (${browserName}) не поддерживает распознавание речи.${reason}\n\nДоступные API:\n• webkitSpeechRecognition: ${'webkitSpeechRecognition' in window}\n• SpeechRecognition: ${'SpeechRecognition' in window}\n\nВыберите режим:\n\n• OK: Текстовый ввод с голосовыми ответами\n• Отмена: Только TTS для ответов на текстовые сообщения`);
-
-      if (choice) {
-        // Текстовый режим с TTS ответами
-        alert('✍️ Текстовый режим активирован!\n\nПишите вопросы в чате - AI будет отвечать голосом.\n\nДля полноценного голосового общения установите Chrome или Edge.');
-        setIsTtsEnabled(true);
-        console.log('📝 Text mode with TTS enabled');
-      } else {
-        // Только TTS для ответов
-        alert('🔊 TTS режим активирован!\n\nAI будет озвучивать ответы на ваши текстовые сообщения.\n\nДля голосового ввода установите Chrome или Edge.');
-        setIsTtsEnabled(true);
-        console.log('🔊 TTS-only mode enabled');
-      }
-      return;
-    }
-
-    console.log('🔍 Checking SpeechRecognition availability...');
-    if (!recognitionRef.current) {
-      console.log('❌ SpeechRecognition not initialized');
-      alert('Ошибка инициализации распознавания речи. Попробуйте перезагрузить страницу.');
-      return;
-    }
-    console.log('✅ SpeechRecognition initialized');
-
-    if (isVoiceChatActive) {
-      // Stop voice chat
-      setIsVoiceChatActive(false);
-      setIsListening(false);
-      recognitionRef.current.stop();
-      OpenAITTS.stop();
-      return;
-    }
-
-    // Start voice chat
-    setIsVoiceChatActive(true);
-    setIsListening(true);
-
-    try {
-      // Configure for continuous listening with interim results
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-
-      let isProcessing = false;
-      let finalTranscript = '';
-      let interimTranscript = '';
-
-      recognitionRef.current.onresult = async (event) => {
-        interimTranscript = '';
-        finalTranscript = '';
-
-        // Process all results
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript;
-          } else {
-            interimTranscript += transcript;
-          }
-        }
-
-        console.log('Final:', finalTranscript, 'Interim:', interimTranscript);
-
-        // Interrupt TTS immediately when user starts speaking (even with minimal interim results)
-        const shouldInterrupt = (interimTranscript.trim() && interimTranscript.trim().length > 0) ||
-                                 (finalTranscript.trim() && finalTranscript.trim().length > 0);
-
-        if (shouldInterrupt && (currentAudioRef.current || isGeneratingTTS || speakingMessageId)) {
-          console.log('🛑 Interrupting TTS - user started speaking');
-
-          // Stop current audio playback
-          if (currentAudioRef.current) {
-            currentAudioRef.current.pause();
-            currentAudioRef.current.currentTime = 0;
-            currentAudioRef.current = null;
-          }
-
-          // Stop TTS generation and playback
-          OpenAITTS.stop();
-          ttsContinueRef.current = false;
-
-          // Stop continuous sound if playing
-          stopContinuousSound();
-
-          // Clear all interruption check intervals
-          clearAllInterruptionChecks();
-
-          // Reset TTS state
-          setIsGeneratingTTS(false);
-          setSpeakingMessageId(null);
-          setCurrentSentence(0);
-          setTotalSentences(0);
-          setTtsInterrupted(true);
-
-          // Reset interruption flag after delay
-          setTimeout(() => setTtsInterrupted(false), 1000);
-
-          console.log('✅ TTS interrupted successfully');
-        }
-
-        // If we have a final transcript and not currently processing
-        if (finalTranscript.trim() && !isProcessing) {
-          isProcessing = true;
-          setIsListening(false);
-
-          try {
-            // Add user message
-            const userMessage: Message = {
-                id: Date.now().toString(),
-                role: 'user',
-                content: finalTranscript.trim(),
-                timestamp: new Date(),
-            };
-
-            setMessages(prev => [...prev, userMessage]);
-            setIsLoading(true);
-
-            // Start continuous thinking sound while AI generates response
-            startContinuousSound(500, 1800);
-
-            // Get AI response using GPT-3.5-turbo for faster response with fallback
-
-            // Создать персонализированный системный промпт для голосового чата
-            const voiceSystemPrompt = `Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Давайте краткие, но полные объяснения.
-
-ВАЖНО: Пишите ВСЕ числа, даты, математические знаки и операции БУКВАМИ, а не цифрами!
-
-Правила написания:
-- Числа: "двадцать три" вместо "23", "сто пятьдесят" вместо "150"
-- Даты: "двенадцатое апреля тысяча девятьсот шестьдесят первого года" вместо "12 апреля 1961 года"
-- Математика: "два плюс три равно пяти" вместо "2 + 3 = 5"
-- Проценты: "тридцать пять процентов" вместо "35%"
-- Дроби: "три пятых" вместо "3/5"
-- Степени: "два в кубе" вместо "2³"
-- Производные: "производная функции эф от икс" или "дифференциал игрек по дифференциал икс" вместо "f'(x)" или "dy/dx"
-- Интегралы: "интеграл от нуля до бесконечности" вместо "∫∞0"
-- Суммы: "сумма от и равняется единице до бесконечности" вместо "∑∞i=1"
-- Греческие буквы: "пи", "сигма", "дельта" вместо "π", "σ", "δ"
-
-Особенности вашего стиля:
-- Объясняйте сложное простыми словами
-- Используйте примеры и аналогии
-- Будьте кратки, но информативны
-- Задавайте наводящие вопросы для лучшего понимания
-- Адаптируйте объяснения под уровень ученика
-
-КРИТИЧНО ВАЖНО ДЛЯ ГОЛОСОВОГО ЧАТА: АКТИВНО ИСПОЛЬЗУЙТЕ ИСТОРИЮ БЕСЕДЫ!
-- Всегда ссылайтесь на предыдущие сообщения в разговоре
-- Помните, что обсуждалось ранее в этой беседе
-- Продолжайте логическую нить разговора
-- Избегайте повторений уже объясненного материала
-- Используйте фразы типа "как мы только что обсуждали", "продолжая нашу тему", "на основе предыдущего объяснения"
-- Отвечайте в контексте всего разговора, а не изолированно
-
-СТРУКТУРА ГОЛОСОВОГО УРОКА:
-Голосовой чат НЕ поддерживает интерактивные тесты, поэтому:
-- Задавайте устные вопросы и ждите ответов ученика
-- Давайте краткие объяснения (2-3 предложения)
-- Проводите беседу в формате "вопрос-ответ"
-- Поддерживайте разговорный стиль
-- После каждого объяснения спрашивайте: "Понятно? Есть вопросы?"
-
-Память и контекст: История последних 30 сообщений передается вам. ОБЯЗАТЕЛЬНО используйте её!`;
-
-
-            let response;
-            try {
-                response = await fetch(`${window.location.origin}/api/chat/completions`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    model: 'gpt-3.5-turbo',
-                    messages: [
-                      {
-                        role: 'system',
-                        content: voiceSystemPrompt,
-                      },
-                      ...messages.slice(-30).map(msg => ({ // Keep last 30 messages for teacher memory context
-                        role: msg.role,
-                        content: msg.content,
-                      })),
-                      {
-                        role: 'user',
-                        content: finalTranscript.trim(),
-                      },
-                    ],
-                    max_tokens: 1000, // Increased for extended teacher memory context with 30 messages
-                    temperature: 0.7,
-                  }),
-                });
-            } catch (fetchError) {
-                console.error('Fetch error:', fetchError);
-                throw new Error('Ошибка сети при подключении к OpenAI');
-            }
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                console.error('OpenAI API Error:', {
-                  status: response.status,
-                  statusText: response.statusText,
-                  error: errorData
-                });
-
-                // Handle specific error codes
-                if (response.status === 401) {
-                  throw new Error('Неверный API ключ OpenAI. Проверьте настройки.');
-                } else if (response.status === 429) {
-                  throw new Error('Превышен лимит запросов к OpenAI. Попробуйте позже.');
-                } else if (response.status === 500) {
-                  throw new Error('Ошибка сервера OpenAI. Попробуйте еще раз.');
-                } else {
-                  throw new Error(`Ошибка OpenAI: ${response.status} ${response.statusText}`);
-                }
-            }
-
-            const data = await response.json();
-
-            if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-                console.error('Invalid OpenAI response:', data);
-                throw new Error('Некорректный ответ от OpenAI');
-            }
-
-            const assistantMessage: Message = {
-                id: (Date.now() + 1).toString(),
-                role: 'assistant',
-                content: data.choices[0].message.content,
-                timestamp: new Date(),
-            };
-
-            // Mark as TTS played to prevent auto-TTS duplication
-            assistantMessage.ttsPlayed = true;
-
-            setMessages(prev => [...prev, assistantMessage]);
-
-
-            // Speak the response sentence by sentence for faster TTS
-            await speakTextBySentences(assistantMessage.content, assistantMessage.id);
-
-          } catch (error) {
-            console.error('Voice chat error:', error);
-            const errorMessage: Message = {
-                id: (Date.now() + 1).toString(),
-                role: 'assistant',
-                content: 'Извините, произошла ошибка. Продолжайте говорить.',
-                timestamp: new Date(),
-            };
-            setMessages(prev => [...prev, errorMessage]);
-          } finally {
-            setIsLoading(false);
-            isProcessing = false;
-            // Stop continuous thinking sound
-            stopContinuousSound();
-
-            // Resume listening after a short delay
-            setTimeout(() => {
-                if (isVoiceChatActive && recognitionRef.current && !OpenAITTS.isPlaying()) {
-                  setIsListening(true);
-                  try {
-                    recognitionRef.current.start();
-                  } catch (e) {
-                    // Recognition might already be started, ignore
-                  }
-                }
-            }, 500);
-          }
-        }
-      };
-
-      recognitionRef.current.onstart = () => {
-        console.log('Speech recognition started');
-        setIsListening(true);
-      };
-
-      recognitionRef.current.onerror = (event) => {
-        console.error('Speech recognition error:', event);
-        setIsListening(false);
-
-        // Try to restart listening if it's a non-fatal error
-        if (isVoiceChatActive && event.error !== 'not-allowed' && event.error !== 'service-not-allowed') {
-          setTimeout(() => {
-            if (isVoiceChatActive && recognitionRef.current) {
-                try {
-                  recognitionRef.current.start();
-                } catch (e) {
-                  console.error('Failed to restart recognition:', e);
-                }
-            }
-          }, 1000);
-        }
-      };
-
-      recognitionRef.current.onend = () => {
-        console.log('Speech recognition ended');
-        setIsListening(false);
-
-        // Restart listening if voice chat is still active and not speaking
-        if (isVoiceChatActive && !OpenAITTS.isPlaying()) {
-          setTimeout(() => {
-            if (isVoiceChatActive && recognitionRef.current) {
-                try {
-                  setIsListening(true);
-                  recognitionRef.current.start();
-                } catch (e) {
-                  console.error('Failed to restart recognition:', e);
-                }
-            }
-          }, 300);
-        }
-      };
-
-      // Start listening
-      recognitionRef.current.start();
-
-    } catch (error) {
-      console.error('Voice chat start error:', error);
-      setIsVoiceChatActive(false);
-      setIsListening(false);
-      alert('Ошибка запуска голосового общения.');
-    }
-  };
-
-  // Function to start camera
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }, // Use back camera if available
-        audio: false
-      });
-      setCameraStream(stream);
-      setIsCameraActive(true);
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-    } catch (error) {
-      console.error('Error accessing camera:', error);
-      alert('Не удалось получить доступ к камере. Проверьте разрешения.');
-    }
-  };
-
-  // Function to stop camera
-  const stopCamera = () => {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(track => track.stop());
-      setCameraStream(null);
-    }
-    setIsCameraActive(false);
-  };
-
-  // Function to capture photo
-  const capturePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-
-    if (!context) return;
-
-    // Set canvas size to video size
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    // Draw video frame to canvas
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    // Convert to base64
-    const imageData = canvas.toDataURL('image/jpeg', 0.8);
-    setCapturedImage(imageData);
-    stopCamera();
-  };
-
-  // Function to retake photo
-  const retakePhoto = () => {
-    setCapturedImage(null);
-    startCamera();
-  };
-
-  // Function to send captured photo as task
-  const sendCapturedPhoto = async () => {
-    if (!capturedImage) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: 'Я сфотографировал задачу. Пожалуйста, реши её.',
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setIsLoading(true);
-
-    try {
-      // Send photo to OpenAI Vision API for task recognition and solving
-      const response = await fetch(`${window.location.origin}/api/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-                role: 'system',
-                content: `Ты - опытный преподаватель и решатель задач. Пользователь прислал фотографию задачи. 
-                
-ВАЖНЫЕ ИНСТРУКЦИИ:
-1. Проанализируй изображение и распознай учебную задачу
-2. Покажи пошаговое решение задачи
-3. Объясни каждый шаг подробно
-4. Если задача математическая - покажи все вычисления
-5. Если задача текстовая - разбери её структуру
-6. Дай окончательный ответ
-7. Если не можешь распознать задачу - попроси пользователя сделать более качественное фото
-
-Формат ответа:
-1. **Распознанная задача**: [что ты увидел на фото]
-2. **Решение**:
-   - Шаг 1: [первый шаг]
-   - Шаг 2: [второй шаг]
-   ...
-3. **Ответ**: [финальный результат]`,
-            },
-            {
-                role: 'user',
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Реши задачу на этой фотографии. Покажи подробное решение.'
-                  },
-                  {
-                    type: 'image_url',
-                    image_url: {
-                      url: capturedImage
-                    }
-                  }
-                ]
-            },
-          ],
-          max_tokens: 2000,
-          temperature: 0.1,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to analyze photo task');
-      }
-
-      const data = await response.json();
-      const assistantMessage: Message = {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: data.choices[0].message.content,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error('Error analyzing photo task:', error);
-      setMessages(prev => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: 'Извините, произошла ошибка при анализе фотографии задачи. Попробуйте ещё раз.',
-          timestamp: new Date(),
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
-      setCapturedImage(null);
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
-    }
-  };
-
-
-  // Function to handle file upload
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    if (files.length > 0) {
-      setUploadedFiles(prev => [...prev, ...files]);
-    }
-  };
-
-  // Function to remove uploaded file
-  const removeFile = (index: number) => {
-    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
-  // Function to get file icon based on type
-  const getFileIcon = (file: File) => {
-    const type = file.type;
-    if (type.startsWith('image/')) return <Image className="w-4 h-4" />;
-    if (type === 'application/pdf') return <FileText className="w-4 h-4" />;
-    if (type.includes('word') || type.includes('document')) return <FileText className="w-4 h-4" />;
-    return <File className="w-4 h-4" />;
-  };
-
-  // Function to extract text from images using OpenAI Vision API
-  const extractTextFromImage = async (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const base64Image = reader.result as string;
-
-          const response = await fetch(`${window.location.origin}/api/chat/completions`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                model: 'gpt-4o-mini',
-                messages: [
-                  {
-                    role: 'user',
-                    content: [
-                      {
-                        type: 'text',
-                        text: 'Распознай весь текст на этом изображении. Верни только распознанный текст без дополнительных комментариев.'
-                      },
-                      {
-                        type: 'image_url',
-                        image_url: {
-                          url: base64Image
-                        }
-                      }
-                    ]
-                  }
-                ],
-                max_tokens: 1000,
-                temperature: 0.1,
-            }),
-          });
-
-          if (!response.ok) {
-            throw new Error('Failed to process image with OpenAI');
-          }
-
-          const data = await response.json();
-          const extractedText = data.choices[0].message.content.trim();
-
-          resolve(extractedText || `Не удалось распознать текст в изображении ${file.name}.`);
-        } catch (error) {
-          console.error('OCR Error:', error);
-          reject(new Error(`Ошибка при распознавании текста: ${error.message}`));
-        }
-      };
-
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Function to extract text from PDF using PDF.js
-  const extractTextFromPDF = async (file: File): Promise<string> => {
-    try {
-      // Dynamic import of PDF.js to avoid bundle bloat
-      const pdfjsLib = await import('pdfjs-dist');
-
-      // Set worker source
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
-      let fullText = '';
-
-      // Extract text from each page
-      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        const page = await pdf.getPage(pageNum);
-        const textContent = await page.getTextContent();
-
-        const pageText = textContent.items
-          .map((item: any) => item.str)
-          .join(' ');
-
-        fullText += pageText + '\n\n';
-      }
-
-      return fullText.trim() || `Не удалось извлечь текст из PDF файла "${file.name}". Возможно, файл содержит только изображения или имеет сложную структуру.`;
-
-    } catch (error) {
-      console.error('PDF processing error:', error);
-      return `Ошибка при обработке PDF файла "${file.name}": ${error.message}. Попробуйте скопировать текст вручную из файла.`;
-    }
-  };
-
-  // Function to extract text from DOCX
-  const extractTextFromDOCX = async (file: File): Promise<string> => {
-    // For browser environment, we'll use a temporary approach
-    // In production, you'd need a server-side solution or a browser-compatible DOCX library
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(`DOCX файл "${file.name}" принят для обработки. Извлечение текста из Word документов требует серверной обработки. В реальном приложении здесь будет содержимое документа, извлеченное на сервере.`);
-      }, 1500);
-    });
-  };
-
-  // Function to process file and extract text
-  const processFile = async (file: File): Promise<string> => {
-    const fileType = file.type;
-
-    if (fileType.startsWith('image/')) {
-      return await extractTextFromImage(file);
-    } else if (fileType === 'application/pdf') {
-      return await extractTextFromPDF(file);
-    } else if (fileType.includes('word') || fileType.includes('document')) {
-      return await extractTextFromDOCX(file);
-    } else {
-      return `Файл ${file.name} не поддерживается для OCR.`;
-    }
-  };
 
   // Function to parse **bold green text** within a string
   const parseBoldGreenText = (text: string, keyPrefix: string) => {
@@ -1492,6 +1438,59 @@ const Chat = () => {
     return result.length > 0 ? result : [<span key="empty" className="whitespace-pre-wrap">{parseBoldGreenText(content, 'empty')}</span>];
   };
 
+  // Assessment testing functions
+  const handleAssessmentAnswer = (selectedAnswer: string) => {
+    if (!assessmentQuestions[currentQuestionIndex]) return;
+
+    const currentQuestion = assessmentQuestions[currentQuestionIndex];
+    const isCorrect = selectedAnswer === currentQuestion.correctAnswer;
+
+    // Save result
+    setAssessmentResults(prev => [...prev, {
+      question: currentQuestion.question,
+      userAnswer: selectedAnswer,
+      correctAnswer: currentQuestion.correctAnswer,
+      isCorrect
+    }]);
+
+    // Move to next question or complete assessment
+    if (currentQuestionIndex < assessmentQuestions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+    } else {
+      setAssessmentCompleted(true);
+    }
+  };
+
+  const restartAssessment = () => {
+    setCurrentQuestionIndex(0);
+    setAssessmentResults([]);
+    setAssessmentCompleted(false);
+  };
+
+  const getAssessmentScore = () => {
+    const correctAnswers = assessmentResults.filter(result => result.isCorrect).length;
+    return Math.round((correctAnswers / assessmentResults.length) * 100);
+  };
+
+  const handleAssessmentCompleted = () => {
+    // Преобразовать результаты в формат для analyzerа
+    const formattedAnswers = assessmentResults.map((result, index) => ({
+      questionIndex: index,
+      isCorrect: result.isCorrect,
+      question: result.question
+    }));
+
+    // Создать персонализированный курс
+    const courseData = createPersonalizedCourseData(
+      formattedAnswers,
+      assessmentQuestions,
+      selectedCourseId || 0,
+      selectedGrade || 1
+    );
+
+    setPersonalizedCourseData(courseData);
+  };
+
   const shuffleOptions = (options: string[]): string[] => {
     const shuffled = [...options];
     for (let i = shuffled.length - 1; i > 0; i--) {
@@ -1501,457 +1500,79 @@ const Chat = () => {
     return shuffled;
   };
 
-  const showTestQuestion = (question: string, options: string[], currentQuestion: number, totalQuestions: number) => {
-    const shuffledOptions = shuffleOptions(options);
-    console.log(`🎯 showTestQuestion - Q${currentQuestion}/${totalQuestions}:`, {
-      question: question.substring(0, 50),
-      originalOptions: options,
-      shuffledOptions: shuffledOptions
-    });
-    setIsTestQuestionActive(true);
-    setTestQuestionData({
-      question,
-      options: shuffledOptions,
-      currentQuestion,
-      totalQuestions
-    });
-  };
 
-  // Redirect to auth if not authenticated
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/auth');
-    }
-  }, [isAuthenticated, navigate]);
 
-  // Auto scroll to bottom when new messages arrive
-  useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
-    }
-  }, [messages]);
 
-  // Focus input on mount
+
+  // Initialize assessment testing if grade parameter is present
   useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
+    const gradeParam = searchParams.get('grade');
+    const courseIdParam = searchParams.get('courseId');
+    const startParam = searchParams.get('start');
+
+    if (gradeParam && courseIdParam && startParam === 'true') {
+      const grade = parseInt(gradeParam);
+      const courseId = parseInt(courseIdParam);
+
+      setSelectedGrade(grade);
+      setSelectedCourseId(courseId);
+
+      // Load questions for this grade
+      if (COURSE_TEST_QUESTIONS[courseId] && COURSE_TEST_QUESTIONS[courseId][grade]) {
+        setAssessmentQuestions(COURSE_TEST_QUESTIONS[courseId][grade]);
+        setIsAssessmentMode(true);
+        setCurrentQuestionIndex(0);
+        setAssessmentResults([]);
+        setAssessmentCompleted(false);
+      } else {
+        console.warn(`No questions found for course ${courseId}, grade ${grade}`);
+      }
     }
-  }, []);
+  }, [searchParams]);
 
   // Check OpenAI API key on mount
   useEffect(() => {
     const checkApiKey = async () => {
       const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
       if (!apiKey || apiKey === 'your_openai_api_key_here') {
+        console.warn('API key not configured');
         setApiKeyStatus('invalid');
         return;
       }
 
       // Проверяем доступность API через health endpoint сервера
       try {
-        const response = await fetch(`${window.location.origin}/health`);
+        // Используем абортивный контроллер с таймаутом 3 сек
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000);
+        
+        const response = await fetch(`${window.location.origin}/health`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        
         if (response.ok) {
           // Если сервер отвечает, считаем что API ключ настроен
-          // (фактическая проверка происходит на стороне сервера)
           setApiKeyStatus('valid');
         } else {
           setApiKeyStatus('error');
         }
       } catch (error) {
-        console.error('API key check failed:', error);
-        setApiKeyStatus('error');
+        console.warn('API key check timeout or failed, continuing anyway:', error);
+        // Не блокируем работу даже если API недоступен
+        setApiKeyStatus('valid');
       }
     };
 
     checkApiKey();
   }, []);
 
-  // Initialize chat with welcome message and start testing immediately
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const startParam = urlParams.get('start');
 
-    if (startParam === 'true' && messages.length === 0) {
-      // Always start in testing mode with Russian language pre-selected
-      setIsInAdaptiveMode(true);
-      setSelectedLanguage('russian'); // Автоматически выбираем русский язык
-      setAssessmentState('collecting_grade');
 
-      // Start testing immediately without welcome message - skip language question and go to grade question
-      setTimeout(() => {
-        showTestQuestion(
-          'В каком ты классе учишься?',
-          ['1-2 класс', '3-4 класс', '5-6 класс', '7-8 класс', '9-10 класс', '11 класс', 'Учусь в вузе', 'Окончил вуз'],
-          1, // Начинаем с 1 вместо 2, так как пропустили вопрос о языке
-          4 // Общее количество вопросов будет 4 (класс + тема + 2 интервью)
-        );
-      }, 500);
-    }
-  }, [messages.length]);
 
-  // Format assessment results for display - only show beautiful learning plan
-  const generateLevelCompletionMessage = (level: string, lastTopic: string): string => {
-    const levelNum = parseInt(level) || 1;
-
-    if (levelNum === 1 || levelNum === 2) {
-      return `Отлично! Мы можем адаптировать наши занятия по английскому языку для учеников 1-2 класса. Давайте начнем с основ.
-
-1. Алфавит
-
-Как мы обсуждали ранее, английский алфавит состоит из 26 букв. Можем начать с того, чтобы выучить их все. Например, давайте возьмем несколько букв: A, B, C.
-
-- A как в слове "Apple" (яблоко)
-- B как в слове "Ball" (мяч)
-- C как в слове "Cat" (кот)
-
-Попробуйте произнести эти слова вслух. Есть ли у вас любимое слово на английском?
-
-2. Простые фразы
-
-После алфавита можно перейти к простым фразам. Например: "Hello!" (Привет!) и "My name is…" (Меня зовут…).
-
-Попробуйте сказать: "Hello! My name is…". Как вы думаете, как можно использовать эти фразы в повседневной жизни?
-
-3. Играем
-
-Давайте сделаем это интересным! Мы можем сыграть в игру: я называю букву, а вы должны придумать слово, которое начинается на эту букву. Например, если я скажу "D", вы можете сказать "Dog" (собака).
-
-Как вы думаете, это будет весело?
-
-Дайте знать, о чем вы хотите поговорить дальше или что вам интересно!`;
-    }
-
-    // Default message for other levels
-    return `Отлично! Мы определили ваш уровень английского языка. Теперь можем начать персонализированное обучение!
-
-🎯 **Ваш уровень:** ${level}
-📚 **Последняя тема:** ${lastTopic || 'Начнем с основ'}
-
-Давайте начнем с интересных упражнений и заданий, адаптированных под ваш уровень!
-
-Дайте знать, о чем вы хотите поговорить или что вам интересно изучить!`;
-  };
-
-  const conceptLabels: Record<string, string> = {
-    greetings_basic: 'Приветствия',
-    greetings_simple: 'Простые приветствия',
-    numbers_1_5: 'Числа 1–5',
-    numbers_1_20: 'Числа 1–20',
-    numbers_basic: 'Базовые числа',
-    colors_basic: 'Основные цвета',
-    alphabet_A_G: 'Алфавит A–G',
-    alphabet_basic: 'Базовый алфавит',
-    full_alphabet: 'Полный алфавит',
-    animals_basic: 'Животные',
-    verbs_basic: 'Базовые глаголы',
-    family_basic: 'Семья и друзья',
-    school_basic: 'Школа и учеба',
-    food_basic: 'Еда и напитки',
-    days_basic: 'Дни недели',
-    weather_basic: 'Погода',
-    time_basic: 'Время',
-    pronouns_basic: 'Местоимения',
-    phonics_basic: 'Произношение',
-    classroom_objects: 'Предметы в классе',
-    emotions_basic: 'Эмоции',
-    hobbies_basic: 'Хобби и увлечения',
-    present_simple: 'Present Simple',
-    past_simple_regular: 'Past Simple (правильные глаголы)',
-    present_continuous: 'Present Continuous',
-    have_got: 'Have Got',
-    prepositions_place: 'Предлоги места',
-    to_be_full: 'To Be (полная форма)',
-    reading_2_3_sent: 'Чтение простых предложений',
-    present_perfect: 'Present Perfect',
-    phrasal_verbs: 'Фразовые глаголы',
-    comparative: 'Сравнительная степень',
-    comparative_superlative: 'Сравнительные степени',
-    health_sports: 'Здоровье и спорт',
-    technology_gadgets: 'Технологии и гаджеты',
-    conditionals: 'Условные предложения',
-    passive_voice: 'Пассивный залог',
-    passive_present: 'Пассивный залог (Present)',
-    complex_times: 'Сложные времена',
-    speaking_discussions: 'Говорение и дискуссии',
-    academic_texts: 'Академические тексты',
-    complex_grammar: 'Сложная грамматика',
-    essay_writing: 'Написание эссе',
-    oral_presentations: 'Устные презентации',
-    exam_preparation: 'Подготовка к экзаменам',
-    academic_writing: 'Академическое письмо',
-    perfect_continuous: 'Perfect Continuous',
-    english_idioms: 'Английские идиомы',
-    discussions_arguments: 'Дискуссии и аргументация',
-    ege_ielts_prep: 'Подготовка к ЕГЭ/IELTS',
-    future_perfect: 'Future Perfect',
-    academic_vocab: 'Академическая лексика',
-    passive_voice_advanced: 'Сложный пассив',
-    reported_speech: 'Косвенная речь',
-    cohesive_devices: 'Связующие элементы текста',
-    business_english: 'Бизнес-английский',
-    negotiations_language: 'Лексика переговоров',
-    emails_formal: 'Формальные письма',
-    idioms_advanced: 'Продвинутые идиомы',
-    presentation_skills: 'Навыки презентаций',
-    modals_basic: 'Модальные глаголы',
-    zero_conditional: 'Условные предложения (тип 0)'
-  };
-
-  const BASE_INTRO_PROFILE: { concept: string; p: number }[] = [
-    { concept: 'greetings_basic', p: 1.0 },
-    { concept: 'numbers_1_5', p: 0.4 },
-    { concept: 'colors_basic', p: 0.2 },
-    { concept: 'alphabet_A_G', p: 0.2 },
-    { concept: 'family_basic', p: 0.3 }
-  ];
-
-  const INTRO_PROFILE_BY_CLUSTER: Partial<Record<GradeCluster, { concept: string; p: number }[]>> = {
-    grade1: BASE_INTRO_PROFILE,
-    grade2: [
-      { concept: 'greetings_basic', p: 0.8 },
-      { concept: 'numbers_1_20', p: 0.4 },
-      { concept: 'colors_basic', p: 0.3 },
-      { concept: 'full_alphabet', p: 0.3 },
-      { concept: 'family_basic', p: 0.2 }
-    ],
-    grade3_4: [
-      { concept: 'present_simple', p: 0.5 },
-      { concept: 'to_be_full', p: 0.4 },
-      { concept: 'have_got', p: 0.4 },
-      { concept: 'prepositions_place', p: 0.3 },
-      { concept: 'reading_2_3_sent', p: 0.3 }
-    ],
-    grade5_6: [
-      { concept: 'past_simple_regular', p: 0.4 },
-      { concept: 'comparative', p: 0.4 },
-      { concept: 'present_continuous', p: 0.3 },
-      { concept: 'have_got', p: 0.3 },
-      { concept: 'prepositions_place', p: 0.3 }
-    ],
-    grade7_8: [
-      { concept: 'present_perfect', p: 0.4 },
-      { concept: 'modals_basic', p: 0.4 },
-      { concept: 'reported_speech', p: 0.3 },
-      { concept: 'zero_conditional', p: 0.3 },
-      { concept: 'past_simple_regular', p: 0.2 }
-    ],
-    grade9: [
-      { concept: 'passive_present', p: 0.4 },
-      { concept: 'reported_speech', p: 0.4 },
-      { concept: 'present_perfect', p: 0.3 },
-      { concept: 'modals_basic', p: 0.3 },
-      { concept: 'past_simple_regular', p: 0.2 }
-    ],
-    grade10_11: [
-      { concept: 'academic_vocab', p: 0.4 },
-      { concept: 'passive_voice_advanced', p: 0.3 },
-      { concept: 'reported_speech', p: 0.4 },
-      { concept: 'cohesive_devices', p: 0.3 },
-      { concept: 'presentation_skills', p: 0.2 }
-    ],
-    grade12: [
-      { concept: 'future_perfect', p: 0.4 },
-      { concept: 'academic_vocab', p: 0.4 },
-      { concept: 'passive_voice_advanced', p: 0.3 },
-      { concept: 'reported_speech', p: 0.3 },
-      { concept: 'cohesive_devices', p: 0.3 }
-    ],
-    grade13: [
-      { concept: 'business_english', p: 0.4 },
-      { concept: 'negotiations_language', p: 0.4 },
-      { concept: 'emails_formal', p: 0.3 },
-      { concept: 'idioms_advanced', p: 0.3 },
-      { concept: 'presentation_skills', p: 0.3 }
-    ]
-  };
-
-  const translateConcept = (concept: string): string => {
-    if (conceptLabels[concept]) {
-      return conceptLabels[concept];
-    }
-    return concept
-      .replace(/_/g, ' ')
-      .replace(/\b([a-z])/g, (_, letter) => letter.toUpperCase())
-      .trim();
-  };
-
-  const formatAssessmentResults = (result: AssessmentResult, recommendation?: CourseRecommendation | null): string => {
-    let text = 'Ваш персональный план обучения\n\n';
-
-    // Show grade and last topic
-    text += `Ваш уровень: Класс ${result.classGrade}\n`;
-    text += `Последняя изученная тема: ${result.lastTopic || 'Начнем с основ'}\n\n`;
-
-    // If we have a course recommendation, show it
-    if (recommendation) {
-      text += `🎯 Рекомендуемый курс: ${recommendation.plan.title}\n\n`;
-      text += `${recommendation.reasoning}\n\n`;
-
-      // Show the recommended lesson details
-      text += `📖 Рекомендуемый урок:\n`;
-      text += `Урок ${recommendation.recommendedLessonNumber}: ${recommendation.recommendedLesson.title}\n`;
-      text += `Тема: ${recommendation.recommendedLesson.topic}\n`;
-      text += `Уровень сложности: ${recommendation.recommendedLesson.difficulty === 'beginner' ? 'начальный' : recommendation.recommendedLesson.difficulty === 'intermediate' ? 'средний' : 'продвинутый'}\n\n`;
-      text += `Основные аспекты:\n${recommendation.recommendedLesson.aspects}\n\n`;
-
-      // Show lesson modules
-      text += `📚 Модули урока:\n`;
-      recommendation.lessonModules.forEach(module => {
-        const typeIcon = {
-          conspectus: '📋',
-          theory: '📖',
-          practice: '✏️',
-          test: '✅'
-        }[module.type] || '📄';
-
-        text += `${typeIcon} ${module.number}. ${module.title}`;
-        if (module.estimatedTime) {
-          text += ` (${module.estimatedTime} мин)`;
-        }
-        text += '\n';
-      });
-      text += '\n';
-
-      // Show what to expect in the course
-      text += 'Что вас ждет в курсе:\n';
-      text += '• Структурированная программа обучения\n';
-      text += '• Систематическое изучение материала\n';
-      text += '• Практические задания и упражнения\n';
-      text += '• Отслеживание прогресса\n';
-      if (recommendation.plan.grade === 90 || recommendation.plan.grade === 100) {
-        text += '• Экзаменационная подготовка\n';
-        text += '• Стратегии выполнения заданий\n';
-      }
-    } else {
-      // Fallback to old 2-week plan format if no recommendation
-      text += '2-недельная программа развития\n\n';
-
-    result.plan2w.forEach(session => {
-      if (session.targets.length > 0) {
-        const week = Math.ceil(session.session / 2);
-        const lessonNum = session.session % 2 === 1 ? 1 : 2;
-          text += `Неделя ${week} - Занятие ${lessonNum}\n`;
-        const translatedTargets = session.targets.map(translateConcept);
-          text += `Основные темы: ${translatedTargets.join(', ')}\n`;
-          text += `Подход: Повторение ${Math.round(session.mix.review * 100)}% | Практика ${Math.round(session.mix.weak * 100)}% | Новое ${Math.round(session.mix.new * 100)}%\n\n`;
-      }
-    });
-
-      text += 'Что вас ждет:\n';
-    text += '• Интерактивные упражнения\n';
-    text += '• Персонализированные задания\n';
-    text += '• Игровые элементы обучения\n';
-      text += '• Отслеживание прогресса\n';
-    }
-
-    return text;
-  };
-
-  const completeIntroAssessment = () => {
-    setAssessmentState('in_progress');
-    setQuestionCount(0);
-    setGradeQuestionIndex(0);
-
-    // For now, just show completion message and learning plan
-    // TODO: Integrate with actual adaptive assessment
-    setTimeout(async () => {
-      const cluster = mapGradeToCluster(classGrade);
-      console.log('🎯 Assessment Debug:', {
-        inputClassGrade: classGrade,
-        detectedCluster: cluster,
-        questionsCount: GRADE_INTRO_QUESTIONS[cluster]?.length || 0
-      });
-      const profileTemplate = INTRO_PROFILE_BY_CLUSTER[cluster] || BASE_INTRO_PROFILE;
-      const profile = profileTemplate.map(item => ({ ...item }));
-      const plan2w = buildTwoWeekPlan(profile, cluster);
-
-      const mockResult: AssessmentResult = {
-        classGrade: classGrade,
-        lastTopic: lastTopic,
-        cluster: cluster,
-        profile: profile,
-        plan2w: plan2w,
-        timestamp: new Date()
-      };
-
-      setAssessmentState('completed');
-      setAssessmentResult(mockResult);
-
-      // Generate learning plan
-      await generateLearningPlan(mockResult);
-    }, 1000);
-  };
-
-  // Generate learning plan and show it
-  const generateLearningPlan = async (result: AssessmentResult) => {
-    console.log('🎓 Generating learning plan:', result);
-
-    // Get course recommendation based on assessment results
-    const recommendation = getCourseRecommendation(result);
-    setCourseRecommendation(recommendation);
-
-    // Save learning plan text for display in test interface
-    const planText = formatAssessmentResults(result, recommendation);
-    setLearningPlanText(planText);
-
-    // Show learning plan confirmation buttons
-    setTimeout(() => {
-      setIsLearningPlanActive(true);
-    }, 500);
-  };
-
-  // Global keyboard shortcuts for TTS control
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Escape or Space to stop TTS
-      if ((event.key === 'Escape' || event.key === ' ') && OpenAITTS.isPlaying()) {
-        event.preventDefault();
-        OpenAITTS.stop();
-        console.log('🛑 TTS stopped by keyboard shortcut');
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
 
   // Check if message contains audio task keywords
-  const checkForAudioTask = (message: string): { isAudioTask: boolean; taskText: string } => {
-    const audioTaskPatterns = [
-      /повторим?\s+все/i,
-      /повтори\s+за\s+мной/i,
-      /проговори/i,
-      /скажи\s+по-английски/i,
-      /произнеси/i,
-      /повтори\s+цвета/i,
-      /повтори\s+числа/i,
-      /давай\s+повторим/i,
-      /теперь\s+повторим/i,
-      /попробуем\s+снова/i
-    ];
-
-    const isAudioTask = audioTaskPatterns.some(pattern => pattern.test(message));
-    let taskText = '';
-
-    if (isAudioTask) {
-      // Extract the specific task from the message
-      if (message.includes('повтори')) {
-        const match = message.match(/повтори[^\n]*/i);
-        if (match) taskText = match[0];
-      } else if (message.includes('проговори')) {
-        const match = message.match(/проговори[^\n]*/i);
-        if (match) taskText = match[0];
-      } else if (message.includes('скажи')) {
-        const match = message.match(/скажи[^\n]*/i);
-        if (match) taskText = match[0];
-      } else {
-        taskText = 'Выполни задание голосом';
-      }
-    }
-
-    return { isAudioTask, taskText };
-  };
 
   // Check if message contains test question with options
   const checkForLearningPlan = (message: string): { isLearningPlan: boolean } => {
@@ -1964,851 +1585,30 @@ const Chat = () => {
     };
   };
 
-  const checkForTestQuestion = (message: string): { isTestQuestion: boolean; questionData?: { question: string; options: string[]; currentQuestion: number; totalQuestions: number } } => {
-    const testQuestionPattern = /Вопрос\s+(\d+)\/(\d+):/i;
-    const match = message.match(testQuestionPattern);
 
-    if (!match) {
-      return { isTestQuestion: false };
-    }
-
-    const currentQuestion = parseInt(match[1]);
-    const totalQuestions = parseInt(match[2]);
-
-    // First, check if this is from adaptive assessment and has structured options
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage && lastMessage.role === 'assistant' && currentAssessmentQuestion?.options) {
-      return {
-        isTestQuestion: true,
-        questionData: {
-          question: currentAssessmentQuestion.prompt,
-          options: currentAssessmentQuestion.options,
-          currentQuestion: currentQuestion,
-          totalQuestions: totalQuestions
-        }
-      };
-    }
-
-    // Fallback: Look for options in parentheses like (in/on/under)
-    const optionsMatch = message.match(/\(([^)]+)\)/);
-    if (!optionsMatch) {
-      return { isTestQuestion: false };
-    }
-
-    // Extract options
-    const optionsText = optionsMatch[1];
-    const options = optionsText.split('/').map(opt => opt.trim());
-
-    // Extract the question text (everything before the options)
-    const questionText = message.split('(')[0].trim();
-
-    return {
-      isTestQuestion: true,
-      questionData: {
-        question: questionText,
-        options: options,
-        currentQuestion: currentQuestion,
-        totalQuestions: totalQuestions
-      }
-    };
-  };
-
-  // Handle audio task recording
-  const startAudioTaskRecording = () => {
-    if (!('webkitSpeechRecognition' in window && 'SpeechRecognition' in window)) {
-      alert('Ваш браузер не поддерживает распознавание речи');
-      return;
-    }
-
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = 'en-US'; // Listen for English speech
-    recognitionRef.current = recognition;
-
-    recognition.onstart = () => {
-      setIsRecordingAudioTask(true);
-    };
-
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      console.log('Audio task transcript:', transcript);
-      setInputMessage(transcript);
-      setIsAudioTaskActive(false);
-      setAudioTaskText('');
-      setIsRecordingAudioTask(false);
-      // Auto-send the message
-      setTimeout(() => {
-        sendMessage();
-      }, 100);
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error('Speech recognition error:', event.error);
-      setIsRecordingAudioTask(false);
-      alert('Ошибка распознавания речи. Попробуйте ещё раз.');
-    };
-
-    recognition.onend = () => {
-      setIsRecordingAudioTask(false);
-    };
-
-    recognition.start();
-  };
 
   // Handle test question answer selection
-  const handleTestAnswer = async (selectedAnswer: string) => {
-    console.log('🧪 handleTestAnswer called with:', selectedAnswer);
-    console.log('🧪 isInAdaptiveMode:', isInAdaptiveMode);
-    console.log('🧪 isTestQuestionActive:', isTestQuestionActive);
-    console.log('🧪 assessmentState:', assessmentState);
 
-    // Handle grade selection (first question now)
-    if (isTestQuestionActive && testQuestionData?.currentQuestion === 1 && assessmentState === 'collecting_grade') {
-      console.log('🧪 Handling grade selection:', selectedAnswer);
 
-      // Set the selected grade based on answer
-      const gradeMap: { [key: string]: string } = {
-        '1-2 класс': '1',
-        '3-4 класс': '3',
-        '5-6 класс': '5',
-        '7-8 класс': '7',
-        '9-10 класс': '9',
-        '11 класс': '11',
-        'Учусь в вузе': '90', // Special grade for university students
-        'Окончил вуз': '100' // Special grade for graduates
-      };
 
-      const selectedGrade = gradeMap[selectedAnswer] || '1';
-      setSelectedGrade(selectedGrade);
-
-      // Hide current test and show topic question
-      setIsTestQuestionActive(false);
-      setTestQuestionData(null);
-
-      // Show next question: topic selection based on selected language and grade
-      setTimeout(() => {
-        const topicOptions = getTopicOptionsForCluster(selectedGrade, 'russian');
-        showTestQuestion(
-          'Какую тему ты хочешь изучить?',
-          topicOptions,
-          2,
-          4
-        );
-
-        // Update assessment state to collecting_topic
-        setAssessmentState('collecting_topic');
-      }, 500);
-
-      return;
-    }
-
-    // Handle introductory test topic selection
-    if (isTestQuestionActive && testQuestionData?.currentQuestion === 2 && assessmentState === 'collecting_topic') {
-      console.log('🧪 Handling introductory test topic selection');
-
-      // Set the selected last topic
-      setLastTopic(selectedAnswer);
-      const cluster = selectedGradeCluster;
-      const clusterQuestions =
-        gradeQuestionBank.length > 0 ? gradeQuestionBank : (GRADE_INTRO_QUESTIONS[cluster] || GRADE_INTRO_QUESTIONS['grade1']);
-      const totalQuestions = 2 + clusterQuestions.length;
-      setGradeQuestionBank(clusterQuestions);
-      setGradeQuestionIndex(0);
-
-      // Hide current test and start assessment
-      setIsTestQuestionActive(false);
-      setTestQuestionData(null);
-
-      // Start the adaptive assessment with interview questions
-      setTimeout(() => {
-        if (clusterQuestions.length === 0) {
-          completeIntroAssessment();
-        } else {
-          setAssessmentState('interview_questions');
-          setQuestionCount(2);
-          const firstQuestion = clusterQuestions[0];
-          showTestQuestion(firstQuestion.question, firstQuestion.options, 2, totalQuestions);
-        }
-      }, 500);
-
-      return;
-    }
-
-    // Handle interview questions
-    if (isInAdaptiveMode && assessmentState === 'interview_questions') {
-      console.log('🧪 Handling interview question answer');
-      const currentIndex = gradeQuestionIndex;
-      const totalQuestions = 2 + gradeQuestionBank.length;
-
-      // Process answer and prepare for next question
-      setIsTestQuestionActive(false);
-      setTestQuestionData(null);
-
-      setTimeout(() => {
-        const nextIndex = currentIndex + 1;
-        if (nextIndex < gradeQuestionBank.length) {
-          setGradeQuestionIndex(nextIndex);
-          setQuestionCount(2 + nextIndex);
-          const nextQuestion = gradeQuestionBank[nextIndex];
-          showTestQuestion(nextQuestion.question, nextQuestion.options, 2 + nextIndex, totalQuestions);
-        } else {
-          // Finish interview and start assessment
-          completeIntroAssessment();
-        }
-      }, 500); // Small delay for smooth transition
-
-      return;
-    }
-
-    // Directly resolve assessment promise if in adaptive mode
-    if (isInAdaptiveMode && window._assessmentResolver) {
-      console.log('🧪 Resolving adaptive assessment');
-      window._assessmentResolver(selectedAnswer);
-      setIsTestQuestionActive(false);
-      setTestQuestionData(null);
-      return;
-    }
-
-    // For test questions in regular chat, send directly
-    console.log('🧪 Sending test answer directly');
-    
-    // Add user answer to chat
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: selectedAnswer,
-      timestamp: new Date(),
-    };
-
-    // Hide test UI immediately
-    setIsTestQuestionActive(false);
-    setTestQuestionData(null);
-    setIsLoading(true);
-
-    // Add message and send to AI
-    setMessages(prev => [...prev, userMessage]);
-    
-    // Send the answer to AI
-    await sendDirectTestAnswer(selectedAnswer);
-  };
-
-  // Handle learning plan confirmation
-  const handleLearningPlanConfirm = () => {
-    console.log('✅ Learning plan confirmed - navigating to personalized course page');
-    console.log('📚 Course recommendation:', courseRecommendation);
-
-    setIsLearningPlanActive(false);
-
-    if (!assessmentResult) {
-      console.log('❌ No assessment result, navigating to home');
-      navigate('/');
-      return;
-    }
-
-    // Create a personalized course object from the assessment result
-    // Determine difficulty level based on cluster
-    let courseDifficulty: 'beginner' | 'intermediate' | 'advanced' = 'beginner';
-    if (assessmentResult.cluster.includes('grade3_4') || assessmentResult.cluster.includes('grade5_6')) {
-      courseDifficulty = 'intermediate';
-    } else if (assessmentResult.cluster !== 'grade1' && assessmentResult.cluster !== 'grade2') {
-      courseDifficulty = 'advanced';
-    }
-
-    // Use lessons from the course plan if available
-    let modules: any[] = [];
-    
-    if (courseRecommendation && courseRecommendation.plan && courseRecommendation.plan.lessons) {
-      console.log('📖 Using real course plan lessons');
-      const coursePlan = courseRecommendation.plan;
-      
-      // Divide lessons into modules (approximately 2-3 lessons per module)
-      const lessonsPerModule = 2;
-      modules = [];
-      
-      for (let i = 0; i < coursePlan.lessons.length; i += lessonsPerModule) {
-        const moduleLessons = coursePlan.lessons.slice(i, i + lessonsPerModule);
-        const moduleNumber = Math.floor(i / lessonsPerModule) + 1;
-        
-        // Get the topics from lesson titles
-        const topics = moduleLessons.map(lesson => lesson.topic).join(', ');
-        
-        modules.push({
-          title: `Неделя ${Math.ceil(moduleNumber / 2)} - Занятие ${moduleNumber}`,
-          description: `Темы: ${topics}`,
-          lessons: moduleLessons.map(lesson => `${lesson.number}. ${lesson.title}`)
-        });
-      }
-    } else {
-      console.log('⚠️ No course plan found, generating default lessons');
-      // Fallback to generated lessons if no real course plan
-      modules = assessmentResult.plan2w.map((session, idx) => {
-        const lessons: string[] = [];
-        const lessonsPerConcept = Math.max(5, Math.ceil(12 / session.targets.length));
-
-        session.targets.forEach(concept => {
-          for (let i = 1; i <= lessonsPerConcept; i++) {
-            const lessonTypes = [
-              'Введение',
-              'Теория',
-              'Практика',
-              'Задания',
-              'Тест',
-              'Материалы',
-              'Закрепление'
-            ];
-            const lessonTitle = lessonTypes[(i - 1) % lessonTypes.length];
-            const translatedConcept = translateConcept(concept).replace(/["']/g, '').trim();
-            lessons.push(`${translatedConcept} - ${lessonTitle} ${i}`);
-          }
-        });
-
-        const finalLessons = lessons.slice(0, Math.min(15, Math.max(10, lessons.length)));
-
-        return {
-          title: `Неделя ${Math.ceil(session.session / 2)} - Занятие ${session.session}`,
-          description: `Основные темы: ${session.targets.map(t => translateConcept(t)).join(', ')}`,
-          lessons: finalLessons
-        };
-      });
-    }
-
-    const personalizedCourse = {
-      id: `course-${Date.now()}`,
-      title: courseRecommendation?.plan?.title || `Персональный курс английского - ${assessmentResult.classGrade}`,
-      description: courseRecommendation?.plan?.description || `Разработан специально для вас на основе теста`,
-      topics: assessmentResult.profile.map(p => p.concept),
-      difficulty: courseDifficulty,
-      estimatedHours: 40,
-      modules: modules
-    };
-
-    // Save the course to the auth context
-    setPersonalizedCourse(personalizedCourse);
-
-    // Navigate to the personalized course page
-    navigate('/personalized-course');
-  };
-
-  // Handle retake assessment
-  const handleRetakeAssessment = () => {
-    console.log('🔄 Retaking assessment');
-
-    // Reset learning plan state
-    setIsLearningPlanActive(false);
-    setAssessmentResult(null);
-
-    // Reset adaptive assessment state
-    setIsInAdaptiveMode(true);
-    setAssessmentState('collecting_grade');
-    setQuestionCount(0);
-    setClassGrade('');
-    setLastTopic('');
-    setIsTestQuestionActive(false);
-    setTestQuestionData(null);
-    setSelectedGradeCluster('grade1');
-    setGradeQuestionBank(GRADE_INTRO_QUESTIONS['grade1']);
-    setGradeQuestionIndex(0);
-    const defaultTotalQuestions = getIntroTotalForCluster('grade1');
-
-    // Start introductory test again
-    setTimeout(() => {
-      showTestQuestion(
-        'В каком ты классе учишься?',
-        ['1-2 класс', '3-4 класс', '5-6 класс', '7-8 класс', '9-10 класс', '11 класс', 'Учусь в вузе', 'Окончил вуз'],
-        1,
-        defaultTotalQuestions
-      );
-    }, 300);
-  };
-
-  // Send test answer directly to AI
-  const sendDirectTestAnswer = async (answer: string) => {
-    try {
-      const systemPrompt = `Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Вы можете "разжевывать" сложные концепции, приводить примеры из реальной жизни, использовать аналогии и пошаговые объяснения.
-
-Особенности вашего стиля:
-- Объясняйте сложное простыми словами
-- Используйте примеры и аналогии
-- Разбивайте информацию на логические блоки
-- Задавайте наводящие вопросы для лучшего понимания
-- Будьте терпеливы и поддерживающи
-- Адаптируйте объяснения под уровень ученика
-- Поощряйте самостоятельное мышление
-
-КРИТИЧНО ВАЖНО: АКТИВНО ИСПОЛЬЗУЙТЕ ИСТОРИЮ БЕСЕДЫ!
-- Всегда ссылайтесь на предыдущие сообщения
-- Помните, что обсуждалось ранее
-- Продолжайте логическую нить разговора
-- Избегайте повторений уже объясненного
-- Используйте фразы типа "как мы обсуждали ранее", "продолжая нашу тему", "на основе предыдущего объяснения"
-
-КОНТЕКСТ ОБУЧЕНИЯ: Ученик выбрал курс "Английский язык". Вы преподаете именно английскому языку. Все объяснения и примеры должны быть связаны с этим предметом.`;
-
-      const response = await fetch(`${window.location.origin}/api/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-                role: 'system',
-                content: systemPrompt,
-            },
-            ...messages.slice(-29).map(msg => ({
-                role: msg.role,
-                content: msg.content,
-            })),
-            {
-                role: 'user',
-                content: answer
-            }
-          ],
-          max_tokens: 2000,
-          temperature: 0.7,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('OpenAI API Error:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorData
-        });
-
-        // Handle specific error codes
-        if (response.status === 401) {
-          throw new Error('Неверный API ключ OpenAI. Проверьте настройки.');
-        } else if (response.status === 429) {
-          throw new Error('Превышен лимит запросов к OpenAI. Попробуйте позже.');
-        } else if (response.status === 500) {
-          throw new Error('Ошибка сервера OpenAI. Попробуйте еще раз.');
-        } else {
-          throw new Error(`Ошибка OpenAI: ${response.status} ${response.statusText}`);
-        }
-      }
-
-      const data = await response.json();
-
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        console.error('Invalid OpenAI response:', data);
-        throw new Error('Некорректный ответ от OpenAI');
-      }
-
-      const aiContent = data.choices[0].message.content;
-
-      const assistantMessage: Message = {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: aiContent,
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error('Error sending test answer:', error);
-      const errorMessage: Message = {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: 'Извините, произошла ошибка при обработке ответа.',
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSkipTest = async () => {
-    console.log('🧪 handleSkipTest called');
-    console.log('🧪 isInAdaptiveMode:', isInAdaptiveMode);
-    console.log('🧪 assessmentState:', assessmentState);
-    console.log('🧪 testQuestionData?.currentQuestion:', testQuestionData?.currentQuestion);
-
-    // Handle skip in interview questions phase
-    if (isInAdaptiveMode && assessmentState === 'interview_questions') {
-      console.log('🧪 Skipping interview question');
-      const currentIndex = gradeQuestionIndex;
-      const totalQuestions = 2 + gradeQuestionBank.length;
-
-      // Move to next question or finish
-      setIsTestQuestionActive(false);
-      setTestQuestionData(null);
-
-      setTimeout(() => {
-        const nextIndex = currentIndex + 1;
-        if (nextIndex < gradeQuestionBank.length) {
-          setGradeQuestionIndex(nextIndex);
-          setQuestionCount(3 + nextIndex);
-          const nextQuestion = gradeQuestionBank[nextIndex];
-          console.log('🧪 Showing next interview question:', nextQuestion.question);
-          showTestQuestion(nextQuestion.question, nextQuestion.options, 3 + nextIndex, totalQuestions);
-        } else {
-          // Finish interview and start assessment
-          console.log('🧪 Interview complete, finishing assessment');
-          completeIntroAssessment();
-        }
-      }, 500);
-      return;
-    }
-
-    // Handle skip for grade selection question
-    if (isInAdaptiveMode && assessmentState === 'collecting_grade' && testQuestionData?.currentQuestion === 1) {
-      console.log('🧪 Skipping grade selection, using default');
-      // Set default grade and continue
-      setClassGrade('1 класс');
-      setLastTopic('');
-      const cluster = mapGradeToCluster('1 класс');
-      setSelectedGradeCluster(cluster);
-      const clusterQuestions = GRADE_INTRO_QUESTIONS[cluster] || GRADE_INTRO_QUESTIONS['grade1'];
-      const totalQuestions = 2 + clusterQuestions.length;
-      setGradeQuestionBank(clusterQuestions);
-      setGradeQuestionIndex(0);
-
-      setIsTestQuestionActive(false);
-      setTestQuestionData(null);
-
-      setTimeout(() => {
-        const topicOptions = getTopicOptionsForCluster(cluster, selectedLanguage);
-        showTestQuestion(
-          selectedLanguage === 'russian' ? 'Что последним проходил(а) по русскому?' : 'Что последним проходил(а) по английскому?',
-          topicOptions,
-          3,
-          totalQuestions
-        );
-        setAssessmentState('collecting_topic');
-      }, 500);
-      return;
-    }
-
-    // Handle skip for topic selection question
-    if (isInAdaptiveMode && assessmentState === 'collecting_topic' && testQuestionData?.currentQuestion === 3) {
-      console.log('🧪 Skipping topic selection, using default');
-      // Set default topic and continue
-      setLastTopic('Ничего из перечисленного');
-      const cluster = selectedGradeCluster;
-      const clusterQuestions =
-        gradeQuestionBank.length > 0 ? gradeQuestionBank : (GRADE_INTRO_QUESTIONS[cluster] || GRADE_INTRO_QUESTIONS['grade1']);
-      const totalQuestions = 2 + clusterQuestions.length;
-      setGradeQuestionBank(clusterQuestions);
-      setGradeQuestionIndex(0);
-
-      setIsTestQuestionActive(false);
-      setTestQuestionData(null);
-
-      setTimeout(() => {
-        if (clusterQuestions.length === 0) {
-          completeIntroAssessment();
-        } else {
-          setAssessmentState('interview_questions');
-          setQuestionCount(3);
-          const firstQuestion = clusterQuestions[0];
-          showTestQuestion(firstQuestion.question, firstQuestion.options, 3, totalQuestions);
-        }
-      }, 500);
-      return;
-    }
-
-    // Directly resolve assessment promise if in adaptive mode
-    if (isInAdaptiveMode && window._assessmentResolver) {
-      console.log('🧪 Resolving skip in adaptive assessment');
-      window._assessmentResolver('Пропустить');
-      setIsTestQuestionActive(false);
-      setTestQuestionData(null);
-      return;
-    }
-
-    // For test questions in regular chat, send skip directly
-    console.log('🧪 Sending skip action directly');
-    
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: 'Пропустить',
-      timestamp: new Date(),
-    };
-
-    // Hide test UI immediately
-    setIsTestQuestionActive(false);
-    setTestQuestionData(null);
-    setIsLoading(true);
-
-    // Add message and send to AI
-    setMessages(prev => [...prev, userMessage]);
-    
-    // Send the skip action to AI
-    await sendDirectTestAnswer('Пропустить');
-  };
-
-  // Handle new assistant message to check for audio tasks, test questions, and learning plans
-  useEffect(() => {
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.ttsPlayed) {
-      // Check for learning plan first (highest priority)
-      const { isLearningPlan } = checkForLearningPlan(lastMessage.content);
-      if (isLearningPlan) {
-        console.log('📚 Learning plan detected - showing confirmation buttons');
-        setIsLearningPlanActive(true);
-
-        // Mark message as processed to prevent re-processing
-        lastMessage.ttsPlayed = true;
-        return;
-      }
-
-      // Check for audio tasks
-      const { isAudioTask, taskText } = checkForAudioTask(lastMessage.content);
-      if (isAudioTask) {
-        setIsAudioTaskActive(true);
-        setAudioTaskText(taskText || 'Выполни задание голосом');
-      } else {
-        // Check for test questions
-        // Temporarily disable automatic test question conversion to prevent interference with normal chat
-        // const { isTestQuestion, questionData } = checkForTestQuestion(lastMessage.content);
-        // if (isTestQuestion && questionData) {
-        //   // Convert text test question to interactive test
-        //   console.log('🧪 Converting text test question to interactive test:', questionData);
-        //   setIsTestQuestionActive(true);
-        //   setTestQuestionData(questionData);
-
-        //   // Mark message as processed to prevent re-processing
-        //   lastMessage.ttsPlayed = true;
-        // }
-      }
-    }
-  }, [messages]);
-
-  // Function to handle lesson questions with context
-  const sendLessonQuestion = async () => {
-    if ((!inputMessage.trim() && uploadedFiles.length === 0) || isLoading || isProcessingFile) return;
-    const currentLessonContext = lessonContextManager.getCurrentContext();
-    if (!currentLessonContext) return;
-
-    // Stop any ongoing TTS and sounds when user sends a new message
-    if (OpenAITTS.isPlaying()) {
-      OpenAITTS.stop();
-      console.log('🛑 TTS stopped due to new user message');
-    }
-    stopContinuousSound();
-
-    let messageContent = inputMessage;
-    const fileContents: string[] = [];
-
-    // Process uploaded files first
-    if (uploadedFiles.length > 0) {
-      setIsProcessingFile(true);
-      try {
-        for (const file of uploadedFiles) {
-          const extractedText = await processFile(file);
-          fileContents.push(`\n\n--- Содержимое файла ${file.name} ---\n${extractedText}`);
-        }
-        messageContent += fileContents.join('\n');
-      } catch (error) {
-        console.error('Error processing files:', error);
-        messageContent += '\n\nОшибка при обработке файлов.';
-      } finally {
-        setIsProcessingFile(false);
-      }
-    }
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: messageContent,
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInputMessage('');
-    setUploadedFiles([]); // Clear uploaded files after sending
-    setIsLoading(true);
-
-    // Get lesson-aware system prompt from context manager
-    const lessonSystemPrompt = lessonContextManager.getSystemPrompt();
-    if (!lessonSystemPrompt) {
-      console.error('No lesson system prompt available');
-      return;
-    }
-
-    try {
-      const response = await fetch(`${window.location.origin}/api/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-                role: 'system',
-                content: lessonSystemPrompt,
-            },
-            ...messages.slice(-25).map(msg => ({
-                role: msg.role,
-                content: msg.content,
-            })),
-            {
-                role: 'user',
-                content: userMessage.content,
-            },
-          ],
-          max_tokens: 1500,
-          temperature: 0.7,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('OpenAI API Error:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorData
-        });
-
-        // Handle specific error codes
-        if (response.status === 401) {
-          throw new Error('Неверный API ключ OpenAI. Проверьте настройки.');
-        } else if (response.status === 429) {
-          throw new Error('Превышен лимит запросов к OpenAI. Попробуйте позже.');
-        } else if (response.status === 500) {
-          throw new Error('Ошибка сервера OpenAI. Попробуйте еще раз.');
-        } else {
-          throw new Error(`Ошибка OpenAI: ${response.status} ${response.statusText}`);
-        }
-      }
-
-      const data = await response.json();
-
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        console.error('Invalid OpenAI response:', data);
-        throw new Error('Некорректный ответ от OpenAI');
-      }
-
-      const aiContent = data.choices[0].message.content;
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: aiContent,
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error('Error sending lesson question:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'Извините, произошла ошибка при обработке вашего вопроса. Попробуйте еще раз или продолжайте урок.',
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-      // Focus back to input after response
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-        }
-      }, 100);
-    }
-  };
 
   const sendMessage = async () => {
-    if ((!inputMessage.trim() && uploadedFiles.length === 0) || isLoading || isProcessingFile) return;
+    if (!inputMessage.trim() || isLoading) return;
 
-    // Stop any ongoing TTS and sounds when user sends a new message
-    if (OpenAITTS.isPlaying()) {
-      OpenAITTS.stop();
-      console.log('🛑 TTS stopped due to new user message');
-    }
+    // Stop any ongoing sounds when user sends a new message
     stopContinuousSound();
-
-    let messageContent = inputMessage;
-    const fileContents: string[] = [];
-
-    // Process uploaded files first
-    if (uploadedFiles.length > 0) {
-      setIsProcessingFile(true);
-      try {
-        for (const file of uploadedFiles) {
-          const extractedText = await processFile(file);
-          fileContents.push(`\n\n--- Содержимое файла ${file.name} ---\n${extractedText}`);
-        }
-        messageContent += fileContents.join('\n');
-      } catch (error) {
-        console.error('Error processing files:', error);
-        messageContent += '\n\nОшибка при обработке файлов.';
-      } finally {
-        setIsProcessingFile(false);
-      }
-    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: messageContent,
+      content: inputMessage,
       timestamp: new Date(),
     };
 
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
-    setUploadedFiles([]); // Clear uploaded files after sending
     setIsLoading(true);
 
-    // Handle adaptive assessment mode
-    if (isInAdaptiveMode) {
-      if (assessmentState === 'collecting_grade') {
-        setClassGrade(messageContent);
-        const cluster = mapGradeToCluster(messageContent);
-        console.log('🎯 Text Input Grade Debug:', {
-          userInput: messageContent,
-          detectedCluster: cluster,
-          questionsAvailable: GRADE_INTRO_QUESTIONS[cluster]?.length || 0,
-          fallbackUsed: !GRADE_INTRO_QUESTIONS[cluster]
-        });
-        setSelectedGradeCluster(cluster);
-        const clusterQuestions = GRADE_INTRO_QUESTIONS[cluster] || GRADE_INTRO_QUESTIONS['grade1'];
-        setGradeQuestionBank(clusterQuestions);
-        setGradeQuestionIndex(0);
-        const totalQuestions = 2 + clusterQuestions.length;
-        setAssessmentState('collecting_topic');
-
-        // Show topic question as interactive test instead of chat message
-        const topicOptions = getTopicOptionsForCluster(cluster, selectedLanguage);
-        showTestQuestion(selectedLanguage === 'russian' ? 'Что последним проходил(а) по русскому?' : 'Что последним проходил(а) по английскому?', topicOptions, 1, totalQuestions);
-
-        setIsLoading(false);
-        return;
-      } else if (assessmentState === 'collecting_topic') {
-        setLastTopic(messageContent);
-
-        // Instead of starting adaptive assessment immediately, show next interview question
-        setAssessmentState('interview_questions');
-        setQuestionCount(1);
-
-        // Show next interview question as interactive test
-        showTestQuestion(
-          'Что значит "Hello" по-русски?',
-          ['привет', 'до свидания', 'спасибо'],
-          3,
-          8
-        );
-
-        setIsLoading(false);
-        return;
-      } else if (assessmentState === 'in_progress' && currentAssessmentQuestion) {
-        // User answered the question - resolve the promise
-        // Do not clear currentAssessmentQuestion or reset questionCount
-        if (window._assessmentResolver) {
-          window._assessmentResolver(messageContent);
-        }
-        // Return to allow adaptive loop to progress to the next question
-        return;
-      }
-    }
 
     // Создать базовый системный промпт для чата
     const systemPrompt = `Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Вы можете "разжевывать" сложные концепции, приводить примеры из реальной жизни, использовать аналогии и пошаговые объяснения.
@@ -2836,7 +1636,7 @@ const Chat = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'gpt-5.1',
           messages: [
             {
                 role: 'system',
@@ -2851,7 +1651,7 @@ const Chat = () => {
                 content: userMessage.content,
             },
           ],
-          max_tokens: 2000,
+          max_tokens: 8000,
           temperature: 0.7,
         }),
       });
@@ -2904,114 +1704,206 @@ const Chat = () => {
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
-      // Focus back to input after response
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-        }
-      }, 100);
     }
   };
 
   // Functions for lesson mode management
-  const startLessonMode = (lessonData: {
-    lessonId: string;
-    currentTopic: string;
-    lessonProgress?: string;
-  }) => {
-    lessonContextManager.startLesson(lessonData);
-    setIsLessonMode(true);
-    console.log('📚 Lesson mode activated:', lessonData);
-  };
-
-  const updateLessonBlock = (block: LessonBlock, blockIndex?: number, totalBlocks?: number) => {
-    lessonContextManager.updateCurrentBlock(block, blockIndex, totalBlocks);
-    console.log('📖 Lesson block updated:', block.title);
-  };
-
-  const endLessonMode = () => {
-    lessonContextManager.endLesson();
-    setIsLessonMode(false);
-    console.log('📚 Lesson mode deactivated');
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      if (isLessonMode && lessonContextManager.getCurrentContext()) {
-        sendLessonQuestion();
-      } else {
-        sendMessage();
-      }
-    }
-  };
-
-  if (!isAuthenticated) {
-    return null; // Will redirect to auth
-  }
 
 
-  // Animated Sphere Component
-  const AnimatedSphere = () => (
-    <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background flex items-center justify-center">
-      <div className="relative">
-        {/* Main sphere */}
-        <div className="w-32 h-32 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full animate-pulse shadow-2xl relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
-          <div className="absolute inset-2 bg-gradient-to-r from-purple-600 to-blue-500 rounded-full opacity-80 animate-ping"></div>
-          <div className="absolute inset-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full opacity-60 animate-bounce"></div>
-        </div>
 
-        {/* Orbiting elements */}
-        <div className="absolute inset-0 animate-spin" style={{ animationDuration: '3s' }}>
-          <div className="w-2 h-2 bg-yellow-400 rounded-full absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1"></div>
-          <div className="w-2 h-2 bg-green-400 rounded-full absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1"></div>
-        </div>
 
-        {/* Calm orbiting elements */}
-        <div className="absolute inset-0" style={{
-          animation: 'gentle-orbit 8s linear infinite'
-        }}>
-          <div className="w-2 h-2 bg-gradient-to-br from-blue-300 to-blue-400 rounded-full absolute opacity-70 shadow-lg"
-                 style={{
-                   left: '50%',
-                   top: '50%',
-                   transform: 'translate(-50%, -50%) translateX(-80px)',
-                   animation: 'float-glow 4s ease-in-out infinite alternate'
-                 }}>
-          </div>
-        </div>
 
-        <div className="absolute inset-0" style={{
-          animation: 'gentle-orbit 8s linear infinite reverse'
-        }}>
-          <div className="w-1.8 h-1.8 bg-gradient-to-br from-purple-300 to-pink-300 rounded-full absolute opacity-60 shadow-lg"
-                 style={{
-                   left: '50%',
-                   top: '50%',
-                   transform: 'translate(-50%, -50%) translateX(75px)',
-                   animation: 'float-glow 3.5s ease-in-out infinite alternate reverse'
-                 }}>
-          </div>
-        </div>
+  // Assessment Mode UI
+  if (isAssessmentMode) {
+    const currentQuestion = assessmentQuestions[currentQuestionIndex];
 
-        {/* Back to chat button */}
-        <Button
-          onClick={() => setShowSphere(false)}
-          className="absolute -bottom-16 left-1/2 transform -translate-x-1/2 mt-4"
-          variant="outline"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Вернуться к чату
-        </Button>
-      </div>
-    </div>
-  );
-
-  if (showSphere) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background flex items-center justify-center">
-        <AnimatedSphere />
+      <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
+        {/* Header */}
+        <Header />
+
+        {/* Assessment Container */}
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          {personalizedCourseData ? (
+            <div className="space-y-6 animate-fade-in-up">
+              <AssessmentResults 
+                data={personalizedCourseData}
+                onStartCourse={() => {
+                  // Сохранить данные курса и перейти к обучению
+                  localStorage.setItem('personalizedCourse', JSON.stringify(personalizedCourseData));
+                  window.location.href = '/courses';
+                }}
+              />
+            </div>
+          ) : !assessmentCompleted ? (
+            <div className="space-y-6">
+              {/* Progress Section */}
+              <Card className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border-blue-200 shadow-lg">
+                <CardContent className="p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-sm font-medium text-blue-800">
+                      Вопрос {currentQuestionIndex + 1} из {assessmentQuestions.length}
+                    </span>
+                    <span className="text-sm text-blue-600 font-semibold">
+                      {Math.round(((currentQuestionIndex + 1) / assessmentQuestions.length) * 100)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-white/60 rounded-full h-3 shadow-inner">
+                    <div
+                      className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500 ease-out shadow-sm"
+                      style={{ width: `${((currentQuestionIndex + 1) / assessmentQuestions.length) * 100}%` }}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Question Card */}
+              <Card className="bg-gradient-to-br from-white via-blue-50/30 to-indigo-50/30 border-2 border-blue-100 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <CardHeader className="text-center pb-2">
+                  <CardTitle className="text-2xl font-bold text-blue-900 leading-tight">
+                    {currentQuestion?.question}
+                  </CardTitle>
+                </CardHeader>
+
+                <CardContent className="pt-2">
+                  <div className="space-y-3">
+                    {currentQuestion?.options.map((option, index) => (
+                      <Button
+                        key={index}
+                        onClick={() => handleAssessmentAnswer(option)}
+                        variant="outline"
+                        className="w-full text-left justify-start h-14 text-base font-medium border-2 border-blue-200 hover:border-blue-400 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:shadow-md transition-all duration-200 group"
+                        size="lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-6 h-6 rounded-full border-2 border-blue-300 group-hover:border-blue-500 flex items-center justify-center text-xs font-bold text-blue-600 group-hover:text-blue-700 transition-colors">
+                            {String.fromCharCode(65 + index)}
+                          </div>
+                          <span className="group-hover:text-blue-800 transition-colors">{option}</span>
+                        </div>
+                      </Button>
+                    ))}
+                  </div>
+
+                  <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                    <p className="text-sm text-blue-700 text-center">
+                      <span className="font-medium">💡 Совет:</span> Выберите вариант, который считаете наиболее правильным
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Results Header */}
+              <Card className="bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 border-2 border-green-200 shadow-xl">
+                <CardContent className="p-8 text-center">
+                  <div className="mb-6">
+                    <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full shadow-lg mb-4">
+                      <span className="text-3xl">🎉</span>
+                    </div>
+                    <CardTitle className="text-3xl font-bold text-green-900 mb-2">
+                      Тестирование завершено!
+                    </CardTitle>
+                  </div>
+
+                  <div className="bg-white/70 rounded-2xl p-6 shadow-inner">
+                    <div className="text-7xl font-bold text-transparent bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text mb-3">
+                      {getAssessmentScore()}%
+                    </div>
+                    <p className="text-green-700 font-medium text-lg">
+                      {assessmentResults.filter(r => r.isCorrect).length} из {assessmentResults.length} правильных ответов
+                    </p>
+                    <div className="mt-4">
+                      {getAssessmentScore() >= 80 ? (
+                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                          <span>🌟</span> Отличный результат!
+                        </div>
+                      ) : getAssessmentScore() >= 60 ? (
+                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
+                          <span>👍</span> Хороший результат
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-800 rounded-full text-sm font-medium">
+                          <span>📚</span> Есть над чем работать
+                        </div>
+                      )}
+                    </div>
+
+                    <Button
+                      onClick={handleAssessmentCompleted}
+                      className="mt-6 h-12 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold text-base"
+                    >
+                      📊 Посмотреть результаты и рекомендации
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Detailed Results */}
+              <Card className="bg-gradient-to-br from-white via-green-50/20 to-emerald-50/20 border-2 border-green-100 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="text-xl text-green-900 flex items-center gap-2">
+                    <span>📋</span> Подробные результаты
+                  </CardTitle>
+                </CardHeader>
+
+                <CardContent className="space-y-4">
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {assessmentResults.map((result, index) => (
+                      <div key={index} className="flex items-start gap-4 p-4 rounded-xl bg-white/60 border border-green-100 hover:shadow-md transition-all duration-200">
+                        <div className="flex-shrink-0 mt-1">
+                          {result.isCorrect ? (
+                            <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center shadow-sm">
+                              <CheckCircle className="w-5 h-5 text-white" />
+                            </div>
+                          ) : (
+                            <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center shadow-sm">
+                              <X className="w-5 h-5 text-white" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 mb-2 leading-tight">{result.question}</p>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                            <span className="text-sm text-gray-600">Ваш ответ:</span>
+                            <span className={`font-medium ${result.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+                              {result.userAnswer}
+                            </span>
+                            {!result.isCorrect && (
+                              <>
+                                <span className="hidden sm:block text-gray-400">•</span>
+                                <span className="text-sm text-green-600">
+                                  Правильно: <span className="font-medium">{result.correctAnswer}</span>
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-green-200">
+                    <Button
+                      onClick={restartAssessment}
+                      variant="outline"
+                      className="flex-1 h-12 border-2 border-green-300 hover:border-green-400 hover:bg-green-50 transition-all duration-200"
+                    >
+                      🔄 Пройти заново
+                    </Button>
+                    <Button
+                      onClick={() => window.history.back()}
+                      className="flex-1 h-12 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 shadow-lg hover:shadow-xl transition-all duration-200"
+                    >
+                      ← Вернуться назад
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -3023,477 +1915,162 @@ const Chat = () => {
       <Header />
 
       {/* Chat Container */}
-      <div className="container mx-auto px-4 py-6 max-w-4xl">
-        <Card className="h-[calc(100vh-12rem)]">
+      <div className="container mx-auto px-4 py-6 max-w-6xl">
+        {/* Teacher Chat Interface */}
+        <div className="space-y-6">
 
-          <CardContent className="flex flex-col h-full">
-            {/* Test Question UI at the top */}
-            {isTestQuestionActive && testQuestionData && (
-              <div className="flex flex-col items-center justify-center space-y-4 py-6 border-b border-gray-200 mb-4">
-                <div className="text-center">
-                  <p className="text-sm text-emerald-700 mb-4">
-                    Вопрос {testQuestionData.currentQuestion}/{testQuestionData.totalQuestions}
-                  </p>
-                  <div className="bg-white rounded-lg p-6 border border-emerald-200 shadow-lg max-w-2xl">
-                    <p className="text-lg font-medium text-gray-800 mb-6">
-                      {testQuestionData.question}
-                    </p>
-                    <div className="grid grid-cols-1 gap-3 max-w-md mx-auto">
-                      {testQuestionData.options.map((option, index) => (
-                        <button
-                          key={index}
-                          onClick={() => handleTestAnswer(option)}
-                          disabled={isLoading}
-                          className="inline-flex items-center justify-start gap-3 whitespace-nowrap ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 h-12 bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-3 px-4 rounded-lg transition-all duration-200 hover:scale-105 hover:shadow-md border-2 border-emerald-400 text-sm w-full"
-                        >
-                          <span className="text-lg mr-3 font-bold min-w-[24px]">
-                            {String.fromCharCode(65 + index)}.
-                          </span>
-                          <span className="text-left">{option}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="mt-6">
-                    <button
-                      onClick={handleSkipTest}
-                      disabled={isLoading}
-                      className="inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border bg-background hover:text-accent-foreground rounded-md border-gray-300 hover:bg-gray-50 text-sm px-4 py-2"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-x w-4 h-4 mr-2">
-                        <path d="M18 6 6 18"></path>
-                        <path d="m6 6 12 12"></path>
-                      </svg>
-                      Пропустить тест
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Messages Area */}
-            <ScrollArea className="flex-1 pr-4 mb-4" ref={scrollAreaRef}>
-                <div className="space-y-4">
-
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
-                      {message.role === 'assistant' && (
-                        <Avatar className="w-8 h-8">
-                          <AvatarFallback className="bg-primary/10 text-primary">
-                            <Brain className="w-4 h-4" />
-                          </AvatarFallback>
-                        </Avatar>
-                      )}
-
-                      {/* Regular Message Bubble */}
-                      <div
-                        className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                          message.role === 'user'
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted'
-                        }`}
-                      >
-                        <div className="whitespace-pre-wrap">
-                          {formatMessageContent(message.content)}
-                        </div>
-                        <div className="flex items-center justify-between mt-2">
-                          <p className="text-xs opacity-70">
-                            {message.timestamp.toLocaleTimeString()}
-                          </p>
-                          {/* TTS Button - only for assistant messages and when auto-TTS is disabled */}
-                          {message.role === 'assistant' && isTTSAvailable() && !isTtsEnabled && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                if (!OpenAITTS.isPlaying()) {
-                                  speakTextBySentences(message.content, message.id);
-                                }
-                              }}
-                              className={`h-6 w-6 p-0 ${
-                                speakingMessageId === message.id
-                                  ? 'text-red-500 hover:text-red-600'
-                                  : 'text-muted-foreground hover:text-foreground'
-                              }`}
-                              title={speakingMessageId === message.id ? 'Остановить озвучивание' : 'Озвучить сообщение'}
-                            >
-                              {speakingMessageId === message.id ? (
-                                <VolumeX className="h-3 w-3" />
-                              ) : (
-                                <Volume2 className="h-3 w-3" />
-                              )}
-                            </Button>
-                          )}
-
-                          {/* Auto-TTS indicator - show when auto-TTS is enabled */}
-                          {message.role === 'assistant' && isTtsEnabled && (
-                            <div className="flex items-center text-green-600" title="Авто-озвучивание включено">
-                              <Volume2 className="h-3 w-3" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {message.role === 'user' && (
-                        <Avatar className="w-8 h-8">
-                          <AvatarFallback className="bg-accent text-accent-foreground">
-                            <User className="w-4 h-4" />
-                          </AvatarFallback>
-                        </Avatar>
-                      )}
-                    </div>
-                  ))}
-
-                  {isLoading && (
-                    <div className="flex gap-3 justify-start">
-                      <Avatar className="w-8 h-8">
-                        <AvatarFallback className="bg-primary/10 text-primary">
-                          <Brain className="w-4 h-4" />
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="bg-muted rounded-lg px-4 py-2">
-                        <div className="flex items-center gap-2">
-                          <div className="flex gap-1">
-                            <div className="w-2 h-2 bg-primary/50 rounded-full animate-bounce" />
-                            <div className="w-2 h-2 bg-primary/50 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                            <div className="w-2 h-2 bg-primary/50 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                          </div>
-                          <span className="text-sm text-muted-foreground">Учитель думает...</span>
-                        </div>
-                      </div>
-                    </div>
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              {/* Start Lesson Button (for lesson mode) */}
+              {isLessonMode && !lessonStarted && (
+                <Button
+                  size="lg"
+                  className="flex-1 sm:flex-none text-lg px-8 py-4 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-300 gap-3 font-semibold"
+                  onClick={generateLessonPlan}
+                  disabled={isGeneratingPlan}
+                >
+                  {isGeneratingPlan ? (
+                    <>Генерирую урок...</>
+                  ) : (
+                    <>🎓 Начать интерактивный урок</>
                   )}
-                </div>
-            </ScrollArea>
-
-            {/* Camera Interface */}
-            {isCameraActive && (
-                <div className="mb-4 p-4 border rounded-lg bg-muted/30">
-                  <div className="relative">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full max-h-64 bg-black rounded"
-                    />
-                    <canvas ref={canvasRef} className="hidden" />
-                    <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={capturePhoto}
-                        className="bg-primary hover:bg-primary/90"
-                      >
-                        📸 Сфотографировать
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={stopCamera}
-                        className="bg-black/50 text-white border-white/30 hover:bg-black/70"
-                      >
-                        ❌ Отмена
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-            )}
-
-            {/* Captured Image Preview */}
-            {capturedImage && (
-                <div className="mb-4 p-4 border rounded-lg bg-muted/30">
-                  <div className="text-center">
-                    <img
-                      src={capturedImage}
-                      alt="Сфотографированная задача"
-                      className="max-h-64 mx-auto rounded"
-                    />
-                    <div className="mt-3 flex gap-2 justify-center">
-                      <Button
-                        size="sm"
-                        onClick={sendCapturedPhoto}
-                        disabled={isLoading}
-                      >
-                        {isLoading ? "Анализирую..." : "🧠 Решить задачу"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={retakePhoto}
-                        disabled={isLoading}
-                      >
-                        🔄 Переснять
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-            )}
-
-            {/* Uploaded Files Display */}
-            {uploadedFiles.length > 0 && (
-                <div className="px-4 py-2 border-t bg-muted/30">
-                  <div className="flex flex-wrap gap-2">
-                    {uploadedFiles.map((file, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center gap-2 bg-background rounded-lg px-3 py-2 border text-sm"
-                      >
-                        {getFileIcon(file)}
-                        <span className="truncate max-w-32">{file.name}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeFile(index)}
-                          className="h-4 w-4 p-0 hover:bg-destructive/20"
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-            )}
-
-            {/* Learning Plan Confirmation or Results */}
-            {isLearningPlanActive && learningPlanText ? (
-              <div className="flex flex-col items-center justify-center space-y-4 py-8">
-                <div className="text-center max-w-4xl">
-                  <div className="bg-white rounded-lg p-8 border border-emerald-200 shadow-lg">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-                      Результаты тестирования
-                    </h2>
-                    <div className="whitespace-pre-line text-left text-gray-700 leading-relaxed">
-                      {learningPlanText}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : isLearningPlanActive && (
-                <div className="pt-4 border-t">
-                  <div className="flex flex-col gap-3">
-                    <p className="text-sm text-muted-foreground text-center">
-                      Готовы начать обучение по персонализированному плану?
-                    </p>
-                    <div className="flex gap-3 justify-center">
-                      <Button
-                        onClick={handleLearningPlanConfirm}
-                        size="lg"
-                        className="bg-green-600 hover:bg-green-700 text-white px-8"
-                        disabled={isLoading}
-                      >
-                        ✅ Да
-                      </Button>
-                      <Button
-                        onClick={handleRetakeAssessment}
-                        variant="outline"
-                        size="lg"
-                        className="px-8"
-                        disabled={isLoading}
-                      >
-                        🔄 Пройти тест еще раз
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-            )}
-
-            {/* Online Communication Status */}
-            {isOnlineCommunication && (
-              <div className="px-4 py-2 border-t bg-green-50 dark:bg-green-950/20">
-                <div className="flex items-center justify-between text-sm text-green-700 dark:text-green-300">
-                  <div className="flex items-center gap-2">
-                    {isListening ? (
-                      <>
-                        <Mic className="w-4 h-4 animate-pulse text-green-600" />
-                        <span>🎤 Учитель слушает - говорите ваш вопрос...</span>
-                      </>
-                    ) : isVoiceChatActive ? (
-                      <>
-                        <MessageCircle className="w-4 h-4 animate-pulse text-green-600" />
-                        <span>💬 Онлайн общение активно - учитель думает...</span>
-                      </>
-                    ) : (
-                      <>
-                        <MessageCircle className="w-4 h-4 text-green-600" />
-                        <span>🎯 Онлайн общение готово - нажмите для начала</span>
-                      </>
-                    )}
-                  </div>
-                  <Button
-                    onClick={() => {
-                      setIsOnlineCommunication(false);
-                      setIsVoiceChatActive(false);
-                      setIsListening(false);
-                      if (recognitionRef.current) {
-                        recognitionRef.current.stop();
-                      }
-                    }}
-                    variant="outline"
-                    size="sm"
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                  >
-                    Завершить
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Input Area - show only when assessment is not started */}
-            {!isLearningPlanActive && assessmentState === 'initial' ? (
-                <div className="flex flex-wrap gap-2 pt-4 border-t">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*,.pdf,.doc,.docx"
-                    multiple
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isLoading}
-                    title="Загрузить файл (изображение, PDF, DOCX)"
-                  >
-                    <Upload className="w-4 h-4" />
-                  </Button>
-
-                {/* Camera Button */}
-                <Button
-                  variant={isCameraActive ? "destructive" : "outline"}
-                  size="icon"
-                  onClick={isCameraActive ? stopCamera : startCamera}
-                  disabled={isLoading}
-                  title={isCameraActive ? "Закрыть камеру" : "Сфотографировать задачу"}
-                  className={isCameraActive ? "animate-pulse" : ""}
-                >
-                  <Camera className="w-4 h-4" />
                 </Button>
+              )}
 
-                {/* Online Communication Button */}
+              {/* Call Teacher Button (for lesson mode) */}
+              {isLessonMode && (
                 <Button
-                  variant={isOnlineCommunication ? "destructive" : "outline"}
-                  size="icon"
-                  onClick={() => {
-                    if (isOnlineCommunication) {
-                      // Stop online communication
-                      setIsOnlineCommunication(false);
-                      setIsVoiceChatActive(false);
-                      setIsListening(false);
-                      if (recognitionRef.current) {
-                        recognitionRef.current.stop();
-                      }
-                    } else {
-                      // Start online communication
-                      setIsOnlineCommunication(true);
-                      setShowChat(true); // Show chat interface
-                      // Auto-start voice chat
-                      setTimeout(() => {
-                        startVoiceChat();
-                      }, 500);
-                    }
-                  }}
-                  disabled={isLoading}
-                  title={isOnlineCommunication ? "Завершить онлайн общение" : "Начать онлайн общение с учителем"}
-                  className={isOnlineCommunication ? "animate-pulse" : ""}
+                  size="lg"
+                  variant="outline"
+                  className="flex-1 sm:flex-none text-lg px-8 py-4 border-2 border-primary/30 hover:border-primary hover:bg-primary/5 transition-all duration-300 gap-3 font-semibold"
+                  onClick={() => setShowVideoCall(true)}
                 >
-                  <MessageCircle className="w-4 h-4" />
+                  <Phone className="w-5 h-5 text-primary" />
+                  📞 Звонок учителю
                 </Button>
+              )}
 
-                {isAudioTaskActive ? (
-                      <div className="w-full flex justify-start">
-                        <div className="w-full max-w-xl bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg p-4 shadow-sm">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                                <Mic className="w-4 h-4 text-blue-600" />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="font-medium text-blue-900 text-sm">🎯 Аудио-задание</p>
-                                <p className="text-xs text-blue-700 truncate">{audioTaskText}</p>
-                              </div>
-                            </div>
-                            <div className="flex gap-2 flex-shrink-0">
-                              <Button
-                                onClick={startAudioTaskRecording}
-                                disabled={isRecordingAudioTask || isLoading}
-                                className="bg-red-500 hover:bg-red-600 text-white animate-pulse text-sm px-3 py-2 h-9"
-                                size="sm"
-                              >
-                              {isRecordingAudioTask ? (
-                                <>
-                                  <Mic className="w-4 h-4 mr-1 animate-pulse" />
-                                  Слушаю...
-                                </>
-                              ) : (
-                                <>
-                                  <Mic className="w-4 h-4 mr-1" />
-                                  🎙️ Выполнить
-                                </>
-                              )}
-                              </Button>
-                              <Button
-                                onClick={() => setIsAudioTaskActive(false)}
-                                disabled={isRecordingAudioTask || isLoading}
-                                variant="outline"
-                                size="sm"
-                                className="border-gray-300 hover:bg-gray-50 text-xs px-3 py-1 h-7"
-                              >
-                                <X className="w-3 h-3 mr-1" />
-                                Отмена
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <Input
-                          ref={inputRef}
-                          value={inputMessage}
-                          onChange={(e) => setInputMessage(e.target.value)}
-                          onKeyPress={handleKeyPress}
-                          placeholder={
-                            isLessonMode && lessonContextManager.getCurrentContext()
-                              ? `Задайте вопрос по теме "${lessonContextManager.getCurrentContext()?.currentTopic}"...`
-                              : "Задайте вопрос по любой учебной теме..."
-                          }
-                          disabled={isLoading || isProcessingFile}
-                          className="flex-1"
-                        />
-
-                        <Button
-                          onClick={() => {
-                            if (inputMessage.trim()) {
-                              // Если есть текст - отправить сообщение
-                              sendMessage();
-                            } else {
-                              // Если текста нет - начать голосовой ввод
-                              startVoiceChat();
-                            }
-                          }}
-                          disabled={(!inputMessage.trim() && uploadedFiles.length === 0) || isLoading || isProcessingFile}
-                          size="icon"
-                        >
-                          {isProcessingFile ? (
-                            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                          ) : inputMessage.trim() ? (
-                            <Send className="w-4 h-4" />
-                          ) : (
-                            <Mic className="w-4 h-4" />
-                          )}
-                        </Button>
-                      </>
-                    )}
+              {/* Error message */}
+              {generationError && (
+                <div className="mt-4 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <div className="w-5 h-5 text-red-500 mt-0.5">⚠️</div>
+                    <div>
+                      <h4 className="text-sm font-medium text-red-800 dark:text-red-200 mb-1">
+                        Ошибка генерации плана урока
+                      </h4>
+                      <p className="text-sm text-red-700 dark:text-red-300">
+                        {generationError}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3 border-red-300 text-red-700 hover:bg-red-50"
+                        onClick={() => setGenerationError('')}
+                      >
+                        Закрыть
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
+
+            {/* Lesson Display with Formatted Content */}
+            {isLessonMode && lessonStarted && lessonPlan && lessonContent && (
+              <LessonDisplay
+                stepTitle={lessonPlan.steps[currentLessonStep]?.title || 'Урок'}
+                stepNumber={currentSectionIndex + 1}
+                totalSteps={currentLessonSections.length}
+                content={lessonContent}
+                duration={lessonPlan.steps[currentLessonStep]?.duration || '5'}
+                onNext={waitingForAnswer ? undefined : nextSection}
+                isGenerating={isGeneratingContent}
+                currentTask={currentSectionTask}
+                waitingForAnswer={waitingForAnswer}
+                onAnswer={handleLessonTaskAnswer}
+              />
+            )}
+
+            {/* Lesson Progress Header */}
+            {isLessonMode && personalizedCourseData && currentLesson && (
+              <Card className="border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-accent/5">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <BookOpen className="w-5 h-5 text-primary" />
+                      <div>
+                        <p className="font-medium text-foreground">
+                          Текущий урок: {currentLesson.title}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {currentLesson.topic}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-muted-foreground">Прогресс</p>
+                      <p className="font-medium text-primary">
+                        Урок {currentLesson.number || 1}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Thinking message display during plan generation */}
+            {isLessonMode && isGeneratingPlan && (
+              <div className="mb-6">
+                <div className="bg-muted/50 border border-border rounded-lg p-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                    <span className="font-medium text-foreground">ИИ анализирует</span>
+                  </div>
+                  <div className="text-sm text-muted-foreground ml-8">
+                    {generationStep}{thinkingDots}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Chat Container - hidden in lesson mode */}
+            {!isLessonMode && (
+            <ChatContainer
+                ref={chatContainerRef}
+              initialSystemPrompt={`Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Вы можете "разжевывать" сложные концепции, приводить примеры из реальной жизни, использовать аналогии и пошаговые объяснения.
+
+Особенности вашего стиля:
+- Объясняйте сложное простыми словами
+- Используйте примеры и аналогии
+- Разбивайте информацию на логические блоки
+- Задавайте наводящие вопросы для лучшего понимания
+- Будьте терпеливы и поддерживающи
+- Адаптируйте объяснения под уровень ученика
+- Поощряйте самостоятельное мышление`}
+              maxMessages={100}
+              onChatStart={() => console.log('Chat started')}
+              onChatEnd={() => console.log('Chat ended')}
+            />
+            )}
+          </div>
+
+          {/* Voice Teacher Chat */}
+          {showVideoCall && (
+            <div className="mt-8" data-video-call>
+              <VoiceTeacherChat
+                lessonTitle={currentLesson?.title || 'Урок'}
+                lessonTopic={currentLesson?.topic || 'Тема'}
+                lessonAspects={currentLesson?.aspects || currentLesson?.description || 'Материал урока'}
+                onComplete={() => {
+                  setShowVideoCall(false);
+                  setLessonStarted(false);
+                }}
+                onClose={() => setShowVideoCall(false)}
+              />
+            </div>
+          )}
+        </div>
     </div>
   );
 };

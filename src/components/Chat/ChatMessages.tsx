@@ -1,22 +1,22 @@
 /**
- * ChatMessages - Display chat messages with optional TTS
+ * ChatMessages - Display chat messages
  */
 
 import React from 'react';
-import { Message, Volume2, VolumeX, Trash2 } from 'lucide-react';
+import { Message, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { ChatMessagesProps } from './types';
 import { logger } from '@/utils/logger';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 export const ChatMessages = React.memo(
   ({
     messages,
     isLoading = false,
-    onMessageSpeak,
-    isSpeakingId = null,
     onMessageRemove,
+    streamingMessage,
   }: ChatMessagesProps) => {
     const scrollAreaRef = React.useRef<HTMLDivElement>(null);
 
@@ -30,14 +30,6 @@ export const ChatMessages = React.memo(
       }
     }, [messages]);
 
-    const handleSpeak = async (message: Message) => {
-      try {
-        logger.debug('Speaking message', { id: message.id });
-        await onMessageSpeak?.(message);
-      } catch (error) {
-        logger.error('Failed to speak message', error as Error);
-      }
-    };
 
     const handleRemove = (id: string) => {
       logger.debug('Removing message', { id });
@@ -52,25 +44,25 @@ export const ChatMessages = React.memo(
               <p>Нет сообщений. Начните разговор!</p>
             </div>
           ) : (
-            messages.map(message => (
+            <>
+              {messages.map(message => (
               <div
                 key={message.id}
-                className={`flex gap-3 ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                className="flex flex-col gap-2"
               >
-                <Avatar className="h-8 w-8 flex-shrink-0">
-                  <AvatarFallback>
-                    {message.role === 'user' ? '👤' : '🤖'}
-                  </AvatarFallback>
-                </Avatar>
 
                 <div
-                  className={`flex max-w-[70%] flex-col gap-2 rounded-lg p-3 ${
+                  className={`rounded-lg p-3 ${
                     message.role === 'user'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-foreground'
                   }`}
                 >
+                    {message.role === 'user' ? (
                   <p className="break-words text-sm">{message.content}</p>
+                    ) : (
+                      <MarkdownRenderer content={message.content} />
+                    )}
 
                   <div className="flex items-center gap-2 text-xs opacity-70">
                     <span>
@@ -84,22 +76,6 @@ export const ChatMessages = React.memo(
                   {/* Action buttons for assistant messages */}
                   {message.role === 'assistant' && (
                     <div className="mt-2 flex gap-2">
-                      {onMessageSpeak && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSpeak(message)}
-                          disabled={isSpeakingId !== null && isSpeakingId !== message.id}
-                          className="h-7 w-7 p-0"
-                          title="Произнести вслух"
-                        >
-                          {isSpeakingId === message.id ? (
-                            <VolumeX className="h-4 w-4" />
-                          ) : (
-                            <Volume2 className="h-4 w-4" />
-                          )}
-                        </Button>
-                      )}
 
                       {onMessageRemove && (
                         <Button
@@ -116,7 +92,26 @@ export const ChatMessages = React.memo(
                   )}
                 </div>
               </div>
-            ))
+              ))}
+
+              {/* Streaming message */}
+              {streamingMessage && (
+                <div className="flex flex-col gap-2">
+                  <div className="rounded-lg bg-muted p-3">
+                    <MarkdownRenderer content={streamingMessage.content} isStreaming={true} />
+                    <div className="flex items-center gap-2 text-xs opacity-70 mt-2">
+                      <span>
+                        {streamingMessage.timestamp.toLocaleTimeString('ru-RU', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                      <span className="text-blue-500">Печатает...</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {/* Loading indicator */}
@@ -127,9 +122,9 @@ export const ChatMessages = React.memo(
               </Avatar>
               <div className="rounded-lg bg-muted p-3">
                 <div className="flex gap-1">
-                  <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
-                  <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" style={{ animationDelay: '0.1s' }} />
-                  <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" style={{ animationDelay: '0.2s' }} />
+                    <div className="h-2 w-2 rounded-full bg-muted-foreground" />
+                    <div className="h-2 w-2 rounded-full bg-muted-foreground" />
+                    <div className="h-2 w-2 rounded-full bg-muted-foreground" />
                 </div>
               </div>
             </div>
@@ -142,8 +137,7 @@ export const ChatMessages = React.memo(
     // Custom comparison for memoization
     return (
       prevProps.messages === nextProps.messages &&
-      prevProps.isLoading === nextProps.isLoading &&
-      prevProps.isSpeakingId === nextProps.isSpeakingId
+      prevProps.isLoading === nextProps.isLoading
     );
   }
 );

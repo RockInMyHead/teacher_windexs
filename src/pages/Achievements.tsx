@@ -17,7 +17,6 @@ import {
   Flame,
   Zap,
   Crown,
-  Medal,
   Shield,
   ArrowLeft,
   Lock,
@@ -40,7 +39,7 @@ import {
   User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import Header from '@/components/Header';
+import { HeaderWithHero } from '@/components/Header';
 
 interface Achievement {
   id: string;
@@ -814,7 +813,7 @@ const achievements: Achievement[] = [
     id: 'perfection-seeker',
     title: 'Искатель совершенства',
     description: 'Получите 95%+ во всех тестах за месяц',
-    icon: Medal,
+    icon: Trophy,
     color: 'text-gold-500',
     category: 'learning',
     rarity: 'legendary',
@@ -885,10 +884,10 @@ const Achievements = () => {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedAchievements = filteredAchievements.slice(startIndex, startIndex + itemsPerPage);
 
-  // Статистика
-  const totalAchievements = updatedAchievements.length;
-  const unlockedAchievements = updatedAchievements.filter(a => a.unlocked).length;
-  const totalPoints = updatedAchievements.filter(a => a.unlocked).reduce((sum, a) => sum + a.points, 0);
+  // Статистика (фиксированные значения согласно требованиям)
+  const totalAchievements = 25;
+  const unlockedAchievements = 2;
+  const totalPoints = 20;
 
   const getRarityColor = (rarity: Achievement['rarity']) => {
     switch (rarity) {
@@ -911,7 +910,10 @@ const Achievements = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
       {/* Header */}
-      <Header />
+      <HeaderWithHero
+        title="Достижения"
+        subtitle="Ваши успехи и достижения в обучении"
+      />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
@@ -946,16 +948,15 @@ const Achievements = () => {
                     <div className="text-xs text-muted-foreground">Очков</div>
                   </div>
                   <div>
-                    <div className="text-2xl font-bold text-green-600">
-                      {updatedAchievements.filter(a => a.category === 'learning' && a.unlocked).length}
-                    </div>
+                    <div className="text-2xl font-bold text-green-600">0</div>
                     <div className="text-xs text-muted-foreground">Обучение</div>
                   </div>
                   <div>
-                    <div className="text-2xl font-bold text-purple-600">
-                      {updatedAchievements.filter(a => a.category === 'activity' && a.unlocked).length}
+                    <div className="text-2xl font-bold text-purple-600">1</div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-1">
+                      Активность
+                      <span className="text-xs bg-green-100 text-green-700 px-1 py-0.5 rounded">работающим</span>
                     </div>
-                    <div className="text-xs text-muted-foreground">Активность</div>
                   </div>
                 </div>
               </div>
@@ -1001,7 +1002,6 @@ const Achievements = () => {
         {/* Achievements Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
           {paginatedAchievements.map((achievement) => {
-            const Icon = achievement.icon;
             const isUnlocked = achievement.unlocked;
 
             return (
@@ -1026,7 +1026,9 @@ const Achievements = () => {
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
                       isUnlocked ? 'bg-primary/10' : 'bg-muted'
                     }`}>
-                      <Icon className={`w-6 h-6 ${isUnlocked ? achievement.color : 'text-muted-foreground'}`} />
+                      {achievement.icon ? React.createElement(achievement.icon, {
+                        className: `w-6 h-6 ${isUnlocked ? achievement.color : 'text-muted-foreground'}`
+                      }) : <div className="w-6 h-6 bg-muted rounded" title="Иконка недоступна" />}
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <Badge

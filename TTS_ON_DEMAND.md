@@ -26,7 +26,7 @@
 
 ### Шаг 1: Открыть урок
 ```
-http://localhost:5173/lesson/1/0/0?grade=1
+https://teacher.windexs.ru/lesson/1/0/0?grade=1
 ```
 
 ### Шаг 2: Видите первое сообщение

@@ -3,7 +3,23 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Brain, Play, MessageCircle, Award, User, Languages, BookOpen } from 'lucide-react';
+import {
+  Brain,
+  Play,
+  MessageCircle,
+  Award,
+  User,
+  BookOpen,
+  Target,
+  Zap,
+  CheckCircle,
+  Star,
+  ArrowRight,
+  Sparkles,
+  GraduationCap,
+  Heart,
+  Clock
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Header from '@/components/Header';
 
@@ -11,113 +27,242 @@ const Index = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  const features = [
+    {
+      icon: Brain,
+      title: 'AI-персонализация',
+      description: 'Интеллектуальный анализ вашего уровня знаний и создание индивидуальной программы обучения'
+    },
+    {
+      icon: MessageCircle,
+      title: 'Интерактивные уроки',
+      description: 'Общение с преподавателями в реальном времени, адаптивные задания и мгновенная обратная связь'
+    },
+    {
+      icon: Target,
+      title: 'Персонализированные цели',
+      description: 'Установка достижимых целей и отслеживание прогресса с подробной аналитикой'
+    },
+    {
+      icon: Award,
+      title: 'Достижения и награды',
+      description: 'Мотивационная система с ачивками, значками и рейтингами среди студентов'
+    },
+    {
+      icon: BookOpen,
+      title: 'Библиотека курсов',
+      description: 'Более 1000 уроков по различным предметам: математика, языки, история, география и др.'
+    },
+    {
+      icon: Clock,
+      title: 'Гибкое расписание',
+      description: 'Изучайте в удобное время, получайте напоминания и поддерживайте регулярность обучения'
+    }
+  ];
+
+  const stats = [
+    { number: '10,000+', label: 'Студентов' },
+    { number: '95%', label: 'Успешность' },
+    { number: '24/7', label: 'Поддержка' }
+  ];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
       {/* Header */}
       <Header />
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        {/* Personalized Course */}
-        <div className="mb-12">
-          <Card className="bg-gradient-to-r from-primary/5 to-accent/5 border-primary/20">
-            <CardContent className="p-8">
-              <div className="grid md:grid-cols-2 gap-8 items-center">
-                {/* Left side - Course info */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <Languages className="w-8 h-8 text-primary" />
-                    <h2 className="text-3xl font-bold">Русский язык</h2>
-                  </div>
-                  <div className="flex items-center gap-4 text-sm">
-                    <Badge variant="secondary" className="text-base px-3 py-1">5</Badge>
-                    <span className="text-muted-foreground">Персонализированное обучение для носителей</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-primary rounded-full"></div>
-                      <span>Персональный</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-accent rounded-full"></div>
-                      <span>Индивидуально</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                      <span>Адаптивно</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                      <span>5 студентов</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-green-600 border-green-600">
-                      Бесплатно
-                    </Badge>
-                  </div>
-                </div>
+      {/* Hero Section */}
+      <section className="relative overflow-hidden">
+        <div className="container mx-auto px-4 py-16 md:py-24">
+          <div className="text-center max-w-4xl mx-auto">
+            {/* Logo */}
+            <div className="inline-flex items-center gap-3 mb-8">
+              <div className="w-16 h-16 bg-gradient-to-r from-primary to-accent rounded-2xl flex items-center justify-center shadow-lg">
+                <Brain className="w-8 h-8 text-white" />
+              </div>
+              <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                Windexs-Учитель
+              </h1>
+            </div>
 
-                {/* Right side - CTA */}
-                <div className="text-center space-y-6">
-                  <div>
-                    <h3 className="text-2xl font-bold mb-2">Готовы начать обучение?</h3>
-                    <p className="text-muted-foreground">
-                      Начните персонализированное обучение с AI-учителем, который адаптируется под ваш уровень и цели
-                    </p>
-                  </div>
-                  <div className="space-y-3">
-                    <Button
-                      size="lg"
-                      className="w-full"
-                      onClick={() => navigate('/chat')}
-                    >
-                      <MessageCircle className="w-5 h-5 mr-2" />
-                      Чат с AI-учителем
-                    </Button>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div className="flex items-center gap-2 justify-center p-3 bg-card rounded-lg">
-                        <div className="w-2 h-2 bg-primary rounded-full"></div>
-                        <span>Гибкое расписание</span>
-                      </div>
-                      <div className="flex items-center gap-2 justify-center p-3 bg-card rounded-lg">
-                        <div className="w-2 h-2 bg-accent rounded-full"></div>
-                        <span>Персонализация</span>
-                      </div>
-                    </div>
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => navigate('/available-courses')}
-                    >
-                      <Play className="w-5 h-5 mr-2" />
-                      Начать обучение
-                    </Button>
-                  </div>
+            {/* Main Heading */}
+            <h2 className="text-3xl md:text-5xl font-bold mb-6 leading-tight">
+              Персонализированное обучение
+              <br />
+              <span className="text-primary">с искусственным интеллектом</span>
+            </h2>
+
+            {/* Subtitle */}
+            <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed">
+              Инновационная платформа для эффективного обучения. AI анализирует ваш уровень знаний,
+              создает индивидуальную программу и помогает достичь целей быстрее традиционных методов.
+            </p>
+
+            {/* CTA Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
+              <Button
+                size="lg"
+                className="text-lg px-8 py-4 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-300 gap-3"
+                onClick={() => navigate('/grade-selection')}
+              >
+                <Play className="w-5 h-5" />
+                Начать обучение
+                <ArrowRight className="w-5 h-5" />
+              </Button>
+
+              {user && (
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="text-lg px-8 py-4 border-2 hover:bg-primary/5 hover:text-black gap-3"
+                  onClick={() => navigate('/courses')}
+                >
+                  <BookOpen className="w-5 h-5" />
+                  Мои курсы
+                </Button>
+              )}
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      {/* Stats Section */}
+      <section className="py-16 bg-card/50">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-wrap justify-center gap-8 md:gap-12">
+            {stats.map((stat, index) => (
+              <div key={index} className="text-center min-w-[120px]">
+                <div className="text-3xl md:text-4xl font-bold text-primary mb-2">
+                  {stat.number}
                 </div>
+                <div className="text-sm md:text-base text-muted-foreground">
+                  {stat.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="py-20">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <h3 className="text-3xl md:text-4xl font-bold mb-4">
+              Почему выбирают Windexs-Учитель?
+            </h3>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Наша платформа сочетает передовые технологии с проверенными методиками обучения
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {features.map((feature, index) => {
+              const Icon = feature.icon;
+              return (
+                <Card key={index} className="group hover:shadow-xl hover:shadow-primary/10 transition-all duration-300 border-2 hover:border-primary/50">
+                  <CardHeader className="pb-4">
+                    <div className="w-12 h-12 bg-gradient-to-r from-primary/10 to-accent/10 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                      <Icon className="w-6 h-6 text-primary" />
+                    </div>
+                    <CardTitle className="text-xl mb-2">{feature.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CardDescription className="text-base leading-relaxed">
+                      {feature.description}
+                    </CardDescription>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works Section */}
+      <section className="py-20 bg-card/30">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <h3 className="text-3xl md:text-4xl font-bold mb-4">
+              Как это работает?
+            </h3>
+            <p className="text-lg text-muted-foreground">
+              Простые шаги к эффективному обучению
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-white font-bold text-xl">
+                1
+              </div>
+              <h4 className="text-xl font-semibold mb-3">Выберите предмет</h4>
+              <p className="text-muted-foreground">
+                Выберите интересующий вас предмет из нашей обширной библиотеки курсов
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-white font-bold text-xl">
+                2
+              </div>
+              <h4 className="text-xl font-semibold mb-3">Пройдите тест</h4>
+              <p className="text-muted-foreground">
+                AI оценит ваш текущий уровень знаний и определит сильные и слабые стороны
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-white font-bold text-xl">
+                3
+              </div>
+              <h4 className="text-xl font-semibold mb-3">Начните обучение</h4>
+              <p className="text-muted-foreground">
+                Получите персонализированную программу и начните эффективное обучение с AI-поддержкой
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-20">
+        <div className="container mx-auto px-4">
+          <Card className="max-w-4xl mx-auto bg-gradient-to-r from-primary/5 to-accent/5 border-2 border-primary/20">
+            <CardContent className="p-8 md:p-12 text-center">
+              <div className="inline-flex items-center gap-2 mb-6">
+                <Sparkles className="w-6 h-6 text-primary" />
+                <span className="text-sm font-medium text-primary uppercase tracking-wide">
+                  Начните бесплатно
+                </span>
+              </div>
+
+              <h3 className="text-3xl md:text-4xl font-bold mb-4">
+                Готовы изменить подход к обучению?
+              </h3>
+
+              <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
+                Присоединяйтесь к тысячам студентов, которые уже улучшили свои результаты
+                благодаря персонализированному подходу Windexs-Учителя
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Button
+                  size="lg"
+                  className="text-lg px-8 py-4 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-300 gap-3"
+                  onClick={() => navigate('/available-courses')}
+                >
+                  <GraduationCap className="w-5 h-5" />
+                  Выбрать курс
+                  <ArrowRight className="w-5 h-5" />
+                </Button>
               </div>
             </CardContent>
           </Card>
         </div>
+      </section>
 
-        {/* Mobile Online Lesson CTA */}
-        <div className="md:hidden">
-          <Card className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/20 dark:to-blue-950/20 border-green-200 dark:border-green-800">
-            <CardContent className="p-6 text-center">
-              <h3 className="text-xl font-bold mb-2">Online-урок</h3>
-              <p className="text-muted-foreground mb-4">Адаптивный для мобильной версии</p>
-              <Button
-                className="w-full bg-green-600 hover:bg-green-700"
-                onClick={() => navigate('/chat')}
-              >
-                <Play className="w-4 h-4 mr-2" />
-                Начать онлайн урок
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </main>
     </div>
   );
 };

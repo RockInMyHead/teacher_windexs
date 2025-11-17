@@ -7,6 +7,17 @@
 
 require('dotenv').config(); // Загружаем переменные окружения
 
+// Обработчик необработанных ошибок и промисов
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  // Не завершаем процесс на необработанные промисы
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  // Не завершаем процесс на необработанные исключения
+});
+
 const express = require('express');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -48,6 +59,7 @@ buildProcess.on('close', (code) => {
 
 function startSinglePortServer() {
   console.log('🚀 Запуск единого сервера на порту 1031...');
+  console.log('🔍 DEBUG: startSinglePortServer called');
 
   // Инициализируем базу данных
   const Database = require('better-sqlite3');
@@ -166,12 +178,27 @@ function startSinglePortServer() {
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       );
 
+      CREATE TABLE IF NOT EXISTS learning_plans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        course_id INTEGER NOT NULL,
+        subject_name TEXT NOT NULL,
+        grade INTEGER NOT NULL,
+        plan_data TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        UNIQUE(user_id, course_id)
+      );
+
       CREATE INDEX IF NOT EXISTS idx_user_progress_user_id ON user_progress(user_id);
       CREATE INDEX IF NOT EXISTS idx_user_progress_lesson_id ON user_progress(lesson_id);
       CREATE INDEX IF NOT EXISTS idx_lessons_course_id ON lessons(course_id);
       CREATE INDEX IF NOT EXISTS idx_assessments_user_id ON assessments(user_id);
       CREATE INDEX IF NOT EXISTS idx_achievements_user_id ON achievements(user_id);
       CREATE INDEX IF NOT EXISTS idx_assessment_questions_assessment_id ON assessment_questions(assessment_id);
+      CREATE INDEX IF NOT EXISTS idx_learning_plans_user_id ON learning_plans(user_id);
+      CREATE INDEX IF NOT EXISTS idx_learning_plans_course_id ON learning_plans(course_id);
     `);
     console.log('✅ Database tables initialized');
   } catch (error) {
@@ -181,13 +208,18 @@ function startSinglePortServer() {
   // Создаем новый Express app
   const app = express();
 
-  // Настраиваем статические файлы frontend
-  app.use(express.static(path.join(__dirname, 'dist')));
-
-  // Настраиваем middleware
+  // Требируем модули ПЕРЕД использованием
   const cors = require('cors');
   const axios = require('axios');
   const https = require('https');
+
+  // ВАЖНО: middleware ДОЛЖЕН быть ПЕРЕД статическими файлами и API маршрутами!
+  app.use(cors());
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+  // ⚠️ ВАЖНО: API маршруты ДОЛЖНЫ быть ПЕРЕД static файлами!
+  // Иначе static middleware будет обрабатывать /api/* как файлы
 
   // Проверяем что прокси настроен (обязательно)
   const PROXY_URL = process.env.PROXY_URL;
@@ -243,6 +275,8 @@ function startSinglePortServer() {
     const headers = options.headers || {};
     const data = options.data;
 
+    console.log('🔧 curlWithProxy called for URL:', url, 'method:', method);
+
     let curlCommand = `curl -s -X ${method}`;
 
     // Add proxy only if configured
@@ -257,24 +291,40 @@ function startSinglePortServer() {
 
     // Add data for POST requests
     if (data && (method === 'POST' || method === 'PUT')) {
-      curlCommand += ` -d '${JSON.stringify(data)}'`;
+      // Escape single quotes in JSON string
+      const jsonData = JSON.stringify(data).replace(/'/g, "'\\''");
+      curlCommand += ` -d '${jsonData}'`;
     }
 
     // Add URL
     curlCommand += ` "${url}"`;
 
     console.log('🔧 Executing curl command:', curlCommand.replace(/(-H "Authorization: Bearer [^"]+)"/, '$1 [HIDDEN]"'));
-    // Execute curl command
-    const { stdout, stderr } = await execAsync(curlCommand);
-    if (stderr) {
-      console.error('Curl stderr:', stderr);
+    
+    try {
+      // Execute curl command
+      const { stdout, stderr } = await execAsync(curlCommand);
+      
+      if (stderr && !stderr.includes('Warning')) {
+        console.error('⚠️ Curl stderr:', stderr);
+      }
+      
+      if (!stdout || stdout.trim().length === 0) {
+        throw new Error('Empty response from curl command');
+      }
+      
+      return stdout;
+    } catch (error) {
+      console.error('❌ curlWithProxy error:', error.message);
+      if (error.stdout) {
+        console.error('❌ curl stdout:', error.stdout.substring(0, 500));
+      }
+      if (error.stderr) {
+        console.error('❌ curl stderr:', error.stderr);
+      }
+      throw new Error(`curl command failed: ${error.message}`);
     }
-    return stdout;
   }
-
-  // Middleware
-  app.use(cors());
-  app.use(express.json({ limit: '10mb' }));
 
   // Health check
   app.get('/health', (req, res) => {
@@ -372,24 +422,16 @@ function startSinglePortServer() {
 
   // Test proxy connection
   app.get('/api/test-proxy', async (req, res) => {
-    console.log('🧪 Тестирование прокси соединения через axiosWithProxy...');
-    console.log('🔍 Прокси:', `${proxyConfig.host}:${proxyConfig.port}`);
+    console.log('🧪 Тестирование прокси соединения...');
+
+    if (!PROXY_URL) {
+      return res.status(400).json({
+        success: false,
+        message: 'Proxy not configured'
+      });
+    }
 
     try {
-      // Сначала тест БЕЗ прокси
-      console.log('🔍 Тестируем прямое соединение...');
-      try {
-        const directResponse = await axios.get('https://httpbin.org/ip', {
-          timeout: 5000,
-          proxy: false
-        });
-        console.log('✅ Прямое соединение: IP =', directResponse.data.origin);
-      } catch (directError) {
-        console.log('❌ Прямое соединение не работает:', directError.message);
-      }
-
-      // Теперь тест прокси
-      console.log('🔍 Тестируем прокси соединение через curl...');
       const curlOutput = await curlWithProxy('https://httpbin.org/ip');
       const response = JSON.parse(curlOutput);
 
@@ -397,19 +439,14 @@ function startSinglePortServer() {
       res.json({
         success: true,
         message: 'Proxy is working',
-        proxy_ip: response.origin,
-        direct_test: 'completed',
-        proxy_config: `${proxyConfig.host}:${proxyConfig.port}`,
-        method: 'curlWithProxy'
+        proxy_ip: response.origin
       });
     } catch (error) {
       console.error('❌ Прокси НЕ работает:', error.message);
       res.status(500).json({
         success: false,
-        message: 'Proxy connection failed',
-        error: error.message,
-        proxy_config: `${proxyConfig.host}:${proxyConfig.port}`,
-        method: 'curlWithProxy'
+        message: 'Proxy test failed',
+        error: error.message
       });
     }
   });
@@ -426,35 +463,8 @@ function startSinglePortServer() {
       });
     }
 
-    console.log('🔑 API ключ найден, делаем запрос к OpenAI через прокси...');
-    console.log('🔍 Прокси:', `${proxyConfig.host}:${proxyConfig.port}`);
-
     try {
-      // Сначала попробуем тест БЕЗ прокси
-      console.log('🧪 Тестируем соединение БЕЗ прокси...');
-      try {
-        const directResponse = await axios.get('https://httpbin.org/ip', {
-          timeout: 5000,
-          proxy: false  // Отключаем прокси для этого запроса
-        });
-        console.log('✅ Прямое соединение работает! IP:', directResponse.data.origin);
-      } catch (directError) {
-        console.log('❌ Даже прямое соединение не работает:', directError.message);
-        console.log('🌐 Сетевая проблема на сервере!');
-        return res.status(500).json({
-          error: 'Network connectivity issue',
-          message: 'Even direct connections are failing',
-          details: directError.message
-        });
-      }
-
-      // Теперь тест прокси
-      console.log('🧪 Тестируем прокси соединение через curl...');
-      const testOutput = await curlWithProxy('https://httpbin.org/ip');
-      const testResponse = JSON.parse(testOutput);
-      console.log('✅ Прокси тест прошел! IP:', testResponse.origin);
-
-      // Теперь основной запрос к OpenAI через прокси
+      // Простой запрос к OpenAI через прокси без лишних тестов
       console.log('🚀 Отправляем запрос к OpenAI через curl...');
       const responseOutput = await curlWithProxy('https://api.openai.com/v1/models', {
         headers: {
@@ -464,34 +474,35 @@ function startSinglePortServer() {
         }
       });
 
-      console.log('✅ Успешный ответ от OpenAI через прокси');
+      console.log('✅ Успешный ответ от OpenAI');
       const response = JSON.parse(responseOutput);
       res.json(response);
 
     } catch (error) {
-      console.error('❌ Ошибка запроса к OpenAI:', error.response?.status, error.message);
-
-      // Логируем детали ошибки
-      if (error.response?.data) {
-        console.error('📄 Детали ошибки от OpenAI:', JSON.stringify(error.response.data, null, 2));
-      } else {
-        console.error('📄 Нет данных в ответе ошибки');
-      }
-
+      console.error('❌ Ошибка запроса к OpenAI:', error.message);
       res.status(500).json({
         error: 'OpenAI API error',
-        status: error.response?.status,
         message: error.message,
-        details: error.response?.data,
         key_loaded: !!process.env.OPENAI_API_KEY,
-        proxy_configured: !!PROXY_URL,
-        timeout: error.code === 'ECONNABORTED' ? 'Connection timeout' : null
+        proxy_configured: !!PROXY_URL
       });
     }
   });
 
   // Chat completions
   app.post('/api/chat/completions', async (req, res) => {
+    console.log('📨 Chat completions request received');
+    console.log('📨 Request body:', JSON.stringify(req.body).substring(0, 500) + '...');
+
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'sk-test-key-for-development') {
+      console.error('❌ OpenAI API key not configured or using test key');
+      return res.status(500).json({
+        error: 'OpenAI API key not properly configured',
+        message: 'Please set a valid OPENAI_API_KEY in the .env file. Current key is: ' + (process.env.OPENAI_API_KEY ? 'TEST_KEY' : 'NOT_SET'),
+        details: 'Get your API key from https://platform.openai.com/api-keys'
+      });
+    }
+
     try {
       const responseOutput = await curlWithProxy('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -503,12 +514,256 @@ function startSinglePortServer() {
         },
         data: req.body
       });
-      const response = JSON.parse(responseOutput);
+
+      // Check if response is empty
+      if (!responseOutput || responseOutput.trim().length === 0) {
+        console.error('❌ Empty response from OpenAI API');
+        return res.status(500).json({
+          error: 'Empty response from OpenAI API',
+          details: 'The API returned an empty response'
+        });
+      }
+
+      // Try to parse JSON
+      let response;
+      try {
+        response = JSON.parse(responseOutput);
+      } catch (parseError) {
+        console.error('❌ Failed to parse JSON response:', parseError.message);
+        console.error('❌ Raw response:', responseOutput.substring(0, 500));
+        return res.status(500).json({
+          error: 'Invalid JSON response from OpenAI API',
+          details: parseError.message,
+          raw_response: responseOutput.substring(0, 200)
+        });
+      }
+
+      // Check if response contains an error from OpenAI
+      if (response.error) {
+        console.error('❌ OpenAI API returned an error:', response.error);
+        return res.status(response.error.status || 500).json({
+          error: 'OpenAI API error',
+          message: response.error.message,
+          type: response.error.type,
+          code: response.error.code
+        });
+      }
+
+      // Check if response has expected structure
+      if (!response.choices || !Array.isArray(response.choices) || response.choices.length === 0) {
+        console.error('❌ Invalid response structure:', JSON.stringify(response).substring(0, 500));
+        return res.status(500).json({
+          error: 'Invalid response structure from OpenAI API',
+          details: 'Response does not contain choices array'
+        });
+      }
+
       res.json(response);
     } catch (error) {
-      console.error('Chat completions error:', error);
+      console.error('❌ Chat completions error:', error);
+      console.error('❌ Error stack:', error.stack);
       res.status(500).json({
         error: 'OpenAI API error',
+        details: error.message,
+        type: error.constructor.name
+      });
+    }
+  });
+
+  // Real chat completions are temporarily disabled for debugging
+
+  // Generate personalized learning plan
+  app.post('/api/generate-learning-plan', async (req, res) => {
+    try {
+      const { courseId, grade, topic, courseName } = req.body;
+
+      if (!topic || !grade || !courseName) {
+        return res.status(400).json({
+          error: 'Missing required fields',
+          required: ['topic', 'grade', 'courseName']
+        });
+      }
+
+      console.log(`🎯 Generating learning plan for ${courseName}, grade ${grade}, topic: "${topic}"`);
+
+      const prompt = `Ты опытный преподаватель ${courseName.toLowerCase()} для учеников ${grade} класса.
+
+ЗАДАЧА: Создать персонализированный план обучения из 15 уроков.
+
+КОНТЕКСТ:
+- Предмет: ${courseName}
+- Класс ученика: ${grade} класс
+- Последняя изученная тема: "${topic}"
+- Уровень сложности: соответствующий для ${grade} класса
+
+ТРЕБОВАНИЯ:
+1. Первый урок должен быть ЛОГИЧЕСКИМ ПРОДОЛЖЕНИЕМ темы "${topic}"
+2. Каждый следующий урок должен быть немного сложнее (progressive difficulty)
+3. План должен быть структурирован так, чтобы каждая тема подготавливала к следующей
+4. Используй методологию, подходящую для ${grade} класса
+5. КРАЙНЕ ВАЖНО: темы должны соответствовать школьной программе для ${grade} класса!
+
+УРОВНИ ОБРАЗОВАНИЯ И СООТВЕТСТВУЮЩИЕ ТЕМЫ:
+
+ДЛЯ 1-4 КЛАССОВ (начальная школа):
+- Основы грамоты, буквы, слоги
+- Простые слова и предложения
+- Основные части речи (имена существительные, прилагательные, глаголы)
+- Чтение и письмо
+- Игры и упражнения на запоминание
+
+ДЛЯ 5-9 КЛАССОВ (средняя школа):
+- Морфология и синтаксис
+- Пунктуация
+- Развитие речи
+- Литературный анализ
+- Стилистика
+
+ДЛЯ 10-11 КЛАССОВ (старшая школа):
+- Сложный синтаксис и пунктуация
+- Стилистика и риторика
+- Текстоведение и интерпретация текста
+- Литературный анализ произведений
+- История русского языка
+- Подготовка к ЕГЭ (сочинения, анализ текста)
+- Функциональные стили речи
+- Лексикология и фразеология
+
+ДЛЯ РУССКОГО ЯЗЫКА В ${grade} КЛАССЕ:
+${grade >= 10 ?
+`- Комплексный синтаксис предложений
+- Стилистический анализ текста
+- Подготовка к ЕГЭ: анализ художественных произведений
+- Функциональные стили речи
+- История русского литературного языка
+- Текстоведение и интерпретация
+- Риторика и ораторское мастерство
+- Лексическая стилистика` :
+
+grade >= 7 ?
+`- Морфология и словообразование
+- Синтаксис сложных предложений
+- Пунктуация в сложных конструкциях
+- Развитие речи и стилистика
+- Литературный анализ` :
+
+grade >= 5 ?
+`- Части речи и их формы
+- Простые и сложные предложения
+- Орфография и пунктуация
+- Развитие речи` :
+
+`- Основы чтения и письма
+- Знакомство с частями речи
+- Простые предложения
+- Азбука и фонетика`}
+
+ПРИМЕР ПРОГРЕССИИ ДЛЯ ${grade} КЛАССА (не копируй!):
+${grade >= 10 ?
+`Если ученик изучал "Сложные предложения", следующие темы:
+- Период как стилистическая фигура
+- Риторические вопросы и восклицания
+- Анализ синтаксических средств выразительности
+- Подготовка к сочинению ЕГЭ
+- Функционально-смысловые типы речи` :
+
+grade >= 7 ?
+`Если ученик изучал "Сложные предложения", следующие темы:
+- Пунктуация в сложных предложениях
+- Стилистические фигуры
+- Развитие речи: рассуждение
+- Анализ текста` :
+
+`Если ученик изучал "Части речи: имена существительные", следующие темы:
+- Практика и типология существительных
+- Имена прилагательные (согласование)
+- Глаголы и их формы
+- Простые предложения`}
+
+ОТВЕТ ТОЛЬКО В JSON (без дополнительного текста):
+{
+  "courseName": "${courseName}",
+  "grade": ${grade},
+  "foundTopic": "${topic}",
+  "lessons": [
+    {
+      "number": 1,
+      "title": "Название урока (продолжение \"${topic}\")",
+      "topic": "Основная тема",
+      "aspects": "Подробное описание: что изучается, основные аспекты, практические примеры",
+      "difficulty": "beginner|intermediate|advanced",
+      "prerequisites": ["${topic}", "другой необходимый навык"]
+    },
+    ...ещё 14 уроков, каждый логично следующий из предыдущего...
+  ]
+}`;
+
+      const requestBody = {
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'Ты преподаватель, создающий персонализированные планы обучения. Всегда отвечай ТОЛЬКО валидным JSON без дополнительного текста.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 3000
+      };
+
+      console.log('📤 Sending request to OpenAI...');
+      const responseOutput = await curlWithProxy('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'curl/7.68.0',
+          'Accept': '*/*'
+        },
+        data: requestBody
+      });
+
+      const response = JSON.parse(responseOutput);
+      
+      if (!response.choices || !response.choices[0] || !response.choices[0].message) {
+        throw new Error('Invalid response structure from OpenAI');
+      }
+
+      const content = response.choices[0].message.content;
+      console.log('📥 OpenAI response:', content.substring(0, 200) + '...');
+
+      // Parse the JSON response
+      let planData;
+      try {
+        // Try to extract JSON from the response (in case there's extra text)
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          throw new Error('No JSON found in response');
+        }
+        planData = JSON.parse(jsonMatch[0]);
+      } catch (parseError) {
+        console.error('❌ Failed to parse JSON response:', parseError.message);
+        console.error('Raw response:', content);
+        return res.status(500).json({
+          error: 'Failed to parse learning plan',
+          details: parseError.message
+        });
+      }
+
+      console.log(`✅ Successfully generated plan with ${planData.lessons?.length || 0} lessons`);
+      
+      res.json({
+        success: true,
+        plan: planData
+      });
+
+    } catch (error) {
+      console.error('❌ Learning plan generation error:', error.message);
+      res.status(500).json({
+        error: 'Failed to generate learning plan',
         details: error.message
       });
     }
@@ -583,21 +838,16 @@ function startSinglePortServer() {
     }
   });
 
-  // SPA fallback - ОТПРАВЛЯЕМ ПОСЛЕДНИМ
-  app.use((req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-  });
-
   // Запускаем сервер
   const server = app.listen(1031, () => {
     console.log('✅ Единый сервер запущен на порту 1031');
     console.log('');
     console.log('🎉 TRUE SINGLE-PORT SERVER ГОТОВ!');
     console.log('==================================');
-    console.log('🌐 Доступно на: http://localhost:1031');
-    console.log('📡 API: http://localhost:1031/api/*');
-    console.log('💻 Frontend: http://localhost:1031/');
-    console.log('💚 Health: http://localhost:1031/health');
+    console.log('🌐 Доступно на: https://teacher.windexs.ru');
+    console.log('📡 API: https://teacher.windexs.ru/api/*');
+    console.log('💻 Frontend: https://teacher.windexs.ru/');
+    console.log('💚 Health: https://teacher.windexs.ru/health');
     console.log('');
     console.log('ТОЛЬКО ОДИН ПОРТ: 1031 ✅');
     console.log('');
@@ -875,6 +1125,274 @@ function startSinglePortServer() {
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
+
+  // Save learning plan
+  app.post('/api/db/learning-plans', (req, res) => {
+    try {
+      const { user_id, course_id, subject_name, grade, plan_data } = req.body;
+      
+      if (!user_id || !course_id || !subject_name || !grade || !plan_data) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'user_id, course_id, subject_name, grade, and plan_data are required',
+          received: { user_id, course_id, subject_name, grade, plan_data_type: typeof plan_data }
+        });
+      }
+
+      console.log(`💾 Saving learning plan for user ${user_id}, course ${course_id}, grade ${grade}`);
+
+      // Extract numeric course_id (in case it comes as "4-10", we need just "4")
+      const baseCourseId = String(course_id).split('-')[0];
+      const numericCourseId = parseInt(baseCourseId);
+      
+      if (isNaN(numericCourseId)) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'course_id must be a number or contain a number',
+          received: course_id,
+          extracted: baseCourseId
+        });
+      }
+
+      console.log(`🔄 Extracted numeric course_id: ${numericCourseId} from ${course_id}`);
+
+      // Ensure user exists, create if not
+      const userCheck = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
+      if (!userCheck) {
+        console.log(`👤 User ${user_id} not found, creating...`);
+        const createUser = db.prepare(`
+          INSERT INTO users (id, username, email, password_hash, first_name, last_name, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `);
+        createUser.run(user_id, `user_${user_id}`, `user_${user_id}@temp.com`, 'temp_password_hash', 'Temp', 'User');
+      }
+
+      const stmt = db.prepare(`
+        INSERT INTO learning_plans (user_id, course_id, subject_name, grade, plan_data, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, course_id) DO UPDATE SET
+          subject_name = excluded.subject_name,
+          grade = excluded.grade,
+          plan_data = excluded.plan_data,
+          updated_at = CURRENT_TIMESTAMP
+      `);
+
+      const planDataStr = typeof plan_data === 'string' ? plan_data : JSON.stringify(plan_data);
+      
+      // Check size limit (SQLite BLOB has reasonable limits)
+      const sizeInKB = Math.round(planDataStr.length / 1024);
+      console.log(`📝 Plan data to save - length: ${planDataStr.length}, size: ${sizeInKB}KB`);
+      
+      if (sizeInKB > 5000) {
+        console.error(`❌ Plan data too large: ${sizeInKB}KB (max 5000KB)`);
+        return res.status(413).json({
+          status: 'error',
+          message: 'Plan data too large',
+          size: sizeInKB,
+          max: 5000
+        });
+      }
+
+      console.log(`🔍 Running insert statement with params:`, {
+        user_id,
+        numericCourseId,
+        subject_name,
+        grade,
+        planDataStr_length: planDataStr.length
+      });
+
+      const result = stmt.run(
+        user_id,
+        numericCourseId,
+        subject_name,
+        grade,
+        planDataStr
+      );
+
+      console.log(`✅ Learning plan saved successfully for user ${user_id}, course ${numericCourseId}, grade ${grade}`);
+
+      res.status(201).json({
+        status: 'ok',
+        message: 'Learning plan saved',
+        id: result.lastInsertRowid,
+        user_id,
+        course_id: numericCourseId,
+        grade
+      });
+    } catch (error) {
+      console.error('❌ Error saving learning plan:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        code: error.code,
+        errno: error.errno,
+        sql: error.sql,
+        stack: error.stack
+      });
+      
+      // Provide more detailed error responses
+      let statusCode = 500;
+      let errorMessage = error.message;
+      
+      if (error.message && error.message.includes('SQLITE_CONSTRAINT')) {
+        statusCode = 409;
+        errorMessage = 'Constraint violation - possibly duplicate entry';
+      } else if (error.message && error.message.includes('SQLITE_FULL')) {
+        statusCode = 507;
+        errorMessage = 'Database disk space full';
+      } else if (error.message && error.message.includes('SQLITE_TOOBIG')) {
+        statusCode = 413;
+        errorMessage = 'Data too large for database';
+      }
+      
+      res.status(statusCode).json({
+        status: 'error',
+        message: errorMessage,
+        code: error.code,
+        errno: error.errno,
+        details: 'Failed to save learning plan to database'
+      });
+    }
+  });
+
+  // Get learning plan by user and course
+  app.get('/api/db/learning-plans/:user_id/:course_id', (req, res) => {
+    try {
+      const { user_id, course_id } = req.params;
+
+      console.log(`📚 Fetching learning plan for user ${user_id}, course ${course_id}`);
+
+      const plan = db.prepare(`
+        SELECT * FROM learning_plans
+        WHERE user_id = ? AND course_id = ?
+      `).get(user_id, course_id);
+
+      if (!plan) {
+        return res.status(404).json({
+          status: 'not_found',
+          message: 'Learning plan not found'
+        });
+      }
+
+      // Parse plan_data if it's stored as JSON string
+      const planData = typeof plan.plan_data === 'string' 
+        ? JSON.parse(plan.plan_data) 
+        : plan.plan_data;
+
+      res.json({
+        status: 'ok',
+        plan: {
+          ...plan,
+          plan_data: planData
+        }
+      });
+    } catch (error) {
+      console.error('❌ Error fetching learning plan:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
+  // Get all learning plans for user
+  app.get('/api/db/learning-plans/user/:user_id', (req, res) => {
+    try {
+      const { user_id } = req.params;
+
+      console.log(`📚 Fetching all learning plans for user ${user_id}`);
+
+      // Ensure user exists, create if not
+      const userCheck = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
+      if (!userCheck) {
+        console.log(`👤 User ${user_id} not found, creating...`);
+        const createUser = db.prepare(`
+          INSERT INTO users (id, username, email, password_hash, first_name, last_name, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `);
+        createUser.run(user_id, `user_${user_id}`, `user_${user_id}@temp.com`, 'temp_password_hash', 'Temp', 'User');
+      }
+
+      const plans = db.prepare(`
+        SELECT * FROM learning_plans
+        WHERE user_id = ?
+        ORDER BY updated_at DESC
+      `).all(user_id);
+
+      console.log(`📊 Found ${plans.length} plans in database`);
+
+      const formattedPlans = plans.map(plan => {
+        try {
+          console.log(`🔧 Processing plan ID ${plan.id}, course ${plan.course_id}`);
+          console.log(`📄 plan_data type: ${typeof plan.plan_data}, length: ${plan.plan_data?.length || 0}`);
+
+          let parsedPlanData = plan.plan_data;
+          if (typeof plan.plan_data === 'string') {
+            try {
+              parsedPlanData = JSON.parse(plan.plan_data);
+              console.log(`✅ Successfully parsed plan_data for course ${plan.course_id}`);
+            } catch (jsonError) {
+              console.error(`❌ Failed to parse plan_data for course ${plan.course_id}:`, jsonError.message);
+              console.error(`📄 Raw plan_data:`, plan.plan_data.substring(0, 200) + '...');
+              // Не прерываем, возвращаем сырые данные
+              parsedPlanData = { error: 'Invalid JSON', raw: plan.plan_data };
+            }
+          }
+
+          return {
+            ...plan,
+            plan_data: parsedPlanData
+          };
+        } catch (planError) {
+          console.error(`❌ Error processing plan ${plan.id}:`, planError);
+          return {
+            ...plan,
+            plan_data: { error: 'Processing failed', raw: plan.plan_data }
+          };
+        }
+      });
+
+      console.log(`✅ Formatted ${formattedPlans.length} plans`);
+
+      res.json({
+        status: 'ok',
+        count: plans.length,
+        plans: formattedPlans
+      });
+    } catch (error) {
+      console.error('❌ Error fetching learning plans:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message,
+        stack: error.stack
+      });
+    }
+  });
+
+  // ⚠️ ВАЖНО: static files и SPA fallback ДОЛЖНЫ быть в конце, ПОСЛЕ ВСЕХ API маршрутов!
+  console.log('📂 Настраиваем static файлы и SPA fallback...');
+  
+  // Настраиваем static файлы frontend
+  // ВАЖНО: НЕ обрабатываем /api/* пути как static файлы
+  app.use((req, res, next) => {
+    // Пропускаем все /api/* маршруты
+    if (req.path.startsWith('/api/') || req.path === '/health') {
+      return next();
+    }
+    // Для остальных путей используем static middleware
+    express.static(path.join(__dirname, 'dist'), {
+      index: false,
+      redirect: false
+    })(req, res, next);
+  });
+
+  // SPA fallback - для всех остальных запросов отправляем index.html
+  // Это позволяет React Router обработать маршруты на клиенте
+  app.use((req, res) => {
+    console.log(`📄 SPA fallback для пути: ${req.path}`);
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  });
+
+  console.log('✅ Static файлы и SPA fallback настроены');
 
   process.on('SIGTERM', () => {
     console.log('\n🛑 Завершение работы...');

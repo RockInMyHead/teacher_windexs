@@ -25,7 +25,7 @@ export default defineConfig(() => ({
           ? (process.env.PROXY_PORT === '1031'
               ? 'http://localhost:1031'  // Single-port режим
               : 'https://teacher.windexs.ru')  // Normal production
-          : `http://localhost:${process.env.PROXY_PORT || 1031}`, // Development: используем 1031 (single-port)
+          : `http://localhost:${process.env.PROXY_PORT || 3003}`, // Development: используем 3003 для simple-api-server
         changeOrigin: true,
         secure: process.env.NODE_ENV === 'production'
           ? (process.env.PROXY_PORT === '1031' ? false : true)  // HTTP для single-port, HTTPS для normal

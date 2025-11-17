@@ -34,7 +34,7 @@
 ### Способ 1: Открыть урок для 1 класса
 
 ```
-http://localhost:5173/lesson/1/0/0?grade=1&type=notes
+https://teacher.windexs.ru/lesson/1/0/0?grade=1&type=notes
 ```
 
 **Параметры:**
@@ -47,13 +47,13 @@ http://localhost:5173/lesson/1/0/0?grade=1&type=notes
 ### Способ 2: Открыть урок для 2 класса
 
 ```
-http://localhost:5173/lesson/1/0/3?grade=2&type=notes
+https://teacher.windexs.ru/lesson/1/0/3?grade=2&type=notes
 ```
 
 ### Пример: Открыть урок "Numbers 1-5" (7-й урок, для 1 класса)
 
 ```
-http://localhost:5173/lesson/1/0/6?grade=1&type=notes
+https://teacher.windexs.ru/lesson/1/0/6?grade=1&type=notes
 ```
 
 ## 📋 Доступные курсы

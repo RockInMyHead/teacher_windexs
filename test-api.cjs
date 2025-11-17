@@ -7,8 +7,8 @@
 require('dotenv').config();
 
 const API_BASE = process.env.SINGLE_PORT_MODE === 'true'
-  ? 'http://localhost:1031'
-  : 'http://localhost:1038';
+  ? 'https://teacher.windexs.ru'
+  : 'https://teacher.windexs.ru';
 
 console.log('🧪 Testing API endpoints...');
 console.log(`📍 API Base: ${API_BASE}`);

@@ -602,7 +602,7 @@ ${lessonAspects}
               content: userMessage.content
             }
           ],
-          model: 'gpt-4-turbo',
+          model: 'gpt-5.1',
           temperature: 0.7,
           max_tokens: 800
         })

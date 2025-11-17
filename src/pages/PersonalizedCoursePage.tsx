@@ -12,7 +12,6 @@ import {
 import {
   Brain,
   ArrowLeft,
-  Play,
   BookOpen,
   CheckCircle,
   Clock,
@@ -308,33 +307,6 @@ const PersonalizedCoursePage = () => {
                 </div>
               </CardHeader>
 
-              <CardContent>
-                <div className="text-center">
-                  {(() => {
-                    // Найти первый незавершенный урок
-                    const firstIncompleteLessonIndex = module.lessons.findIndex((lesson, index) => {
-                      const lessonKey = `${courseId}-${currentModule}-${index}`;
-                      return !completedLessons.has(lessonKey);
-                    });
-
-                    const currentLessonIndex = firstIncompleteLessonIndex >= 0 ? firstIncompleteLessonIndex : 0;
-                    const currentLesson = module.lessons[currentLessonIndex];
-
-                    return (
-                      <>
-                        <h3 className="text-xl font-semibold mb-4">{currentLesson}</h3>
-                        <Button
-                          onClick={() => navigate(`/lesson/${courseId}/${currentModule}/${currentLessonIndex}`)}
-                          className="flex items-center gap-2"
-                        >
-                          <Play className="w-4 h-4" />
-                          Начать урок
-                        </Button>
-                      </>
-                    );
-                  })()}
-                </div>
-              </CardContent>
             </Card>
 
           </div>

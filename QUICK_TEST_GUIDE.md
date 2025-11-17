@@ -2,14 +2,14 @@
 
 ## 🚀 Запуск
 
-Проект уже запущен на: **http://localhost:1031/**
+Проект уже запущен на: **https://teacher.windexs.ru/**
 
 ## ✅ Как протестировать
 
 ### Шаг 1: Откройте приложение
 
 ```
-http://localhost:1031/
+https://teacher.windexs.ru/
 ```
 
 ### Шаг 2: Выберите курс
@@ -126,7 +126,7 @@ pkill -f "npm run start:single-port"
 npm run start:single-port
 
 # Проверить здоровье сервера
-curl http://localhost:1031/health
+curl https://teacher.windexs.ru/health
 ```
 
 ---

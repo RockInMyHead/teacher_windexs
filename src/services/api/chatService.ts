@@ -167,7 +167,7 @@ export class ChatService {
    */
   createMessageRequest(
     messages: ChatMessage[],
-    model: string = 'gpt-4o-mini',
+    model: string = 'gpt-5.1',
     maxTokens: number = 2000,
     temperature: number = 0.7
   ): ChatCompletionRequest {

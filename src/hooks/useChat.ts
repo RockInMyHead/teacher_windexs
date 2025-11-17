@@ -24,15 +24,16 @@ export const useChat = (options: UseChatOptions = {}): UseChatReturn => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<AppError | null>(null);
+  const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
 
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
   /**
-   * Send message to AI
+   * Send message to AI with streaming
    */
   const sendMessage = useCallback(
-    async (content: string, systemPrompt: string, model: string = 'gpt-4o-mini') => {
+    async (content: string, systemPrompt: string, model: string = 'gpt-5.1') => {
       try {
         setIsLoading(true);
         setError(null);
@@ -55,6 +56,16 @@ export const useChat = (options: UseChatOptions = {}): UseChatReturn => {
 
         onMessageReceived?.(userMessage);
 
+        // Create streaming assistant message
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: '',
+          timestamp: new Date(),
+        };
+
+        setStreamingMessage(assistantMessage);
+
         // Prepare chat messages
         const chatMessages = messagesRef.current
           .slice(-29) // Keep last 29 messages + new one = 30 total
@@ -73,7 +84,7 @@ export const useChat = (options: UseChatOptions = {}): UseChatReturn => {
           content,
         });
 
-        // Get AI response
+        // Get AI response with streaming
         const request: ChatCompletionRequest = {
           model,
           messages: chatMessages as any,
@@ -81,29 +92,35 @@ export const useChat = (options: UseChatOptions = {}): UseChatReturn => {
           temperature: 0.7,
         };
 
-        const response = await chatService.sendMessage(request);
+        await chatService.sendMessageStream(request, (chunk: string) => {
+          setStreamingMessage(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              content: prev.content + chunk,
+            };
+          });
+        });
 
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: response.choices[0]?.message?.content || 'No response',
-          timestamp: new Date(),
-        };
-
-        setMessages(prev => {
-          const updated = [...prev, assistantMessage];
+        // Finalize streaming message
+        setStreamingMessage(prev => {
+          if (!prev) return null;
+          setMessages(currentMessages => {
+            const updated = [...currentMessages, prev];
           if (updated.length > maxMessages) {
             return updated.slice(-maxMessages);
           }
           return updated;
         });
-
-        onMessageReceived?.(assistantMessage);
+          onMessageReceived?.(prev);
+          return null;
+        });
 
         logger.debug('Message sent successfully');
       } catch (err) {
         const appError = handleApiError(err);
         setError(appError);
+        setStreamingMessage(null);
         onError?.(appError);
         logger.error('Failed to send message', err as Error);
       } finally {
@@ -168,6 +185,7 @@ export const useChat = (options: UseChatOptions = {}): UseChatReturn => {
     getLastMessage,
     getContext,
     error,
+    streamingMessage,
   };
 };
 

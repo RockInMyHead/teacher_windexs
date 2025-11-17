@@ -8,8 +8,6 @@ import type { Message, AssessmentQuestion, AssessmentResult, TestQuestionData } 
 
 export interface ChatMessageProps {
   message: Message;
-  onSpeak?: (text: string) => Promise<void>;
-  isSpeaking?: boolean;
   onRemove?: (id: string) => void;
 }
 
@@ -17,11 +15,9 @@ export interface ChatMessageProps {
 
 export interface ChatInputProps {
   onSendMessage: (content: string) => Promise<void>;
-  onFileSelected?: (files: File[]) => void;
   isLoading?: boolean;
   disabled?: boolean;
   placeholder?: string;
-  uploadedFilesCount?: number;
 }
 
 // ============= CHAT MESSAGES LIST =============
@@ -29,45 +25,11 @@ export interface ChatInputProps {
 export interface ChatMessagesProps {
   messages: Message[];
   isLoading?: boolean;
-  onMessageSpeak?: (message: Message) => Promise<void>;
-  isSpeakingId?: string | null;
   onMessageRemove?: (id: string) => void;
+  streamingMessage?: Message | null;
 }
 
-// ============= VOICE CHAT CONTROLS =============
 
-export interface VoiceChatControlsProps {
-  isActive: boolean;
-  isListening: boolean;
-  isSpeaking: boolean;
-  onToggle: () => void;
-  onStartListening: () => void;
-  onStopListening: () => void;
-  disabled?: boolean;
-}
-
-// ============= TTS CONTROLS =============
-
-export interface TTSControlsProps {
-  isEnabled: boolean;
-  isSpeaking: boolean;
-  currentSentence: number;
-  totalSentences: number;
-  onToggle: () => void;
-  onStop: () => void;
-  disabled?: boolean;
-}
-
-// ============= FILE UPLOAD AREA =============
-
-export interface FileUploadAreaProps {
-  onFilesSelected: (files: File[]) => void;
-  uploadedFiles?: File[];
-  onFileRemove?: (index: number) => void;
-  isProcessing?: boolean;
-  disabled?: boolean;
-  maxFiles?: number;
-}
 
 // ============= ASSESSMENT PANEL =============
 
@@ -113,6 +75,8 @@ export interface ChatContainerProps {
   maxMessages?: number;
   onChatStart?: () => void;
   onChatEnd?: () => void;
+  initialMessages?: Message[];
+  onSendMessage?: (message: string) => Promise<void>;
 }
 
 // ============= INTERNAL STATE =============
@@ -120,11 +84,6 @@ export interface ChatContainerProps {
 export interface ChatInternalState {
   messages: Message[];
   isLoading: boolean;
-  isVoiceChatActive: boolean;
-  isListening: boolean;
-  isSpeaking: boolean;
-  isTtsEnabled: boolean;
-  uploadedFiles: File[];
   assessmentState: 'initial' | 'collecting_grade' | 'collecting_topic' | 'in_progress' | 'completed';
   currentAssessmentQuestion: AssessmentQuestion | null;
   assessmentResult: AssessmentResult | null;

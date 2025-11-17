@@ -113,9 +113,9 @@ npm run proxy
 npm run dev
 ```
 
-Приложение будет доступно по адресу: http://localhost:4000
-Приложение доступно по адресу: http://localhost:1037
-Прокси-сервер (API) доступен по адресу: http://localhost:1038
+Приложение будет доступно по адресу: https://teacher.windexs.ru
+Приложение доступно по адресу: https://teacher.windexs.ru
+Прокси-сервер (API) доступен по адресу: https://teacher.windexs.ru/api
 
 ### Запуск на сервере (порты 1037-1039)
 

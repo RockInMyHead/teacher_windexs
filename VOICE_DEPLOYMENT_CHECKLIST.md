@@ -70,7 +70,7 @@ VITE_OPENAI_API_KEY=sk-...  # Обязателен!
 npm run dev
 
 # Открыть браузер
-# http://localhost:5173
+# https://teacher.windexs.ru
 
 # Проверить консоль на ошибки (F12)
 # Должны появиться логи инициализации

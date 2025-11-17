@@ -74,7 +74,7 @@ Test Files  1 passed (1)
 
 ### Шаг 1: Откройте приложение
 ```
-http://localhost:1031/
+https://teacher.windexs.ru/
 ```
 
 ### Шаг 2: Выберите курс
@@ -257,7 +257,7 @@ npm test -- src/utils/lessonParser.test.ts --run
 ```
 
 ### Ручное тестирование:
-1. Откройте http://localhost:1031/
+1. Откройте https://teacher.windexs.ru/
 2. Выберите курс
 3. Начните обучение
 4. Ответьте на вопросы AI
@@ -265,7 +265,7 @@ npm test -- src/utils/lessonParser.test.ts --run
 
 ### Проверка здоровья:
 ```bash
-curl http://localhost:1031/health
+curl https://teacher.windexs.ru/health
 ```
 
 ---
@@ -307,7 +307,7 @@ npm run lint
 **Дата завершения:** 11 ноября 2025  
 **Версия:** 2.0 - Interactive Teacher  
 **Статус:** ✅ Готов к использованию  
-**Сервер:** http://localhost:1031/
+**Сервер:** https://teacher.windexs.ru/
 
 
 
