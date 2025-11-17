@@ -86,11 +86,11 @@ app.post('/api/db/learning-plans', (req, res) => {
     const userCheck = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
     if (!userCheck) {
       console.log(`👤 User ${user_id} not found, creating...`);
-      const createUser = db.prepare(`
+    const createUser = db.prepare(`
         INSERT INTO users (id, username, email, password_hash, first_name, last_name, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `);
-      createUser.run(user_id, `user_${user_id}`, `user_${user_id}@temp.com`, 'temp_password_hash', 'Temp', 'User');
+    `);
+    createUser.run(user_id, `user_${user_id}`, `user_${user_id}@temp.com`, 'temp_password_hash', 'Temp', 'User');
     }
     
     // Создаём learning plan
@@ -131,11 +131,11 @@ app.get('/api/db/learning-plans/user/:user_id', (req, res) => {
     // Создаём пользователя если не существует
     const userCheck = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
     if (!userCheck) {
-      const createUser = db.prepare(`
+    const createUser = db.prepare(`
         INSERT INTO users (id, username, email, password_hash, first_name, last_name, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `);
-      createUser.run(user_id, `user_${user_id}`, `user_${user_id}@temp.com`, 'temp_password_hash', 'Temp', 'User');
+    `);
+    createUser.run(user_id, `user_${user_id}`, `user_${user_id}@temp.com`, 'temp_password_hash', 'Temp', 'User');
     }
     
     // Получаем learning plans
