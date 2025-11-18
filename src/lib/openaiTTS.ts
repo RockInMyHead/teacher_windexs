@@ -105,7 +105,7 @@ export class OpenAITTS {
 
       // Создаем Blob вместо Base64 для лучшей совместимости и производительности
       console.log('🔄 Creating Blob and Object URL...');
-      const mimeType = this.getMimeType(format);
+      const mimeType = this.getMimeType(options.format || 'aac');
       console.log('📝 Using MIME type:', mimeType);
       const blob = new Blob([audioBuffer], { type: mimeType });
       const audioUrl = URL.createObjectURL(blob);
