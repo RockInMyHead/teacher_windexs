@@ -10,6 +10,7 @@ export class OpenAITTS {
   private static audioContext: AudioContext | null = null;
   private static currentAudio: HTMLAudioElement | null = null;
   private static videoElement: HTMLVideoElement | null = null;
+  private static currentAudioUrl: string | null = null;
 
   static async generateSpeech(text: string, options: TTSOptions = {}): Promise<ArrayBuffer> {
     const {
@@ -83,14 +84,13 @@ export class OpenAITTS {
       const audioBuffer = await this.generateSpeech(text, options);
       console.log('✅ generateSpeech completed');
 
-      // Преобразуем ArrayBuffer в base64 для лучшей совместимости с Safari
-      console.log('🔄 Converting to base64...');
-      const base64Audio = this.arrayBufferToBase64(audioBuffer);
-      console.log('✅ Base64 conversion completed, length:', base64Audio.length);
+      // Создаем Blob вместо Base64 для лучшей совместимости и производительности
+      console.log('🔄 Creating Blob and Object URL...');
+      const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+      const audioUrl = URL.createObjectURL(blob);
+      this.currentAudioUrl = audioUrl;
+      console.log('✅ Object URL created:', audioUrl);
       
-      const audioUrl = `data:audio/mpeg;base64,${base64Audio}`;
-      console.log('📝 Created data URL, length:', audioUrl.length);
-
       this.currentAudio = new Audio();
       console.log('✅ Audio element created');
       
@@ -104,10 +104,18 @@ export class OpenAITTS {
       return new Promise((resolve, reject) => {
         if (!this.currentAudio) return reject(new Error('Audio not created'));
 
+        const cleanup = () => {
+          if (this.currentAudioUrl) {
+            URL.revokeObjectURL(this.currentAudioUrl);
+            this.currentAudioUrl = null;
+          }
+        };
+
         this.currentAudio.onended = () => {
           console.log('✅ Audio playback ended');
           this.pauseVideo();
           this.currentAudio = null;
+          cleanup();
           resolve();
         };
 
@@ -115,6 +123,7 @@ export class OpenAITTS {
           console.error('❌ Audio error event:', error);
           this.pauseVideo();
           this.currentAudio = null;
+          cleanup();
           reject(new Error('Audio playback failed'));
         };
 
@@ -145,6 +154,7 @@ export class OpenAITTS {
           });
           this.pauseVideo();
           this.currentAudio = null;
+          cleanup();
 
           // Проверяем тип ошибки
           let errorMessage = `Audio play failed: ${playError.message}`;
@@ -180,6 +190,10 @@ export class OpenAITTS {
       this.currentAudio.pause();
       this.currentAudio.currentTime = 0;
       this.currentAudio = null;
+    }
+    if (this.currentAudioUrl) {
+      URL.revokeObjectURL(this.currentAudioUrl);
+      this.currentAudioUrl = null;
     }
     this.pauseVideo();
   }
