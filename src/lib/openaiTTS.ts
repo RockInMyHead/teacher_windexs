@@ -122,23 +122,23 @@ export class OpenAITTS {
       console.log('✅ Audio src set, volume:', this.currentAudio.volume);
 
       // Настраиваем обработчики событий
-      return new Promise((resolve, reject) => {
-        if (!this.currentAudio) return reject(new Error('Audio not created'));
+    return new Promise((resolve, reject) => {
+      if (!this.currentAudio) return reject(new Error('Audio not created'));
 
-        const cleanup = () => {
-          if (this.currentAudioUrl) {
-            URL.revokeObjectURL(this.currentAudioUrl);
-            this.currentAudioUrl = null;
-          }
-        };
+      const cleanup = () => {
+        if (this.currentAudioUrl) {
+          URL.revokeObjectURL(this.currentAudioUrl);
+          this.currentAudioUrl = null;
+        }
+      };
 
-        this.currentAudio.onended = () => {
-          console.log('✅ Audio playback ended');
-          this.pauseVideo();
-          this.currentAudio = null;
-          cleanup();
-          resolve();
-        };
+      this.currentAudio.onended = () => {
+        console.log('✅ Audio playback ended');
+        this.pauseVideo();
+        this.currentAudio = null;
+        cleanup();
+        resolve();
+      };
 
         this.currentAudio.onerror = (error) => {
           console.error('❌ Audio error event:', error);
