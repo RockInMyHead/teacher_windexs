@@ -407,98 +407,102 @@ function startSinglePortServer() {
     console.log('📨 Request body:', JSON.stringify(req.body).substring(0, 500) + '...');
 
     // Handle Gemini models
-    if (req.body.model && (req.body.model.toLowerCase().includes('gemini') || req.body.model === 'gemini-2.0-pro-exp-02-05')) {
-        console.log('🤖 Using Gemini API');
-        const geminiApiKey = process.env.GEMINI_API_KEY || 'AIzaSyA0fqfnbjliRhUqAFa9Bt-Iy7VjR2Ufkp8'; // Use provided key as default fallback
-        
-        // Convert OpenAI messages to Gemini format
-        const messages = req.body.messages || [];
-        const contents = messages.map(msg => {
-            let role = msg.role;
-            if (role === 'system' || role === 'developer') role = 'user'; // Gemini doesn't support system/developer role exactly same way in basic generateContent, usually mapped to user or system instruction
-            if (role === 'assistant') role = 'model';
-            return {
-                role: role,
-                parts: [{ text: msg.content }]
-            };
+    if (req.body.model && (req.body.model.toLowerCase().includes('gemini') || req.body.model === 'gemini-3.0-pro')) {
+        console.log('🤖 Using Gemini 3.0 Pro via GoogleGenAI');
+
+        const { GoogleGenAI } = require('@google/genai');
+
+        const geminiApiKey = process.env.GEMINI_API_KEY || 'AIzaSyA0fqfnbjliRhUqAFa9Bt-Iy7VjR2Ufkp8';
+        const ai = new GoogleGenAI({
+          apiKey: geminiApiKey
         });
-        
-        // Extract system prompt if present (for systemInstruction)
-        let systemInstruction = undefined;
-        const systemMsg = messages.find(m => m.role === 'system');
-        if (systemMsg) {
-            systemInstruction = { parts: [{ text: systemMsg.content }] };
-            // Remove system message from contents to avoid duplication if model supports separate systemInstruction
-            // But for safety with all models, keeping it as user message is sometimes better if model doesn't support systemInstruction.
-            // However, Gemini 1.5+ supports systemInstruction.
-            // Let's filter it out from contents if we use systemInstruction
-             // contents = contents.filter(c => c.role !== 'system'); // Wait, map above already converted it to user.
-             // Let's re-do mapping properly
-        }
-
-        const geminiContents = messages
-            .filter(msg => msg.role !== 'system')
-            .map(msg => ({
-                role: msg.role === 'assistant' ? 'model' : 'user',
-                parts: [{ text: msg.content }]
-            }));
-
-        const payload = {
-            contents: geminiContents,
-            generationConfig: {
-                temperature: req.body.temperature || 0.7,
-                maxOutputTokens: req.body.max_tokens || 1000,
-            }
-        };
-        
-        if (systemMsg) {
-            payload.systemInstruction = { parts: [{ text: systemMsg.content }] };
-        }
-
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${req.body.model}:generateContent?key=${geminiApiKey}`;
 
         try {
-             const responseOutput = await curlWithProxy(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
+          // Convert OpenAI messages to Gemini format
+          const messages = req.body.messages || [];
+
+          // Extract system message if present
+          let systemInstruction = undefined;
+          const systemMsg = messages.find(m => m.role === 'system');
+          if (systemMsg) {
+            systemInstruction = systemMsg.content;
+          }
+
+          // Build conversation history for Gemini
+          const conversationParts = [];
+          for (const msg of messages) {
+            if (msg.role === 'system') continue; // Skip system messages as they're handled separately
+
+            if (msg.role === 'user') {
+              conversationParts.push({
+                role: 'user',
+                parts: [{ text: msg.content }]
+              });
+            } else if (msg.role === 'assistant') {
+              conversationParts.push({
+                role: 'model',
+                parts: [{ text: msg.content }]
+              });
+            }
+          }
+
+          const model = ai.getGenerativeModel({
+            model: 'gemini-3.0-pro',
+            systemInstruction: systemInstruction
+          });
+
+          const chat = model.startChat({
+            history: conversationParts.slice(0, -1), // Exclude the last message as it will be sent as the prompt
+            generationConfig: {
+              temperature: req.body.temperature || 0.7,
+              maxOutputTokens: req.body.max_tokens || 1000,
+            }
+          });
+
+          const lastMessage = messages[messages.length - 1];
+          const prompt = lastMessage ? lastMessage.content : 'Hello';
+
+          const result = await chat.sendMessage(prompt);
+          const response = await result.response;
+          const text = response.text();
+
+          // Transform Gemini response to OpenAI format
+          const openaiResponse = {
+            id: 'chatcmpl-gemini-3-pro-' + Date.now(),
+            object: 'chat.completion',
+            created: Math.floor(Date.now() / 1000),
+            model: 'gemini-3.0-pro',
+            choices: [
+              {
+                index: 0,
+                message: {
+                  role: 'assistant',
+                  content: text
                 },
-                data: payload
-            });
-            
-            const geminiResponse = JSON.parse(responseOutput);
-            
-            // Transform Gemini response to OpenAI format
-            const openaiResponse = {
-                id: 'chatcmpl-gemini-' + Date.now(),
-                object: 'chat.completion',
-                created: Math.floor(Date.now() / 1000),
-                model: req.body.model,
-                choices: [
-                    {
-                        index: 0,
-                        message: {
-                            role: 'assistant',
-                            content: geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text || ''
-                        },
-                        finish_reason: 'stop'
-                    }
-                ],
-                usage: {
-                    prompt_tokens: geminiResponse.usageMetadata?.promptTokenCount || 0,
-                    completion_tokens: geminiResponse.usageMetadata?.candidatesTokenCount || 0,
-                    total_tokens: geminiResponse.usageMetadata?.totalTokenCount || 0
-                }
-            };
-            
-            return res.json(openaiResponse);
+                finish_reason: 'stop'
+              }
+            ],
+            usage: {
+              prompt_tokens: response.usageMetadata?.promptTokenCount || 0,
+              completion_tokens: response.usageMetadata?.candidatesTokenCount || 0,
+              total_tokens: response.usageMetadata?.totalTokenCount || 0
+            }
+          };
+
+          console.log('✅ Gemini 3.0 Pro response:', text.substring(0, 200) + '...');
+          return res.json(openaiResponse);
 
         } catch (error) {
-            console.error('❌ Gemini API error:', error);
-            return res.status(500).json({ error: 'Gemini API error', details: error.message });
+          console.error('❌ Gemini 3.0 Pro API error:', error);
+          return res.status(500).json({
+            error: 'Gemini 3.0 Pro API error',
+            details: error.message,
+            stack: error.stack
+          });
         }
     }
 
+    // Fallback to OpenAI for non-Gemini models
     if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'sk-test-key-for-development') {
       console.error('❌ OpenAI API key not configured or using test key');
       return res.status(500).json({
@@ -746,7 +750,7 @@ grade >= 7 ?
 }`;
 
       const requestBody = {
-        model: 'gpt-4o',
+        model: 'gemini-3.0-pro',
         messages: [
           {
             role: 'system',

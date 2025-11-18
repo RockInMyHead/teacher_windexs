@@ -365,7 +365,7 @@ const Chat = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-5.1',
+          model: 'gemini-3.0-pro',
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.7,
           max_completion_tokens: 2000
@@ -816,7 +816,7 @@ ${context}
               { role: 'system', content: systemPrompt },
               { role: 'user', content: `Ученик только что сказал: "${textToSend}". Продолжи урок.` }
               ],
-              model: 'gpt-4o',
+              model: 'gemini-3.0-pro',
               temperature: 0.7,
               max_tokens: 300
             }),
@@ -911,7 +911,7 @@ ${context}
             { role: 'system', content: systemPrompt },
                 { role: 'user', content: prompt }
               ],
-              model: 'gpt-4o',
+              model: 'gemini-3.0-pro',
               temperature: 0.7,
           max_tokens: 300
             })
@@ -1016,7 +1016,7 @@ ${context}
               content: initialMessage
             }
               ],
-              model: 'gpt-4o',
+              model: 'gemini-3.0-pro',
           temperature: 0.7,
           max_tokens: 300
             })
