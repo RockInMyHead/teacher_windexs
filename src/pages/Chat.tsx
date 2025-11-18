@@ -365,7 +365,7 @@ const Chat = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gemini-3.0-pro',
+          model: 'gemini-2.5-flash',
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.7,
           max_completion_tokens: 2000
@@ -710,7 +710,7 @@ const Chat = () => {
       console.log('⏭️ Skipping: not final or empty');
       return;
     }
-
+    
     // 1. Cancel any pending processing or speech
     if (processingTimeoutRef.current) {
       clearTimeout(processingTimeoutRef.current);
@@ -816,7 +816,7 @@ ${context}
               { role: 'system', content: systemPrompt },
               { role: 'user', content: `Ученик только что сказал: "${textToSend}". Продолжи урок.` }
               ],
-              model: 'gemini-3.0-pro',
+              model: 'gemini-2.5-flash',
               temperature: 0.7,
               max_tokens: 300
             }),
@@ -837,8 +837,8 @@ ${context}
               onEnd: () => {
                 setTimeout(() => {
                   VoiceComm.startListening();
-                }, 1000);
-              }
+              }, 1000);
+            }
             });
           }
         } catch (error) {
@@ -850,7 +850,7 @@ ${context}
             }
         } finally {
           if (currentRequestId === latestRequestIdRef.current) {
-             setIsProcessingQuestion(false);
+          setIsProcessingQuestion(false);
              abortControllerRef.current = null;
           }
         }
@@ -911,7 +911,7 @@ ${context}
             { role: 'system', content: systemPrompt },
                 { role: 'user', content: prompt }
               ],
-              model: 'gemini-3.0-pro',
+              model: 'gemini-2.5-flash',
               temperature: 0.7,
           max_tokens: 300
             })
@@ -1016,7 +1016,7 @@ ${context}
               content: initialMessage
             }
               ],
-              model: 'gemini-3.0-pro',
+              model: 'gemini-2.5-flash',
           temperature: 0.7,
           max_tokens: 300
             })

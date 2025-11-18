@@ -407,8 +407,8 @@ function startSinglePortServer() {
     console.log('📨 Request body:', JSON.stringify(req.body).substring(0, 500) + '...');
 
     // Handle Gemini models
-    if (req.body.model && (req.body.model.toLowerCase().includes('gemini') || req.body.model === 'gemini-3.0-pro')) {
-        console.log('🤖 Using Gemini 3.0 Pro via GoogleGenAI');
+    if (req.body.model && req.body.model.toLowerCase().includes('gemini')) {
+        console.log('🤖 Using Gemini 2.5 Flash via GoogleGenAI');
 
         const { GoogleGenAI } = require('@google/genai');
 
@@ -428,50 +428,45 @@ function startSinglePortServer() {
             systemInstruction = systemMsg.content;
           }
 
-          // Build conversation history for Gemini
-          const conversationParts = [];
-          for (const msg of messages) {
-            if (msg.role === 'system') continue; // Skip system messages as they're handled separately
+          // Build conversation parts - concatenate all messages into a single prompt
+          // since Gemini's generateContent doesn't maintain conversation state like startChat
+          let fullPrompt = '';
 
-            if (msg.role === 'user') {
-              conversationParts.push({
-                role: 'user',
-                parts: [{ text: msg.content }]
-              });
-            } else if (msg.role === 'assistant') {
-              conversationParts.push({
-                role: 'model',
-                parts: [{ text: msg.content }]
-              });
-            }
+          if (systemInstruction) {
+            fullPrompt += `System: ${systemInstruction}\n\n`;
           }
 
-          const model = ai.getGenerativeModel({
-            model: 'gemini-3.0-pro',
-            systemInstruction: systemInstruction
-          });
+          // Add conversation history
+          for (const msg of messages) {
+            if (msg.role === 'system') continue; // Already handled above
 
-          const chat = model.startChat({
-            history: conversationParts.slice(0, -1), // Exclude the last message as it will be sent as the prompt
+            const roleName = msg.role === 'assistant' ? 'Assistant' : 'User';
+            fullPrompt += `${roleName}: ${msg.content}\n\n`;
+          }
+
+          fullPrompt += 'Assistant: '; // Start the assistant's response
+
+          const result = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ parts: [{ text: fullPrompt }] }],
             generationConfig: {
               temperature: req.body.temperature || 0.7,
               maxOutputTokens: req.body.max_tokens || 1000,
             }
           });
 
-          const lastMessage = messages[messages.length - 1];
-          const prompt = lastMessage ? lastMessage.content : 'Hello';
+          console.log('Gemini API result keys:', Object.keys(result));
 
-          const result = await chat.sendMessage(prompt);
-          const response = await result.response;
-          const text = response.text();
+          const text = result.response?.candidates?.[0]?.content?.parts?.[0]?.text ||
+                      result.candidates?.[0]?.content?.parts?.[0]?.text ||
+                      'No response from Gemini';
 
           // Transform Gemini response to OpenAI format
           const openaiResponse = {
-            id: 'chatcmpl-gemini-3-pro-' + Date.now(),
+            id: 'chatcmpl-gemini-2.5-flash-' + Date.now(),
             object: 'chat.completion',
             created: Math.floor(Date.now() / 1000),
-            model: 'gemini-3.0-pro',
+            model: 'gemini-2.5-flash',
             choices: [
               {
                 index: 0,
@@ -483,16 +478,16 @@ function startSinglePortServer() {
               }
             ],
             usage: {
-              prompt_tokens: response.usageMetadata?.promptTokenCount || 0,
-              completion_tokens: response.usageMetadata?.candidatesTokenCount || 0,
-              total_tokens: response.usageMetadata?.totalTokenCount || 0
+              prompt_tokens: result.usageMetadata?.promptTokenCount || 0,
+              completion_tokens: result.usageMetadata?.candidatesTokenCount || 0,
+              total_tokens: result.usageMetadata?.totalTokenCount || 0
             }
           };
 
           console.log('✅ Gemini 3.0 Pro response:', text.substring(0, 200) + '...');
           return res.json(openaiResponse);
 
-        } catch (error) {
+    } catch (error) {
           console.error('❌ Gemini 3.0 Pro API error:', error);
           return res.status(500).json({
             error: 'Gemini 3.0 Pro API error',
@@ -750,7 +745,7 @@ grade >= 7 ?
 }`;
 
       const requestBody = {
-        model: 'gemini-3.0-pro',
+        model: 'gemini-1.5-flash',
         messages: [
           {
             role: 'system',
@@ -1671,8 +1666,8 @@ grade >= 7 ?
       const stmt = db.prepare(`
         UPDATE lesson_sessions
         SET session_status = 'completed',
-        completed_at = CURRENT_TIMESTAMP,
-        updated_at = CURRENT_TIMESTAMP
+            completed_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `);
       stmt.run(sessionId);
