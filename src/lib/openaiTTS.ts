@@ -275,7 +275,8 @@ export async function isAudioFormatSupported(format: string): Promise<boolean> {
 
 // Функция для получения лучшего поддерживаемого формата
 export async function getBestSupportedFormat(): Promise<string> {
-  const formats = ['aac', 'mp3', 'opus', 'flac'];
+  // MP3 is the most compatible format for Blob URLs across all browsers
+  const formats = ['mp3', 'aac', 'opus', 'flac'];
 
   for (const format of formats) {
     if (await isAudioFormatSupported(format)) {
