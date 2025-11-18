@@ -699,6 +699,10 @@ const Chat = () => {
   };
 
   // Handle user transcript with question detection
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const latestRequestIdRef = useRef<number>(0);
+  const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const handleUserTranscript = useCallback(async (text: string, isFinal: boolean) => {
     console.log('🔍 handleUserTranscript called:', { text, isFinal });
     
@@ -706,26 +710,63 @@ const Chat = () => {
       console.log('⏭️ Skipping: not final or empty');
       return;
     }
+
+    // 1. Cancel any pending processing or speech
+    if (processingTimeoutRef.current) {
+      clearTimeout(processingTimeoutRef.current);
+      processingTimeoutRef.current = null;
+    }
+    
+    if (abortControllerRef.current) {
+      console.log('🚫 Aborting previous request due to new input');
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    OpenAITTS.stop(); // Ensure TTS is stopped
+    
+    // 2. Update Request ID to ignore stale responses
+    const currentRequestId = ++latestRequestIdRef.current;
     
     console.log('📝 User said (final):', text);
     setCallTranscript(prev => prev + (prev ? ' ' : '') + text);
-    
-    // Add to conversation history
-    setConversationHistory(prev => [...prev, { role: 'student', text: text }]);
+
+    // 3. Smart History Update: Combine with previous if it was pending
+    setConversationHistory(prev => {
+      const lastMsg = prev[prev.length - 1];
+      if (lastMsg && lastMsg.role === 'student') {
+         console.log('🔗 Appending to previous unanswered student message');
+         const newHistory = [...prev];
+         newHistory[newHistory.length - 1] = { 
+           ...lastMsg, 
+           text: lastMsg.text + ' ' + text 
+         };
+         return newHistory;
+      } else {
+         return [...prev, { role: 'student', text: text }];
+      }
+    });
 
     // Generate next step in conversation
     console.log('🎯 Generating next conversation step...');
 
-      setTimeout(async () => {
+    // Small debounce to allow rapid-fire sentences to merge before sending
+    processingTimeoutRef.current = setTimeout(async () => {
         try {
           setIsProcessingQuestion(true);
           
-          // Get conversation context
-        const context = conversationHistory.slice(-4).map(h =>
+          const controller = new AbortController();
+          abortControllerRef.current = controller;
+          
+          // Use Ref to get latest history
+          const context = historyRef.current.slice(-4).map(h =>
             `${h.role === 'teacher' ? 'Юля' : 'Ученик'}: ${h.text}`
           ).join('\n');
           
-        const systemPrompt = `Ты - Юля, дружелюбный, но СТРОГИЙ и ВНИМАТЕЛЬНЫЙ школьный учитель с 15-летним стажем. Твоя цель - научить, а не просто поболтать.
+          const lastStudentMsg = historyRef.current[historyRef.current.length - 1];
+          const textToSend = lastStudentMsg?.role === 'student' ? lastStudentMsg.text : text;
+
+          const systemPrompt = `Ты - Юля, дружелюбный, но СТРОГИЙ и ВНИМАТЕЛЬНЫЙ школьный учитель с 15-летним стажем. Твоя цель - научить, а не просто поболтать.
 
 ТВОЙ СТИЛЬ:
 🎭 Дружелюбная, как старшая сестра, но требовательная к знаниям.
@@ -758,7 +799,7 @@ ${currentLesson?.aspects || 'Изучаем основы географии, ф�
 КОНТЕКСТ РАЗГОВОРА:
 ${context}
 
-УЧЕНИК СКАЗАЛ: "${text}"
+УЧЕНИК СКАЗАЛ: "${textToSend}"
 
 ИНСТРУКЦИЯ ДЛЯ ОТВЕТА:
 1. Оцени правильность сказанного учеником относительно темы урока.
@@ -774,41 +815,51 @@ ${context}
             body: JSON.stringify({
               messages: [
               { role: 'system', content: systemPrompt },
-              { role: 'user', content: `Ученик только что сказал: "${text}". Продолжи урок.` }
+              { role: 'user', content: `Ученик только что сказал: "${textToSend}". Продолжи урок.` }
               ],
               model: 'gpt-4o',
               temperature: 0.7,
-            max_tokens: 300
-            })
+              max_tokens: 300
+            }),
+            signal: controller.signal
           });
 
           if (response.ok) {
             const data = await response.json();
-          const teacherResponse = data.choices[0].message.content;
-          console.log('✅ Teacher response:', teacherResponse);
+            const teacherResponse = data.choices[0].message.content;
+            console.log('✅ Teacher response:', teacherResponse);
 
-          // Add to conversation history and speak
-          setConversationHistory(prev => [...prev, { role: 'teacher', text: teacherResponse }]);
-          await OpenAITTS.speak(teacherResponse, {
-            voice: 'nova',
-            speed: 1.0,
-            onEnd: () => {
-              // After teacher speaks, start listening again
-              setTimeout(() => {
-                VoiceComm.startListening();
-              }, 1000);
-            }
-          });
+            if (controller.signal.aborted) return;
+
+            setConversationHistory(prev => [...prev, { role: 'teacher', text: teacherResponse }]);
+            await OpenAITTS.speak(teacherResponse, {
+              voice: 'nova',
+              speed: 1.0,
+              onEnd: () => {
+                setTimeout(() => {
+                  VoiceComm.startListening();
+                }, 1000);
+              }
+            });
           }
         } catch (error) {
-        console.error('❌ Error generating teacher response:', error);
-      } finally {
-          setIsProcessingQuestion(false);
+            const err = error as Error;
+            if (err.name === 'AbortError') {
+                 console.log('🛑 Request aborted');
+            } else {
+                 console.error('❌ Error generating teacher response:', err);
+            }
+        } finally {
+          if (currentRequestId === latestRequestIdRef.current) {
+             setIsProcessingQuestion(false);
+             abortControllerRef.current = null;
+          }
         }
       }, 500);
   }, [conversationHistory, currentLesson]);
-
-  // Stream lesson generation for real-time display
+  
+  const historyRef = useRef(conversationHistory);
+  useEffect(() => { historyRef.current = conversationHistory; }, [conversationHistory]);
   const generateLessonNotesStreaming = useCallback(async (): Promise<string[]> => {
     console.log('📝 Starting streaming lesson generation...');
     setIsGeneratingLesson(true);
