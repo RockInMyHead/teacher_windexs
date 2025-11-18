@@ -339,7 +339,7 @@ function startSinglePortServer() {
     // Add URL
     curlCommand += ` "${url}"`;
 
-    console.log('🔧 Executing curl command:', curlCommand.replace(/(-H "Authorization: Bearer [^"]+)"/, '$1 [HIDDEN]"'));
+    console.log('🔧 Executing curl command:', curlCommand.replace(/(-H "Authorization: Bearer [^"]+)"/, '$1 [HIDDEN]"').replace(/AIza[0-9a-zA-Z\-_]+/, '[HIDDEN_API_KEY]'));
 
     if (stream) {
       // Return a readable stream for streaming responses
@@ -401,168 +401,103 @@ function startSinglePortServer() {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
   });
 
-  // Diagnostic route
-  app.get('/api/diagnostic', (req, res) => {
-    res.json({
-      timestamp: new Date().toISOString(),
-      environment: {
-        NODE_ENV: process.env.NODE_ENV,
-        PORT: process.env.PORT,
-        PROXY_PORT: process.env.PROXY_PORT
-      },
-      api_key: {
-        loaded: !!process.env.OPENAI_API_KEY,
-        prefix: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.substring(0, 20) + '...' : null
-      },
-      proxy: {
-        configured: !!process.env.PROXY_URL,
-        url: process.env.PROXY_URL ? process.env.PROXY_URL.replace(/:([^:]+)@/, ':***@') : null
-      }
-    });
-  });
-
-  // Test proxy connection with native Node.js
-  app.get('/api/test-proxy-native', async (req, res) => {
-    console.log('🧪 Тестирование прокси через нативный Node.js https...');
-
-    return new Promise((resolve) => {
-      const proxyUrl = new URL(PROXY_URL);
-      const options = {
-        hostname: proxyUrl.hostname,
-        port: proxyUrl.port,
-        path: 'https://httpbin.org/ip',
-        method: 'GET',
-        headers: {
-          'Proxy-Authorization': 'Basic ' + Buffer.from(`${proxyUrl.username}:${proxyUrl.password}`).toString('base64'),
-          'User-Agent': 'Node.js'
-        }
-      };
-
-      const request = https.request(options, (response) => {
-        let data = '';
-        response.on('data', (chunk) => {
-          data += chunk;
-        });
-
-        response.on('end', () => {
-          try {
-            const parsed = JSON.parse(data);
-            console.log('✅ Нативный прокси тест прошел! IP:', parsed.origin);
-            resolve(res.json({
-              success: true,
-              message: 'Native proxy test successful',
-              proxy_ip: parsed.origin,
-              method: 'native-node-https'
-            }));
-          } catch (e) {
-            console.log('❌ Ошибка парсинга ответа:', e.message);
-            resolve(res.status(500).json({
-              success: false,
-              message: 'Response parse error',
-              error: e.message,
-              raw_data: data.substring(0, 200) + '...'
-            }));
-          }
-        });
-      });
-
-      request.on('error', (error) => {
-        console.log('❌ Нативный прокси тест провалился:', error.message);
-        resolve(res.status(500).json({
-          success: false,
-          message: 'Native proxy test failed',
-          error: error.message,
-          method: 'native-node-https'
-        }));
-      });
-
-      request.setTimeout(10000, () => {
-        console.log('❌ Нативный прокси тест: таймаут');
-        request.destroy();
-        resolve(res.status(500).json({
-          success: false,
-          message: 'Native proxy timeout',
-          method: 'native-node-https'
-        }));
-      });
-
-      request.end();
-    });
-  });
-
-  // Test proxy connection
-  app.get('/api/test-proxy', async (req, res) => {
-    console.log('🧪 Тестирование прокси соединения...');
-
-    if (!PROXY_URL) {
-      return res.status(400).json({
-        success: false,
-        message: 'Proxy not configured'
-      });
-    }
-
-    try {
-      const curlOutput = await curlWithProxy('https://httpbin.org/ip');
-      const response = JSON.parse(curlOutput);
-
-      console.log('✅ Прокси работает! IP:', response.origin);
-      res.json({
-        success: true,
-        message: 'Proxy is working',
-        proxy_ip: response.origin
-      });
-    } catch (error) {
-      console.error('❌ Прокси НЕ работает:', error.message);
-      res.status(500).json({
-        success: false,
-        message: 'Proxy test failed',
-        error: error.message
-      });
-    }
-  });
-
-  // OpenAI API routes
-  app.get('/api/models', async (req, res) => {
-    console.log('📋 Запрос к /api/models получен');
-
-    if (!process.env.OPENAI_API_KEY) {
-      console.error('❌ OPENAI_API_KEY не найден в переменных окружения');
-      return res.status(500).json({
-        error: 'API key not configured',
-        details: 'OPENAI_API_KEY is missing'
-      });
-    }
-
-    try {
-      // Простой запрос к OpenAI через прокси без лишних тестов
-      console.log('🚀 Отправляем запрос к OpenAI через curl...');
-      const responseOutput = await curlWithProxy('https://api.openai.com/v1/models', {
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'User-Agent': 'curl/7.68.0',
-          'Accept': '*/*'
-        }
-      });
-
-      console.log('✅ Успешный ответ от OpenAI');
-      const response = JSON.parse(responseOutput);
-      res.json(response);
-
-    } catch (error) {
-      console.error('❌ Ошибка запроса к OpenAI:', error.message);
-      res.status(500).json({
-        error: 'OpenAI API error',
-        message: error.message,
-        key_loaded: !!process.env.OPENAI_API_KEY,
-        proxy_configured: !!PROXY_URL
-      });
-    }
-  });
-
   // Chat completions
   app.post('/api/chat/completions', async (req, res) => {
     console.log('📨 Chat completions request received');
     console.log('📨 Request body:', JSON.stringify(req.body).substring(0, 500) + '...');
+
+    // Handle Gemini models
+    if (req.body.model && (req.body.model.toLowerCase().includes('gemini') || req.body.model === 'gemini-2.0-pro-exp-02-05')) {
+        console.log('🤖 Using Gemini API');
+        const geminiApiKey = process.env.GEMINI_API_KEY || 'AIzaSyA0fqfnbjliRhUqAFa9Bt-Iy7VjR2Ufkp8'; // Use provided key as default fallback
+        
+        // Convert OpenAI messages to Gemini format
+        const messages = req.body.messages || [];
+        const contents = messages.map(msg => {
+            let role = msg.role;
+            if (role === 'system' || role === 'developer') role = 'user'; // Gemini doesn't support system/developer role exactly same way in basic generateContent, usually mapped to user or system instruction
+            if (role === 'assistant') role = 'model';
+            return {
+                role: role,
+                parts: [{ text: msg.content }]
+            };
+        });
+        
+        // Extract system prompt if present (for systemInstruction)
+        let systemInstruction = undefined;
+        const systemMsg = messages.find(m => m.role === 'system');
+        if (systemMsg) {
+            systemInstruction = { parts: [{ text: systemMsg.content }] };
+            // Remove system message from contents to avoid duplication if model supports separate systemInstruction
+            // But for safety with all models, keeping it as user message is sometimes better if model doesn't support systemInstruction.
+            // However, Gemini 1.5+ supports systemInstruction.
+            // Let's filter it out from contents if we use systemInstruction
+             // contents = contents.filter(c => c.role !== 'system'); // Wait, map above already converted it to user.
+             // Let's re-do mapping properly
+        }
+
+        const geminiContents = messages
+            .filter(msg => msg.role !== 'system')
+            .map(msg => ({
+                role: msg.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: msg.content }]
+            }));
+
+        const payload = {
+            contents: geminiContents,
+            generationConfig: {
+                temperature: req.body.temperature || 0.7,
+                maxOutputTokens: req.body.max_tokens || 1000,
+            }
+        };
+        
+        if (systemMsg) {
+            payload.systemInstruction = { parts: [{ text: systemMsg.content }] };
+        }
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${req.body.model}:generateContent?key=${geminiApiKey}`;
+
+        try {
+             const responseOutput = await curlWithProxy(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                data: payload
+            });
+            
+            const geminiResponse = JSON.parse(responseOutput);
+            
+            // Transform Gemini response to OpenAI format
+            const openaiResponse = {
+                id: 'chatcmpl-gemini-' + Date.now(),
+                object: 'chat.completion',
+                created: Math.floor(Date.now() / 1000),
+                model: req.body.model,
+                choices: [
+                    {
+                        index: 0,
+                        message: {
+                            role: 'assistant',
+                            content: geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text || ''
+                        },
+                        finish_reason: 'stop'
+                    }
+                ],
+                usage: {
+                    prompt_tokens: geminiResponse.usageMetadata?.promptTokenCount || 0,
+                    completion_tokens: geminiResponse.usageMetadata?.candidatesTokenCount || 0,
+                    total_tokens: geminiResponse.usageMetadata?.totalTokenCount || 0
+                }
+            };
+            
+            return res.json(openaiResponse);
+
+        } catch (error) {
+            console.error('❌ Gemini API error:', error);
+            return res.status(500).json({ error: 'Gemini API error', details: error.message });
+        }
+    }
 
     if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'sk-test-key-for-development') {
       console.error('❌ OpenAI API key not configured or using test key');
@@ -1732,8 +1667,8 @@ grade >= 7 ?
       const stmt = db.prepare(`
         UPDATE lesson_sessions
         SET session_status = 'completed',
-            completed_at = CURRENT_TIMESTAMP,
-            updated_at = CURRENT_TIMESTAMP
+        completed_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `);
       stmt.run(sessionId);
