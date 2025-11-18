@@ -1457,6 +1457,10 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
               console.log('🎤 Notes available:', !!notes, 'Notes length:', notes?.length);
               setIsCallActive(true);
 
+              // Stop TTS immediately when user starts speaking to avoid conflicts
+              console.log('🛑 Stopping TTS because user started speaking');
+              OpenAITTS.stop();
+
               // Lesson already started automatically after generation, just ensure voice recognition is active
             },
             onListeningEnd: () => {
@@ -1655,7 +1659,7 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
             {!isLessonMode && (
             <ChatContainer
                 ref={chatContainerRef}
-              initialSystemPrompt={`Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Вы можете "разжевывать" сложные концепции, приводить примеры из реальной жизни, использовать аналогии и пошаговые объяснения.                                         
+              initialSystemPrompt={`Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Вы можете "разжевывать" сложные концепции, приводить примеры из реальной жизни, использовать аналогии и пошаговые объяснения.
 
 Особенности вашего стиля:
 - Объясняйте сложное простыми словами
@@ -1671,96 +1675,96 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
             />
             )}
 
-            {/* Video Call */}
-            {showVideoCall && (
-              <div className="mt-8" data-video-call>
-                <div className="bg-card border border-border rounded-lg p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold">Видео звонок с учителем</h3>
-                    <div className="flex gap-2">
-                      <Button
-                        variant={isCallActive ? "destructive" : "default"}
-                        size="sm"
-                        onClick={handleCall}
-                        className="gap-2"
-                      >
-                        {isCallActive ? <PhoneOff className="w-4 h-4" /> : <Phone className="w-4 h-4" />}
-                        {isCallActive ? 'Завершить звонок' : 'Позвонить'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowVideoCall(false)}
-                      >
-                        ✕ Закрыть
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="w-[300px] h-[300px] bg-black rounded-full overflow-hidden mx-auto">
-                    <video
-                      ref={videoRef}
-                      className="w-full h-full object-cover"
-                      muted
-                      loop
-                      src="/Untitled Video.mp4"
-                      onError={(e) => {
-                        console.error('Video load error:', e);
-                        // Fallback: show message if video not found
-                        e.currentTarget.style.display = 'none';
-                        const parent = e.currentTarget.parentElement;
-                        if (parent) {
-                          parent.innerHTML = `
-                            <div class="flex items-center justify-center h-full text-white">
-                              <div class="text-center">
-                                <p class="text-lg mb-2">🎥 Видео не найдено</p>
-                                <p class="text-sm opacity-75">Поместите файл "Untitled Video.mp4" в папку public</p>
-                              </div>
-                            </div>
-                          `;
-                        }
-                      }}
+          {/* Video Call */}
+          {showVideoCall && (
+            <div className="mt-8" data-video-call>
+              <div className="bg-card border border-border rounded-lg p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold">Видео звонок с учителем</h3>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={isCallActive ? "destructive" : "default"}
+                      size="sm"
+                      onClick={handleCall}
+                      className="gap-2"
                     >
-                      Ваш браузер не поддерживает видео.
-                    </video>
+                      {isCallActive ? <PhoneOff className="w-4 h-4" /> : <Phone className="w-4 h-4" />}
+                      {isCallActive ? 'Завершить звонок' : 'Позвонить'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowVideoCall(false)}
+                    >
+                      ✕ Закрыть
+                    </Button>
                   </div>
                 </div>
-              </div>
-            )}
+                <div className="w-[300px] h-[300px] bg-black rounded-full overflow-hidden mx-auto">
+                  <video
+                    ref={videoRef}
+                    className="w-full h-full object-cover"
+                    muted
+                    loop
+                    src="/Untitled Video.mp4"
+                    onError={(e) => {
+                      console.error('Video load error:', e);
+                      // Fallback: show message if video not found
+                      e.currentTarget.style.display = 'none';
+                      const parent = e.currentTarget.parentElement;
+                      if (parent) {
+                        parent.innerHTML = `
+                          <div class="flex items-center justify-center h-full text-white">
+                            <div class="text-center">
+                              <p class="text-lg mb-2">🎥 Видео не найдено</p>
+                              <p class="text-sm opacity-75">Поместите файл "Untitled Video.mp4" в папку public</p>
+                            </div>
+                          </div>
+                        `;
+                      }
+                    }}
+                  >
+                    Ваш браузер не поддерживает видео.
+                  </video>
+                </div>
+                      </div>
+                        </div>
+                      )}
 
             {/* Saved Lessons */}
-            {/* Saved Lessons Modal */}
-            {showSavedLessons && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
-                  <div className="p-6 border-b">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-bold">📚 Сохраненные уроки</h2>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowSavedLessons(false)}
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        ✕
-                      </Button>
-                    </div>
-                  </div>
+      {/* Saved Lessons Modal */}
+      {showSavedLessons && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
+            <div className="p-6 border-b">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold">📚 Сохраненные уроки</h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowSavedLessons(false)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  ✕
+                </Button>
+              </div>
+            </div>
 
-                  <div className="p-6 overflow-y-auto max-h-[60vh]">
-                    {savedLessons.length === 0 ? (
-                      <div className="text-center py-8">
-                        <p className="text-muted-foreground">У вас пока нет сохраненных уроков.</p>
-                        <p className="text-sm text-muted-foreground mt-2">
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {savedLessons.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">У вас пока нет сохраненных уроков.</p>
+                  <p className="text-sm text-muted-foreground mt-2">
                           Завершите урок и нажмите "💾 Сохранить урок" чтобы сохранить его для последующего использования.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
                         {savedLessons.map((lesson) => (
                           <div key={lesson.id} className="border border-border rounded-lg p-4 hover:bg-muted/50 transition-colors">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <h3 className="font-semibold text-lg">{lesson.lesson_title}</h3>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-lg">{lesson.lesson_title}</h3>
                                 <p className="text-muted-foreground text-sm mt-1">
                                   {lesson.course_name} • {lesson.interaction_type === 'voice' ? '🎤 Голосовой урок' : '💬 Текстовый урок'}
                                 </p>
@@ -1772,37 +1776,37 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
                                     Тема: {lesson.lesson_topic}
                                   </p>
                                 )}
-                              </div>
-                              <div className="flex gap-2 ml-4">
-                                <Button
+                          </div>
+                        <div className="flex gap-2 ml-4">
+                          <Button
                                   variant="outline"
-                                  size="sm"
+                            size="sm"
                                   onClick={() => {
                                     loadSavedLesson(lesson.id);
                                   }}
-                                  className="gap-2"
-                                >
-                                  📖 Загрузить
-                                </Button>
-                                <Button
-                                  variant="outline"
+                            className="gap-2"
+                          >
+                            📖 Загрузить
+                          </Button>
+                          <Button
+                            variant="outline"
                                   size="sm"
-                                  onClick={() => {
+                            onClick={() => {
                                     if (confirm('Вы уверены, что хотите удалить этот урок?')) {
-                                      deleteSavedLesson(lesson.id);
-                                    }
-                                  }}
+                                deleteSavedLesson(lesson.id);
+                              }
+                            }}
                                   className="gap-2 text-red-600 hover:text-red-700"
-                                >
-                                  🗑️ Удалить
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                          >
+                            🗑️ Удалить
+                          </Button>
+                        </div>
                       </div>
-                    )}
-                  </div>
+                        </div>
+                  ))}
+                </div>
+              )}
+            </div>
                 </div>
               </div>
             )}
@@ -1811,11 +1815,11 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
             <div className="mt-8 pt-6 border-t border-border">
               <div className="text-center text-sm text-muted-foreground">
                 <p>🎓 AI-Помощник в обучении • Создано с ❤️ для лучших учеников</p>
-              </div>
             </div>
           </div>
         </div>
-      </div>
-    );
+        </div>
+    </div>
+  );
   }
 export default Chat;
