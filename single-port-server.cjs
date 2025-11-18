@@ -408,7 +408,7 @@ function startSinglePortServer() {
 
     // Handle Gemini models
     if (req.body.model && req.body.model.toLowerCase().includes('gemini')) {
-        console.log('🤖 Using Gemini 2.5 Flash via GoogleGenAI');
+        console.log('🤖 Using Gemini 3 Pro Preview via GoogleGenAI');
 
         const { GoogleGenAI } = require('@google/genai');
 
@@ -447,7 +447,7 @@ function startSinglePortServer() {
           fullPrompt += 'Assistant: '; // Start the assistant's response
 
           const result = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-pro-preview',
             contents: [{ parts: [{ text: fullPrompt }] }],
             generationConfig: {
               temperature: req.body.temperature || 0.7,
@@ -463,10 +463,10 @@ function startSinglePortServer() {
 
           // Transform Gemini response to OpenAI format
           const openaiResponse = {
-            id: 'chatcmpl-gemini-2.5-flash-' + Date.now(),
+            id: 'chatcmpl-gemini-3-pro-preview-' + Date.now(),
             object: 'chat.completion',
             created: Math.floor(Date.now() / 1000),
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-pro-preview',
             choices: [
               {
                 index: 0,
@@ -745,7 +745,7 @@ grade >= 7 ?
 }`;
 
       const requestBody = {
-        model: 'gemini-1.5-flash',
+        model: 'gemini-3-pro-preview',
         messages: [
           {
             role: 'system',
