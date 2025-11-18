@@ -43,3 +43,14 @@ package-lock.json
 
 # Backup files
 *.backup
+*.bak
+
+# Video files (large media)
+*.mp4
+*.avi
+*.mov
+*.wmv
+
+# Temporary files
+*.tmp
+*.temp

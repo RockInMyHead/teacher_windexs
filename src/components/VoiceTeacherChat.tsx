@@ -66,12 +66,15 @@ export const VoiceTeacherChat = React.memo(({
   // State
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isGeneratingLesson, setIsGeneratingLesson] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lessonNotes, setLessonNotes] = useState<string[]>([]);
   const [currentNoteIndex, setCurrentNoteIndex] = useState(0);
   const [lessonProgress, setLessonProgress] = useState(0);
   const [callDuration, setCallDuration] = useState(0);
   const [isReadingLesson, setIsReadingLesson] = useState(false);
+  const [userTranscript, setUserTranscript] = useState('');
+  const [conversationHistory, setConversationHistory] = useState<Array<{role: 'teacher' | 'student', text: string}>>([]);
 
   // Refs
   const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
@@ -106,17 +109,17 @@ export const VoiceTeacherChat = React.memo(({
   const generateLessonNotes = useCallback(async () => {
     try {
       setIsProcessing(true);
+      setIsGeneratingLesson(true);
 
       const prompt = `Создай подробный конспект урока по теме "${lessonTitle}" (${lessonTopic}).
 
 Основные аспекты для изучения:
 ${lessonAspects}
 
-КРИТИЧЕСКИ ВАЖНО: Первый элемент массива ОБЯЗАТЕЛЬНО должен быть приветствием учителя ученику. 
-Приветствие должно быть примерно таким: "Здравствуй! Меня зовут учитель. Сегодня мы с тобой изучим тему [название темы]. Давай начнем наш урок!"
+КРИТИЧЕСКИ ВАЖНО: НЕ добавляй приветствие в начало урока - начинай сразу с материала.
 
 Структура конспекта должна быть такой:
-1. ПРИВЕТСТВИЕ (ОБЯЗАТЕЛЬНО ПЕРВЫМ!) - учитель должен сначала поздороваться с учеником
+1. Материал урока (сразу начинай с темы)
 2. Введение в тему
 3. Основные понятия и определения
 4. Законы и правила (с формулами если применимо)
@@ -137,7 +140,7 @@ ${lessonAspects}
           messages: [
             {
               role: 'system',
-              content: 'Ты - опытный педагог. Создай подробный конспект урока в формате JSON массива строк. КРИТИЧЕСКИ ВАЖНО: ПЕРВЫЙ элемент массива ОБЯЗАТЕЛЬНО должен быть приветствием от учителя ученику. Приветствие должно начинаться со слов "Здравствуй!" или "Привет!" и содержать представление учителя. Без приветствия урок начинаться НЕ ДОЛЖЕН. Каждый элемент массива должен содержать логически завершенную мысль или абзац, подходящий для озвучивания.'
+              content: 'Ты - Юля, опытный педагог. Создай подробный конспект урока в формате JSON массива строк. КРИТИЧЕСКИ ВАЖНО: НЕ добавляй приветствие в начало урока - начинай сразу с материала. Каждый элемент массива должен содержать логически завершенную мысль или абзац, подходящий для озвучивания.'
             },
             {
               role: 'user',
@@ -161,23 +164,8 @@ ${lessonAspects}
       try {
         const notes = JSON.parse(content);
         if (Array.isArray(notes) && notes.length > 0) {
-          // Строгая проверка приветствия в первом элементе
-          const firstNote = notes[0].toLowerCase().trim();
-          const hasGreeting = firstNote.startsWith('здравствуй') || 
-                             firstNote.startsWith('привет') || 
-                             firstNote.includes('здравствуй!') || 
-                             firstNote.includes('привет!') ||
-                             firstNote.includes('добро пожаловать') ||
-                             (firstNote.includes('меня зовут') && (firstNote.includes('учитель') || firstNote.includes('преподаватель')));
-          
-          // Если нет приветствия, ВСЕГДА добавляем его в начало
-          if (!hasGreeting) {
-            const greeting = `Здравствуй! Меня зовут учитель. Сегодня мы с тобой изучим тему "${lessonTitle}". Давай начнем наш урок!`;
-            notes.unshift(greeting);
-            console.log('✅ Добавлено приветствие в начало урока (не было найдено в ответе)');
-          } else {
-            console.log('✅ Приветствие найдено в первом элементе:', notes[0].substring(0, 50));
-          }
+          // Приветствие больше не требуется - начинаем сразу с материала
+          console.log('✅ Урок начинается с материала:', notes[0].substring(0, 50));
           
           setLessonNotes(notes);
           console.log('📝 Lesson notes generated:', notes.length, 'items');
@@ -185,9 +173,7 @@ ${lessonAspects}
         } else {
           // Fallback: split by newlines if not JSON
           const fallbackNotes = content.split('\n').filter(note => note.trim());
-          // ВСЕГДА добавляем приветствие в начало
-          const greeting = `Здравствуй! Меня зовут учитель. Сегодня мы с тобой изучим тему "${lessonTitle}". Давай начнем наш урок!`;
-          fallbackNotes.unshift(greeting);
+          // Приветствие больше не требуется
           setLessonNotes(fallbackNotes);
           console.log('✅ Добавлено приветствие (fallback режим)');
         }
@@ -213,13 +199,80 @@ ${lessonAspects}
       console.log('✅ Использованы fallback notes с приветствием');
     } finally {
       setIsProcessing(false);
+      setIsGeneratingLesson(false);
     }
   }, [lessonTitle, lessonTopic, lessonAspects]);
 
-  // Initialize lesson notes on mount
+  // Generate dynamic lesson content based on user response
+  const generateDynamicContent = useCallback(async (userResponse: string): Promise<string> => {
+    try {
+      setIsGeneratingLesson(true);
+      console.log('🎯 Generating dynamic content for user response:', userResponse);
+
+      const conversationContext = conversationHistory.slice(-4).map(msg =>
+        `${msg.role === 'teacher' ? 'Юля' : 'Ученик'}: ${msg.text}`
+      ).join('\n');
+
+      const prompt = `Ты - Юля, дружелюбная учительница, ведущая интерактивный урок. Ученик только что сказал: "${userResponse}"
+
+КОНТЕКСТ УРОКА:
+- Тема: "${lessonTitle}" (${lessonTopic})
+- Аспекты для изучения: ${lessonAspects}
+- Предыдущий разговор: ${conversationContext}
+
+ЗАДАЧА: Создай 1-2 логически связанных предложения или абзаца, которые:
+1. Отвечают на вопрос/замечание ученика
+2. Объясняют материал по теме
+3. Задают следующий вопрос для продолжения диалога
+
+Формат ответа: Просто текст для озвучивания, без JSON, без форматирования.`;
+
+      const response = await fetch('/api/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: 'system',
+              content: 'Ты - дружелюбная учительница Юля, которая объясняет материал доступно и задает вопросы для проверки понимания.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          model: 'gpt-4o',
+          temperature: 0.7,
+          max_tokens: 500
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const newContent = data.choices?.[0]?.message?.content || 'Извините, не удалось получить ответ.';
+
+      console.log('✅ Generated dynamic content:', newContent.substring(0, 100) + '...');
+      return newContent.trim();
+
+    } catch (error) {
+      console.error('❌ Error generating dynamic content:', error);
+      return 'Извините, произошла ошибка. Можете перефразировать свой вопрос?';
+    } finally {
+      setIsGeneratingLesson(false);
+    }
+  }, [lessonTitle, lessonTopic, lessonAspects, conversationHistory]);
+
+  // Initialize lesson notes on mount - start empty, generate content dynamically
   useEffect(() => {
-    generateLessonNotes();
-  }, [generateLessonNotes]);
+    // Start with empty notes, will be filled when user starts speaking
+    setLessonNotes([]);
+    console.log('🎤 Lesson initialized, waiting for user interaction');
+  }, [lessonTitle]);
 
   // Read current lesson note
   const readNextNote = useCallback(async () => {
@@ -295,29 +348,14 @@ ${lessonAspects}
   // Auto-start reading lesson when notes are ready
   useEffect(() => {
     if (lessonNotes.length > 0 && !isProcessing && !isReadingLesson && currentNoteIndex === 0) {
-      // Убеждаемся, что первый элемент - это приветствие
-      const firstNote = lessonNotes[0]?.toLowerCase().trim() || '';
-      const hasGreeting = firstNote.startsWith('здравствуй') || 
-                         firstNote.startsWith('привет') || 
-                         firstNote.includes('здравствуй!') || 
-                         firstNote.includes('привет!') ||
-                         firstNote.includes('меня зовут');
-      
-      if (!hasGreeting && lessonNotes.length > 0) {
-        console.warn('⚠️ Первый элемент не является приветствием, добавляем приветствие');
-        const greeting = `Здравствуй! Меня зовут учитель. Сегодня мы с тобой изучим тему "${lessonTitle}". Давай начнем наш урок!`;
-        setLessonNotes(prev => [greeting, ...prev]);
-        return;
-      }
-      
-      // Start reading after a short delay (начинаем с приветствия)
-      console.log('🎤 Начинаем урок с приветствия:', lessonNotes[0]?.substring(0, 50));
+      // Начинаем урок сразу с материала (приветствие больше не требуется)
+      console.log('🎤 Начинаем урок с материала:', lessonNotes[0]?.substring(0, 50));
       const timer = setTimeout(() => {
         readNextNote();
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [lessonNotes.length, isProcessing, isReadingLesson, currentNoteIndex, readNextNote, lessonNotes, lessonTitle]);
+  }, [lessonNotes.length, isProcessing, isReadingLesson, currentNoteIndex, readNextNote, lessonNotes]);
 
   // Initialize speech recognition
   useEffect(() => {
@@ -327,11 +365,12 @@ ${lessonAspects}
       if (SpeechRecognitionAPI) {
         speechRecognitionRef.current = new SpeechRecognitionAPI();
         speechRecognitionRef.current.continuous = false;
-        speechRecognitionRef.current.interimResults = false;
+        speechRecognitionRef.current.interimResults = true;
         speechRecognitionRef.current.lang = 'ru-RU';
 
         speechRecognitionRef.current.onstart = () => {
           setIsListening(true);
+          setUserTranscript('');
         };
 
         speechRecognitionRef.current.onend = () => {
@@ -340,12 +379,19 @@ ${lessonAspects}
 
         speechRecognitionRef.current.onresult = (event) => {
           let finalTranscript = '';
+          let interimTranscript = '';
 
           for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
             if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript;
+              finalTranscript += transcript;
+            } else {
+              interimTranscript += transcript;
             }
           }
+
+          // Update transcript display
+          setUserTranscript(finalTranscript || interimTranscript);
 
           if (finalTranscript) {
             handleUserMessage(finalTranscript);
@@ -376,43 +422,21 @@ ${lessonAspects}
     }
 
     setIsProcessing(true);
+    // Clear transcript after processing starts
+    setUserTranscript('');
+
+    // Add user message to conversation history
+    setConversationHistory(prev => [...prev, { role: 'student', text: message }]);
 
     try {
-      // Send to AI for response
-      const response = await fetch('/api/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: 'system',
-              content: `Ты - опытный учитель по теме "${lessonTitle}" (${lessonTopic}).
+      // Generate dynamic content based on user response
+      const aiResponse = await generateDynamicContent(message);
 
-Твоя задача - объяснять материал доступно, отвечать на вопросы ученика, и продолжать урок.
+      // Add AI response to conversation history
+      setConversationHistory(prev => [...prev, { role: 'teacher', text: aiResponse }]);
 
-Текущий материал урока: ${lessonAspects}
-
-Отвечай кратко и по делу. После ответа предложи продолжить урок.`
-            },
-            {
-              role: 'user',
-              content: message
-            }
-          ],
-          model: 'gpt-4-turbo',
-          temperature: 0.7,
-          max_completion_tokens: 500
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const aiResponse = data.choices[0]?.message?.content || 'Извините, не удалось получить ответ.';
+      // Add new content to lesson notes
+      setLessonNotes(prev => [...prev, aiResponse]);
 
       // Speak AI response
       try {
@@ -421,16 +445,14 @@ ${lessonAspects}
           voice: 'nova',
           speed: 1.0,
           onStart: () => console.log('Speaking AI response'),
-          onEnd: () => {
-            setIsSpeaking(false);
-            // Resume reading lesson after response
-            isInterruptedRef.current = false;
-            setTimeout(() => {
-              if (currentNoteIndex < lessonNotes.length) {
-                readNextNote();
-              }
-            }, 1000);
-          },
+        onEnd: () => {
+          setIsSpeaking(false);
+          // Continue with the new content
+          isInterruptedRef.current = false;
+          setTimeout(() => {
+            readNextNote();
+          }, 1000);
+        },
           onError: (error) => {
             console.error('TTS error:', error);
             setIsSpeaking(false);
@@ -512,11 +534,42 @@ ${lessonAspects}
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col items-center justify-center space-y-6">
+        {/* Loading indicator when generating lesson or dynamic content */}
+        {isGeneratingLesson && (
+          <div className="w-full max-w-md bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+            <div className="flex items-center justify-center mb-3">
+              <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+            <p className="text-sm font-medium text-blue-900">
+              {lessonNotes.length === 0 ? 'Генерирую урок...' : 'Думаю над ответом...'}
+            </p>
+            <p className="text-xs text-blue-700 mt-1">
+              {lessonNotes.length === 0
+                ? 'AI создает персональный урок специально для вас'
+                : 'AI адаптирует урок под ваш вопрос'
+              }
+            </p>
+          </div>
+        )}
+
+        {/* User transcript display */}
+        {userTranscript && !isProcessing && !isGeneratingLesson && (
+          <div className="w-full max-w-md bg-muted/50 rounded-lg p-4 border">
+            <p className="text-sm text-center text-foreground">
+              <span className="font-medium">Вы сказали:</span>
+            </p>
+            <p className="text-sm text-center mt-2 italic text-muted-foreground">
+              "{userTranscript}"
+            </p>
+          </div>
+        )}
+
         {/* Pulsing green circle for voice input */}
-        <div className="relative flex items-center justify-center">
+        {!isProcessing && !isGeneratingLesson && (
+          <div className="relative flex items-center justify-center">
           <Button
             onClick={toggleListening}
-            disabled={isProcessing || isSpeaking}
+            disabled={isProcessing || isSpeaking || isGeneratingLesson}
             className={`w-32 h-32 rounded-full ${
               isListening
                 ? 'bg-green-500 hover:bg-green-600 animate-pulse'
@@ -538,6 +591,7 @@ ${lessonAspects}
             </>
           )}
         </div>
+        )}
 
         {/* Status text */}
         <div className="text-center space-y-2">

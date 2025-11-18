@@ -25,16 +25,16 @@ const { exec } = require('child_process');
 const util = require('util');
 const execAsync = util.promisify(exec);
 
-console.log('🚀 Запуск TRUE Single Port Server (ТОЛЬКО ПОРТ 1031)');
+console.log(`🚀 Запуск TRUE Single Port Server (ПОРТ ${process.env.PORT || '1031'})`);
 console.log('================================================');
 
 // Устанавливаем переменные окружения
 process.env.NODE_ENV = 'production';
-process.env.PORT = '1031';
-process.env.PROXY_PORT = '1031';
+process.env.PORT = process.env.PORT || '1031';
+process.env.PROXY_PORT = process.env.PORT;
 
 console.log('📊 Конфигурация TRUE SINGLE-PORT:');
-console.log('  - Единственный порт: 1031');
+console.log(`  - Единственный порт: ${process.env.PORT}`);
 console.log('  - Frontend + API на одном порту');
 console.log('  - OpenAI API Key:', process.env.OPENAI_API_KEY ? '✅ Установлен' : '❌ НЕ установлен');
 console.log('');
@@ -191,6 +191,41 @@ function startSinglePortServer() {
         UNIQUE(user_id, course_id)
       );
 
+      CREATE TABLE IF NOT EXISTS lesson_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        course_name TEXT NOT NULL,
+        lesson_title TEXT NOT NULL,
+        lesson_topic TEXT,
+        lesson_number INTEGER,
+        lesson_notes TEXT NOT NULL,
+        current_note_index INTEGER DEFAULT 0,
+        total_notes INTEGER NOT NULL,
+        call_transcript TEXT,
+        session_status TEXT DEFAULT 'in_progress',
+        started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        completed_at TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS generated_lessons (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        course_name TEXT NOT NULL,
+        lesson_title TEXT NOT NULL,
+        lesson_topic TEXT,
+        lesson_number INTEGER,
+        lesson_notes TEXT NOT NULL,
+        total_notes INTEGER NOT NULL,
+        generation_prompt TEXT,
+        conversation_history TEXT,
+        interaction_type TEXT DEFAULT 'voice', -- 'voice' or 'text'
+        is_template BOOLEAN DEFAULT 0,
+        is_active BOOLEAN DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE INDEX IF NOT EXISTS idx_user_progress_user_id ON user_progress(user_id);
       CREATE INDEX IF NOT EXISTS idx_user_progress_lesson_id ON user_progress(lesson_id);
       CREATE INDEX IF NOT EXISTS idx_lessons_course_id ON lessons(course_id);
@@ -199,6 +234,10 @@ function startSinglePortServer() {
       CREATE INDEX IF NOT EXISTS idx_assessment_questions_assessment_id ON assessment_questions(assessment_id);
       CREATE INDEX IF NOT EXISTS idx_learning_plans_user_id ON learning_plans(user_id);
       CREATE INDEX IF NOT EXISTS idx_learning_plans_course_id ON learning_plans(course_id);
+      CREATE INDEX IF NOT EXISTS idx_lesson_sessions_user_id ON lesson_sessions(user_id);
+      CREATE INDEX IF NOT EXISTS idx_lesson_sessions_status ON lesson_sessions(session_status);
+      CREATE INDEX IF NOT EXISTS idx_generated_lessons_course ON generated_lessons(course_name, lesson_title);
+      CREATE INDEX IF NOT EXISTS idx_generated_lessons_active ON generated_lessons(is_active);
     `);
     console.log('✅ Database tables initialized');
   } catch (error) {
@@ -274,8 +313,9 @@ function startSinglePortServer() {
     const method = options.method || 'GET';
     const headers = options.headers || {};
     const data = options.data;
+    const stream = options.stream || false;
 
-    console.log('🔧 curlWithProxy called for URL:', url, 'method:', method);
+    console.log('🔧 curlWithProxy called for URL:', url, 'method:', method, 'stream:', stream);
 
     let curlCommand = `curl -s -X ${method}`;
 
@@ -300,29 +340,59 @@ function startSinglePortServer() {
     curlCommand += ` "${url}"`;
 
     console.log('🔧 Executing curl command:', curlCommand.replace(/(-H "Authorization: Bearer [^"]+)"/, '$1 [HIDDEN]"'));
-    
-    try {
-      // Execute curl command
-      const { stdout, stderr } = await execAsync(curlCommand);
-      
-      if (stderr && !stderr.includes('Warning')) {
-        console.error('⚠️ Curl stderr:', stderr);
+
+    if (stream) {
+      // Return a readable stream for streaming responses
+      return new Promise((resolve, reject) => {
+        const { spawn } = require('child_process');
+        const curl = spawn('bash', ['-c', curlCommand], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+        let stderrData = '';
+
+        curl.stderr.on('data', (data) => {
+          stderrData += data.toString();
+        });
+
+        curl.on('close', (code) => {
+          if (code !== 0) {
+            const error = new Error(`curl process exited with code ${code}`);
+            error.stderr = stderrData;
+            reject(error);
+          }
+        });
+
+        curl.on('error', (error) => {
+          error.stderr = stderrData;
+          reject(error);
+        });
+
+        // Resolve with the readable stream
+        resolve(curl.stdout);
+      });
+    } else {
+      try {
+        // Execute curl command synchronously
+        const { stdout, stderr } = await execAsync(curlCommand);
+
+        if (stderr && !stderr.includes('Warning')) {
+          console.error('⚠️ Curl stderr:', stderr);
+        }
+
+        if (!stdout || stdout.trim().length === 0) {
+          throw new Error('Empty response from curl command');
+        }
+
+        return stdout;
+      } catch (error) {
+        console.error('❌ curlWithProxy error:', error.message);
+        if (error.stdout) {
+          console.error('❌ curl stdout:', error.stdout.substring(0, 500));
+        }
+        if (error.stderr) {
+          console.error('❌ curl stderr:', error.stderr);
+        }
+        throw new Error(`curl command failed: ${error.message}`);
       }
-      
-      if (!stdout || stdout.trim().length === 0) {
-        throw new Error('Empty response from curl command');
-      }
-      
-      return stdout;
-    } catch (error) {
-      console.error('❌ curlWithProxy error:', error.message);
-      if (error.stdout) {
-        console.error('❌ curl stdout:', error.stdout.substring(0, 500));
-      }
-      if (error.stderr) {
-        console.error('❌ curl stderr:', error.stderr);
-      }
-      throw new Error(`curl command failed: ${error.message}`);
     }
   }
 
@@ -504,61 +574,101 @@ function startSinglePortServer() {
     }
 
     try {
-      const responseOutput = await curlWithProxy('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'curl/7.68.0',
-          'Accept': '*/*'
-        },
-        data: req.body
-      });
+      // Check if streaming is requested
+      const isStreaming = req.body.stream === true;
+      console.log('📡 Streaming mode:', isStreaming);
 
-      // Check if response is empty
-      if (!responseOutput || responseOutput.trim().length === 0) {
-        console.error('❌ Empty response from OpenAI API');
-        return res.status(500).json({
-          error: 'Empty response from OpenAI API',
-          details: 'The API returned an empty response'
+      if (isStreaming) {
+        // Handle streaming response
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        const stream = await curlWithProxy('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+            'User-Agent': 'curl/7.68.0',
+            'Accept': '*/*'
+          },
+          data: req.body,
+          stream: true
         });
-      }
 
-      // Try to parse JSON
-      let response;
-      try {
-        response = JSON.parse(responseOutput);
-      } catch (parseError) {
-        console.error('❌ Failed to parse JSON response:', parseError.message);
-        console.error('❌ Raw response:', responseOutput.substring(0, 500));
-        return res.status(500).json({
-          error: 'Invalid JSON response from OpenAI API',
-          details: parseError.message,
-          raw_response: responseOutput.substring(0, 200)
+        // Pipe the stream to response
+        stream.on('data', (chunk) => {
+          const data = chunk.toString();
+          res.write(data);
         });
-      }
 
-      // Check if response contains an error from OpenAI
-      if (response.error) {
-        console.error('❌ OpenAI API returned an error:', response.error);
-        return res.status(response.error.status || 500).json({
-          error: 'OpenAI API error',
-          message: response.error.message,
-          type: response.error.type,
-          code: response.error.code
+        stream.on('end', () => {
+          res.end();
         });
-      }
 
-      // Check if response has expected structure
-      if (!response.choices || !Array.isArray(response.choices) || response.choices.length === 0) {
-        console.error('❌ Invalid response structure:', JSON.stringify(response).substring(0, 500));
-        return res.status(500).json({
-          error: 'Invalid response structure from OpenAI API',
-          details: 'Response does not contain choices array'
+        stream.on('error', (error) => {
+          console.error('❌ Streaming error:', error);
+          res.status(500).end();
         });
-      }
 
-      res.json(response);
+      } else {
+        // Handle regular response
+        const responseOutput = await curlWithProxy('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+            'User-Agent': 'curl/7.68.0',
+            'Accept': '*/*'
+          },
+          data: req.body
+        });
+
+        // Check if response is empty
+        if (!responseOutput || responseOutput.trim().length === 0) {
+          console.error('❌ Empty response from OpenAI API');
+          return res.status(500).json({
+            error: 'Empty response from OpenAI API',
+            details: 'The API returned an empty response'
+          });
+        }
+
+        // Try to parse JSON
+        let response;
+        try {
+          response = JSON.parse(responseOutput);
+        } catch (parseError) {
+          console.error('❌ Failed to parse JSON response:', parseError.message);
+          console.error('❌ Raw response:', responseOutput.substring(0, 500));
+          return res.status(500).json({
+            error: 'Invalid JSON response from OpenAI API',
+            details: parseError.message,
+            raw_response: responseOutput.substring(0, 200)
+          });
+        }
+
+        // Check if response contains an error from OpenAI
+        if (response.error) {
+          console.error('❌ OpenAI API returned an error:', response.error);
+          return res.status(response.error.status || 500).json({
+            error: 'OpenAI API error',
+            message: response.error.message,
+            type: response.error.type,
+            code: response.error.code
+          });
+        }
+
+        // Check if response has expected structure
+        if (!response.choices || !Array.isArray(response.choices) || response.choices.length === 0) {
+          console.error('❌ Invalid response structure:', JSON.stringify(response).substring(0, 500));
+          return res.status(500).json({
+            error: 'Invalid response structure from OpenAI API',
+            details: 'Response does not contain choices array'
+          });
+        }
+
+        res.json(response);
+      }
     } catch (error) {
       console.error('❌ Chat completions error:', error);
       console.error('❌ Error stack:', error.stack);
@@ -680,6 +790,8 @@ grade >= 7 ?
 - Глаголы и их формы
 - Простые предложения`}
 
+ВАЖНО: Отвечай ТОЛЬКО валидным JSON формате, без каких-либо markdown блоков, без markdown обертки, без дополнительного текста. Первый символ ответа должен быть '{', последний '}'.
+
 ОТВЕТ ТОЛЬКО В JSON (без дополнительного текста):
 {
   "courseName": "${courseName}",
@@ -699,7 +811,7 @@ grade >= 7 ?
 }`;
 
       const requestBody = {
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         messages: [
           {
             role: 'system',
@@ -711,10 +823,12 @@ grade >= 7 ?
           }
         ],
         temperature: 0.7,
-        max_completion_tokens: 3000
+        max_tokens: 3000
       };
 
       console.log('📤 Sending request to OpenAI...');
+      console.log('🔧 Request body:', JSON.stringify(requestBody, null, 2));
+      console.log('🔧 Using proxy:', !!PROXY_URL);
       const responseOutput = await curlWithProxy('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -726,24 +840,42 @@ grade >= 7 ?
         data: requestBody
       });
 
+      console.log('📥 Raw OpenAI response:', responseOutput.substring(0, 500) + '...');
+
       const response = JSON.parse(responseOutput);
-      
+
       if (!response.choices || !response.choices[0] || !response.choices[0].message) {
+        console.error('❌ Invalid response structure:', JSON.stringify(response, null, 2));
         throw new Error('Invalid response structure from OpenAI');
       }
 
       const content = response.choices[0].message.content;
-      console.log('📥 OpenAI response:', content.substring(0, 200) + '...');
+      console.log('📥 OpenAI response content:', content ? content.substring(0, 200) + '...' : 'EMPTY CONTENT!');
+      console.log('📥 Full message object:', JSON.stringify(response.choices[0].message, null, 2));
+
+      if (!content || content.trim().length === 0) {
+        console.error('❌ OpenAI returned empty content!');
+        throw new Error('OpenAI returned empty response content');
+      }
 
       // Parse the JSON response
       let planData;
       try {
-        // Try to extract JSON from the response (in case there's extra text)
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        console.log('🔍 Looking for JSON in learning plan response...');
+        // Try to extract JSON from markdown code blocks first
+        let jsonMatch = content.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+        console.log('🔍 Learning plan - Markdown JSON match:', !!jsonMatch, jsonMatch?.[0]?.substring(0, 100) + '...');
+        if (!jsonMatch) {
+          // Fallback to plain JSON
+          jsonMatch = content.match(/\{[\s\S]*\}/);
+          console.log('🔍 Learning plan - Plain JSON match:', !!jsonMatch, jsonMatch?.[0]?.substring(0, 100) + '...');
+        }
         if (!jsonMatch) {
           throw new Error('No JSON found in response');
         }
-        planData = JSON.parse(jsonMatch[0]);
+        // Use the captured group if it exists (from markdown), otherwise use the full match
+        const jsonString = jsonMatch[1] || jsonMatch[0];
+        planData = JSON.parse(jsonString);
       } catch (parseError) {
         console.error('❌ Failed to parse JSON response:', parseError.message);
         console.error('Raw response:', content);
@@ -796,10 +928,11 @@ grade >= 7 ?
   // Text-to-Speech
   app.post('/api/audio/speech', async (req, res) => {
     try {
+      console.log('🎤 TTS API called with body:', JSON.stringify(req.body).substring(0, 100));
+      
       // For TTS, we need to stream the response, so we'll use spawn instead of exec
       const curlArgs = [
         '-s', '-X', 'POST',
-        '--proxy', PROXY_URL,
         '-H', `Authorization: Bearer ${process.env.OPENAI_API_KEY}`,
         '-H', 'Content-Type: application/json',
         '-H', 'User-Agent: curl/7.68.0',
@@ -808,14 +941,29 @@ grade >= 7 ?
         'https://api.openai.com/v1/audio/speech'
       ];
 
+      // Only add proxy if PROXY_URL is set
+      if (PROXY_URL) {
+        console.log('🌐 Using proxy for TTS:', PROXY_URL);
+        curlArgs.splice(2, 0, '--proxy', PROXY_URL);
+      } else {
+        console.log('🌐 TTS: Making direct request to OpenAI (no proxy)');
+      }
+
+      console.log('📡 Spawning curl process for TTS...');
       const curlProcess = spawn('curl', curlArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      let stderrData = '';
+      
+      curlProcess.stderr.on('data', (data) => {
+        stderrData += data.toString();
+      });
 
       res.setHeader('Content-Type', 'audio/mpeg');
 
       curlProcess.stdout.pipe(res);
 
       curlProcess.on('error', (error) => {
-        console.error('TTS curl error:', error);
+        console.error('❌ TTS curl error:', error);
         if (!res.headersSent) {
           res.status(500).json({
             error: 'OpenAI TTS API error',
@@ -826,11 +974,14 @@ grade >= 7 ?
 
       curlProcess.on('close', (code) => {
         if (code !== 0) {
-          console.error('TTS curl process exited with code:', code);
+          console.error('❌ TTS curl process exited with code:', code);
+          console.error('❌ TTS stderr:', stderrData);
+        } else {
+          console.log('✅ TTS audio streamed successfully');
         }
       });
     } catch (error) {
-      console.error('TTS error:', error);
+      console.error('❌ TTS error:', error);
       res.status(500).json({
         error: 'OpenAI TTS API error',
         details: error.message
@@ -839,17 +990,17 @@ grade >= 7 ?
   });
 
   // Запускаем сервер
-  const server = app.listen(1031, () => {
-    console.log('✅ Единый сервер запущен на порту 1031');
+  const server = app.listen(process.env.PORT, () => {
+    console.log(`✅ Единый сервер запущен на порту ${process.env.PORT}`);
     console.log('');
     console.log('🎉 TRUE SINGLE-PORT SERVER ГОТОВ!');
     console.log('==================================');
-    console.log('🌐 Доступно на: https://teacher.windexs.ru');
-    console.log('📡 API: https://teacher.windexs.ru/api/*');
-    console.log('💻 Frontend: https://teacher.windexs.ru/');
-    console.log('💚 Health: https://teacher.windexs.ru/health');
+    console.log(`🌐 Доступно на: http://localhost:${process.env.PORT}`);
+    console.log(`📡 API: http://localhost:${process.env.PORT}/api/*`);
+    console.log(`💻 Frontend: http://localhost:${process.env.PORT}/`);
+    console.log(`💚 Health: http://localhost:${process.env.PORT}/health`);
     console.log('');
-    console.log('ТОЛЬКО ОДИН ПОРТ: 1031 ✅');
+    console.log(`ТОЛЬКО ОДИН ПОРТ: ${process.env.PORT} ✅`);
     console.log('');
     console.log('Для остановки: Ctrl+C');
   });
@@ -1368,9 +1519,573 @@ grade >= 7 ?
     }
   });
 
+  // ==================== LESSON SESSION API ROUTES ====================
+  
+  // Create or update lesson session
+  app.post('/api/lesson-sessions', (req, res) => {
+    try {
+      const {
+        user_id,
+        course_name,
+        lesson_title,
+        lesson_topic,
+        lesson_number,
+        lesson_notes,
+        current_note_index,
+        call_transcript
+      } = req.body;
+
+      if (!course_name || !lesson_title || !lesson_notes) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'course_name, lesson_title, and lesson_notes are required'
+        });
+      }
+
+      const notesArray = Array.isArray(lesson_notes) ? lesson_notes : JSON.parse(lesson_notes);
+      const totalNotes = notesArray.length;
+      const notesJson = JSON.stringify(notesArray);
+
+      console.log('📝 Creating/updating lesson session:', {
+        course_name,
+        lesson_title,
+        total_notes: totalNotes,
+        current_note_index: current_note_index || 0
+      });
+
+      // Check if session already exists for this lesson
+      const existingSession = db.prepare(`
+        SELECT id FROM lesson_sessions
+        WHERE user_id IS ? AND course_name = ? AND lesson_title = ? AND session_status = 'in_progress'
+        ORDER BY started_at DESC LIMIT 1
+      `).get(user_id || null, course_name, lesson_title);
+
+      if (existingSession) {
+        // Update existing session
+        const stmt = db.prepare(`
+          UPDATE lesson_sessions
+          SET lesson_notes = ?,
+              current_note_index = ?,
+              total_notes = ?,
+              call_transcript = ?,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `);
+        stmt.run(notesJson, current_note_index || 0, totalNotes, call_transcript || '', existingSession.id);
+
+        res.json({
+          status: 'success',
+          message: 'Lesson session updated',
+          session_id: existingSession.id
+        });
+      } else {
+        // Create new session
+        const stmt = db.prepare(`
+          INSERT INTO lesson_sessions (
+            user_id, course_name, lesson_title, lesson_topic, lesson_number,
+            lesson_notes, current_note_index, total_notes, call_transcript
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        const result = stmt.run(
+          user_id || null,
+          course_name,
+          lesson_title,
+          lesson_topic || '',
+          lesson_number || null,
+          notesJson,
+          current_note_index || 0,
+          totalNotes,
+          call_transcript || ''
+        );
+
+        res.json({
+          status: 'success',
+          message: 'Lesson session created',
+          session_id: result.lastInsertRowid
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error creating/updating lesson session:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
+  // Get active lesson session
+  app.get('/api/lesson-sessions/active', (req, res) => {
+    try {
+      const { user_id, course_name, lesson_title } = req.query;
+
+      let query = `
+        SELECT * FROM lesson_sessions
+        WHERE session_status = 'in_progress'
+      `;
+      const params = [];
+
+      if (user_id) {
+        query += ` AND user_id = ?`;
+        params.push(user_id);
+      } else {
+        query += ` AND user_id IS NULL`;
+      }
+
+      if (course_name) {
+        query += ` AND course_name = ?`;
+        params.push(course_name);
+      }
+
+      if (lesson_title) {
+        query += ` AND lesson_title = ?`;
+        params.push(lesson_title);
+      }
+
+      query += ` ORDER BY updated_at DESC LIMIT 1`;
+
+      const session = db.prepare(query).get(...params);
+
+      if (session) {
+        // Parse lesson_notes JSON
+        session.lesson_notes = JSON.parse(session.lesson_notes);
+        
+        res.json({
+          status: 'success',
+          session
+        });
+      } else {
+        res.json({
+          status: 'success',
+          session: null
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error fetching active session:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
+  // Update lesson progress
+  app.put('/api/lesson-sessions/:sessionId/progress', (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const { current_note_index, call_transcript, lesson_notes } = req.body;
+
+      console.log('📝 Updating lesson progress:', {
+        session_id: sessionId,
+        current_note_index,
+        transcript_length: call_transcript?.length || 0,
+        lesson_notes_updated: !!lesson_notes
+      });
+
+      const updates = [];
+      const params = [];
+
+      if (current_note_index !== undefined) {
+        updates.push('current_note_index = ?');
+        params.push(current_note_index);
+      }
+
+      if (call_transcript !== undefined) {
+        updates.push('call_transcript = ?');
+        params.push(call_transcript);
+      }
+
+      if (lesson_notes !== undefined) {
+        updates.push('lesson_notes = ?');
+        params.push(JSON.stringify(lesson_notes));
+      }
+
+      updates.push('updated_at = CURRENT_TIMESTAMP');
+      params.push(sessionId);
+
+      const stmt = db.prepare(`
+        UPDATE lesson_sessions
+        SET ${updates.join(', ')}
+        WHERE id = ?
+      `);
+      stmt.run(...params);
+
+      res.json({
+        status: 'success',
+        message: 'Progress updated'
+      });
+    } catch (error) {
+      console.error('❌ Error updating progress:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
+  // Complete lesson session
+  app.put('/api/lesson-sessions/:sessionId/complete', (req, res) => {
+    try {
+      const { sessionId } = req.params;
+
+      console.log('✅ Completing lesson session:', sessionId);
+
+      const stmt = db.prepare(`
+        UPDATE lesson_sessions
+        SET session_status = 'completed',
+            completed_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `);
+      stmt.run(sessionId);
+
+      res.json({
+        status: 'success',
+        message: 'Lesson session completed'
+      });
+    } catch (error) {
+      console.error('❌ Error completing session:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
+  // Get all sessions for user
+  app.get('/api/lesson-sessions', (req, res) => {
+    try {
+      const { user_id, status, limit } = req.query;
+
+      let query = `SELECT * FROM lesson_sessions WHERE 1=1`;
+      const params = [];
+
+      if (user_id) {
+        query += ` AND user_id = ?`;
+        params.push(user_id);
+      } else {
+        query += ` AND user_id IS NULL`;
+      }
+
+      if (status) {
+        query += ` AND session_status = ?`;
+        params.push(status);
+      }
+
+      query += ` ORDER BY updated_at DESC`;
+
+      if (limit) {
+        query += ` LIMIT ?`;
+        params.push(parseInt(limit));
+      }
+
+      const sessions = db.prepare(query).all(...params);
+
+      // Parse lesson_notes for each session
+      sessions.forEach(session => {
+        try {
+          session.lesson_notes = JSON.parse(session.lesson_notes);
+        } catch (e) {
+          session.lesson_notes = [];
+        }
+      });
+
+      res.json({
+        status: 'success',
+        sessions
+      });
+    } catch (error) {
+      console.error('❌ Error fetching sessions:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
+  // ==================== GENERATED LESSONS API ROUTES ====================
+
+  // Save generated lesson
+  app.post('/api/generated-lessons', (req, res) => {
+    try {
+      const {
+        course_name,
+        lesson_title,
+        lesson_topic,
+        lesson_number,
+        lesson_notes,
+        generation_prompt,
+        conversation_history,
+        interaction_type,
+        is_template
+      } = req.body;
+
+      if (!course_name || !lesson_title || !lesson_notes) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'course_name, lesson_title, and lesson_notes are required'
+        });
+      }
+
+      const notesArray = Array.isArray(lesson_notes) ? lesson_notes : JSON.parse(lesson_notes);
+      const totalNotes = notesArray.length;
+
+      console.log('💾 Saving generated lesson:', {
+        course_name,
+        lesson_title,
+        total_notes: totalNotes,
+        is_template: is_template || false
+      });
+
+      // Check if lesson already exists
+      const existingLesson = db.prepare(`
+        SELECT id FROM generated_lessons
+        WHERE lesson_title = ? AND course_name = ?
+      `).get(lesson_title, course_name);
+
+      let result;
+      if (existingLesson) {
+        // Update existing lesson
+        console.log('📝 Updating existing lesson:', existingLesson.id);
+        const updateStmt = db.prepare(`
+          UPDATE generated_lessons
+          SET lesson_topic = ?,
+              lesson_number = ?,
+              lesson_notes = ?,
+              total_notes = ?,
+              generation_prompt = ?,
+              conversation_history = ?,
+              interaction_type = ?,
+              is_template = ?,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `);
+
+        updateStmt.run(
+          lesson_topic || '',
+          lesson_number || null,
+          JSON.stringify(notesArray),
+          totalNotes,
+          generation_prompt || '',
+          conversation_history ? JSON.stringify(conversation_history) : null,
+          interaction_type || 'voice',
+          is_template ? 1 : 0,
+          existingLesson.id
+        );
+
+        result = { lastInsertRowid: existingLesson.id, changes: 1 };
+      } else {
+        // Create new lesson
+        console.log('🆕 Creating new lesson');
+        const insertStmt = db.prepare(`
+          INSERT INTO generated_lessons (
+            course_name, lesson_title, lesson_topic, lesson_number,
+            lesson_notes, total_notes, generation_prompt, conversation_history,
+            interaction_type, is_template
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        result = insertStmt.run(
+          course_name,
+          lesson_title,
+          lesson_topic || '',
+          lesson_number || null,
+          JSON.stringify(notesArray),
+          totalNotes,
+          generation_prompt || '',
+          conversation_history ? JSON.stringify(conversation_history) : null,
+          interaction_type || 'voice',
+          is_template ? 1 : 0
+        );
+      }
+
+      res.json({
+        status: 'success',
+        message: 'Lesson saved successfully',
+        lesson_id: result.lastInsertRowid
+      });
+    } catch (error) {
+      console.error('❌ Error saving generated lesson:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
+  // Get generated lessons
+  app.get('/api/generated-lessons', (req, res) => {
+    try {
+      const { course_name, is_template, limit } = req.query;
+
+      let query = `SELECT * FROM generated_lessons WHERE is_active = 1`;
+      const params = [];
+
+      if (course_name) {
+        query += ` AND course_name = ?`;
+        params.push(course_name);
+      }
+
+      if (is_template !== undefined) {
+        query += ` AND is_template = ?`;
+        params.push(is_template === 'true' ? 1 : 0);
+      }
+
+      query += ` ORDER BY created_at DESC`;
+
+      if (limit) {
+        query += ` LIMIT ?`;
+        params.push(parseInt(limit));
+      }
+
+      const lessons = db.prepare(query).all(...params);
+
+      // Parse lesson_notes for each lesson
+      lessons.forEach(lesson => {
+        try {
+          lesson.lesson_notes = JSON.parse(lesson.lesson_notes);
+        } catch (e) {
+          lesson.lesson_notes = [];
+        }
+      });
+
+      res.json({
+        status: 'success',
+        lessons
+      });
+    } catch (error) {
+      console.error('❌ Error fetching generated lessons:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
+  // Get specific generated lesson
+  app.get('/api/generated-lessons/:lessonId', (req, res) => {
+    try {
+      const { lessonId } = req.params;
+
+      const lesson = db.prepare(`
+        SELECT * FROM generated_lessons
+        WHERE id = ? AND is_active = 1
+      `).get(lessonId);
+
+      if (lesson) {
+        // Parse lesson_notes
+        try {
+          lesson.lesson_notes = JSON.parse(lesson.lesson_notes);
+        } catch (e) {
+          lesson.lesson_notes = [];
+        }
+
+        res.json({
+          status: 'success',
+          lesson
+        });
+      } else {
+        res.status(404).json({
+          status: 'error',
+          message: 'Lesson not found'
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error fetching generated lesson:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
+  // Update generated lesson
+  app.put('/api/generated-lessons/:lessonId', (req, res) => {
+    try {
+      const { lessonId } = req.params;
+      const { lesson_notes, is_template } = req.body;
+
+      console.log('📝 Updating generated lesson:', lessonId);
+
+      const updates = [];
+      const params = [];
+
+      if (lesson_notes !== undefined) {
+        updates.push('lesson_notes = ?');
+        const notesArray = Array.isArray(lesson_notes) ? lesson_notes : JSON.parse(lesson_notes);
+        params.push(JSON.stringify(notesArray));
+        updates.push('total_notes = ?');
+        params.push(notesArray.length);
+      }
+
+      if (is_template !== undefined) {
+        updates.push('is_template = ?');
+        params.push(is_template ? 1 : 0);
+      }
+
+      updates.push('updated_at = CURRENT_TIMESTAMP');
+      params.push(lessonId);
+
+      const stmt = db.prepare(`
+        UPDATE generated_lessons
+        SET ${updates.join(', ')}
+        WHERE id = ?
+      `);
+
+      stmt.run(...params);
+
+      res.json({
+        status: 'success',
+        message: 'Lesson updated successfully'
+      });
+    } catch (error) {
+      console.error('❌ Error updating generated lesson:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
+  // Delete generated lesson
+  app.delete('/api/generated-lessons/:lessonId', (req, res) => {
+    try {
+      const { lessonId } = req.params;
+
+      console.log('🗑️ Deleting generated lesson:', lessonId);
+
+      const stmt = db.prepare(`
+        UPDATE generated_lessons
+        SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `);
+
+      stmt.run(lessonId);
+
+      res.json({
+        status: 'success',
+        message: 'Lesson deleted successfully'
+      });
+    } catch (error) {
+      console.error('❌ Error deleting generated lesson:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
   // ⚠️ ВАЖНО: static files и SPA fallback ДОЛЖНЫ быть в конце, ПОСЛЕ ВСЕХ API маршрутов!
   console.log('📂 Настраиваем static файлы и SPA fallback...');
-  
+
+  // Настраиваем static файлы для public (видео, изображения и т.д.)
+  app.use(express.static(path.join(__dirname, 'public'), {
+    setHeaders: (res, path) => {
+      if (path.endsWith('.mp4')) {
+        res.setHeader('Content-Type', 'video/mp4');
+      }
+    }
+  }));
+
   // Настраиваем static файлы frontend
   // ВАЖНО: НЕ обрабатываем /api/* пути как static файлы
   app.use((req, res, next) => {

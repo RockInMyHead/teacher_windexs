@@ -4,15 +4,16 @@ declare global {
   }
 }
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Brain, Send, User, MessageCircle, Volume2, VolumeX, CheckCircle, X, BookOpen, Target, ArrowLeft, Phone } from 'lucide-react';
+import { Brain, Send, User, MessageCircle, Volume2, VolumeX, CheckCircle, X, BookOpen, Target, ArrowLeft, Phone, PhoneOff } from 'lucide-react';
 import { OpenAITTS, isTTSAvailable } from '@/lib/openaiTTS';
+import { VoiceComm, VoiceUtils } from '@/lib/voiceComm';
 import { COURSE_TEST_QUESTIONS, TestQuestion, COURSE_PLANS } from '@/utils/coursePlans';
 import { AssessmentResults } from '@/components/AssessmentResults';
 import { createPersonalizedCourseData } from '@/utils/assessmentAnalyzer';
@@ -114,6 +115,27 @@ const Chat = () => {
   const [waitingForAnswer, setWaitingForAnswer] = useState(false);
   const [thinkingDots, setThinkingDots] = useState('');
   const [showVideoCall, setShowVideoCall] = useState(false);
+  const [isCallActive, setIsCallActive] = useState(false);
+  const [callTranscript, setCallTranscript] = useState('');
+  const [lessonNotes, setLessonNotes] = useState<string[]>([]);
+  const [currentNoteIndex, setCurrentNoteIndex] = useState(0);
+  const [isLessonSpeaking, setIsLessonSpeaking] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
+  const [userQuestion, setUserQuestion] = useState<string>('');
+  const [isProcessingQuestion, setIsProcessingQuestion] = useState(false);
+  const [questionTimeout, setQuestionTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [lessonPausedAt, setLessonPausedAt] = useState<number | null>(null);
+  const [isWaitingForStudentAnswer, setIsWaitingForStudentAnswer] = useState(false);
+  const [currentTeacherQuestion, setCurrentTeacherQuestion] = useState<string>('');
+  const [conversationHistory, setConversationHistory] = useState<Array<{role: 'teacher' | 'student', text: string}>>([]);
+  const [isGeneratingLesson, setIsGeneratingLesson] = useState(false);
+  const [lessonStreamText, setLessonStreamText] = useState('');
+  const [lessonGenerationComplete, setLessonGenerationComplete] = useState(false);
+  const [textMessage, setTextMessage] = useState('');
+  const [isProcessingTextMessage, setIsProcessingTextMessage] = useState(false);
+  const [savedLessons, setSavedLessons] = useState<any[]>([]);
+  const [showSavedLessons, setShowSavedLessons] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   // Auto-scroll to video call when it opens
   useEffect(() => {
@@ -128,6 +150,20 @@ const Chat = () => {
         }
       }, 100);
     }
+  }, [showVideoCall]);
+
+  // Set video element for TTS synchronization
+  useEffect(() => {
+    if (showVideoCall && videoRef.current) {
+      console.log('🎥 Setting video element for TTS sync');
+      OpenAITTS.setVideoElement(videoRef.current);
+    } else {
+      OpenAITTS.setVideoElement(null);
+    }
+    
+    return () => {
+      OpenAITTS.setVideoElement(null);
+    };
   }, [showVideoCall]);
   const ttsContinueRef = useRef<boolean>(true);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -643,7 +679,7 @@ const Chat = () => {
       // TTS for next section
       if (isTTSAvailable() && isTtsEnabled) {
         try {
-          await OpenAITTS.speak(sectionContent, teacherMessage.id);
+          await OpenAITTS.speak(sectionContent, {});
         } catch (ttsError) {
           console.error('TTS error:', ttsError);
         }
@@ -662,1251 +698,729 @@ const Chat = () => {
     }
   };
 
-  // Generate content for specific lesson step
-  const generateStepContent = async (stepIndex: number, step: any, plan?: any) => {
-    console.log('🎯 generateStepContent called with stepIndex:', stepIndex, 'step:', step);
-    console.log('📋 Params: plan provided=', !!plan, 'lessonPlan in state=', !!lessonPlan, 'currentLesson=', !!currentLesson);
-
-    const currentPlan = plan || lessonPlan;
-    console.log('🔍 Using plan:', {
-      planProvided: !!plan,
-      usingProvidedPlan: !!plan,
-      currentPlanExists: !!currentPlan,
-      currentPlanHasSteps: !!currentPlan?.steps,
-      stepsLength: currentPlan?.steps?.length
-    });
-
-    if (!currentPlan || !currentLesson) {
-      console.error('❌ Missing lessonPlan or currentLesson:', {
-        currentPlan: !!currentPlan,
-        currentLesson: !!currentLesson,
-        lessonPlan: !!lessonPlan
-      });
+  // Handle user transcript with question detection
+  const handleUserTranscript = useCallback(async (text: string, isFinal: boolean) => {
+    console.log('🔍 handleUserTranscript called:', { text, isFinal });
+    
+    if (!isFinal || !text.trim()) {
+      console.log('⏭️ Skipping: not final or empty');
       return;
     }
+    
+    console.log('📝 User said (final):', text);
+    setCallTranscript(prev => prev + (prev ? ' ' : '') + text);
+    
+    // Add to conversation history
+    setConversationHistory(prev => [...prev, { role: 'student', text: text }]);
 
-    // Debug logging for prompt variables
-    console.log('🔧 Debug prompt variables:', {
-      currentLessonTitle: currentLesson.title,
-      currentLessonTopic: currentLesson.topic,
-      stepDescription: step?.description,
-      stepDuration: step?.duration,
-      currentPlanObjective: currentPlan?.objective
-    });
+    // Generate next step in conversation
+    console.log('🎯 Generating next conversation step...');
 
-    setIsGeneratingContent(true);
+      setTimeout(async () => {
+        try {
+          setIsProcessingQuestion(true);
+          
+          // Get conversation context
+        const context = conversationHistory.slice(-4).map(h =>
+            `${h.role === 'teacher' ? 'Юля' : 'Ученик'}: ${h.text}`
+          ).join('\n');
+          
+        const systemPrompt = `Ты - Юля, дружелюбный и терпеливый репетитор. Твоя задача - объяснить тему "${currentLesson?.title || 'Урок'}" (${currentLesson?.topic || 'Тема'}).
+
+ВАЖНО:
+1. Веди урок в формате живого диалога.
+2. НЕ выдавай весь материал сразу. Объясняй шаг за шагом.
+3. Говори кратко (1-3 предложения), чтобы ученику было легко воспринимать информацию на слух.
+4. После каждого объяснения задавай простой вопрос, чтобы проверить понимание или удержать внимание.
+5. Будь эмоциональной и поддерживающей.
+6. Если ученик молчит или не знает ответа, подбодри его и объясни проще.
+
+Текущий разговор:
+${context}
+Ученик только что сказал: "${text}"
+
+Ответь как Юля: кратко объясни следующий шаг темы и задай вопрос.`;
+
+          const response = await fetch('/api/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: `Ученик только что сказал: "${text}". Продолжи урок.` }
+              ],
+              model: 'gpt-4o',
+              temperature: 0.7,
+            max_tokens: 300
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+          const teacherResponse = data.choices[0].message.content;
+          console.log('✅ Teacher response:', teacherResponse);
+
+          // Add to conversation history and speak
+          setConversationHistory(prev => [...prev, { role: 'teacher', text: teacherResponse }]);
+          await OpenAITTS.speak(teacherResponse, {
+            voice: 'nova',
+            speed: 1.0,
+            onEnd: () => {
+              // After teacher speaks, start listening again
+              setTimeout(() => {
+                VoiceComm.startListening();
+              }, 1000);
+            }
+          });
+          }
+        } catch (error) {
+        console.error('❌ Error generating teacher response:', error);
+      } finally {
+          setIsProcessingQuestion(false);
+        }
+      }, 500);
+  }, [conversationHistory, currentLesson]);
+
+  // Stream lesson generation for real-time display
+  const generateLessonNotesStreaming = useCallback(async (): Promise<string[]> => {
+    console.log('📝 Starting streaming lesson generation...');
+    setIsGeneratingLesson(true);
+    setLessonStreamText('');
+    setLessonGenerationComplete(false);
+
     try {
-      // Validate required variables
-      if (!currentLesson?.title || !currentLesson?.topic || !step?.description || !step?.duration || !currentPlan?.objective) {
-        console.error('❌ Missing required variables for prompt generation:', {
-          title: currentLesson?.title,
-          topic: currentLesson?.topic,
-          description: step?.description,
-          duration: step?.duration,
-          objective: currentPlan?.objective
-        });
-        setIsGeneratingContent(false);
-        return;
+      const systemPrompt = `Ты - Юля, дружелюбный и терпеливый репетитор. Твоя задача - объяснить тему "\${currentLesson?.title || 'Урок'}" (\${currentLesson?.topic || 'Тема'}).
+ВАЖНО:
+1. Веди урок в формате живого диалога.
+2. НЕ выдавай весь материал сразу. Объясняй шаг за шагом.
+3. Говори кратко (1-3 предложения), чтобы ученику было легко воспринимать информацию на слух.
+4. После каждого объяснения задавай простой вопрос, чтобы проверить понимание или удержать внимание.
+5. Будь эмоциональной и поддерживающей.
+6. Если ученик молчит или не знает ответа, подбодри его и объясни проще.
+
+Создай приветствие для начала урока. Верни ответ в формате JSON массива строк, где ПЕРВЫЙ элемент - приветствие от Юли.`;
+
+      const initialMessage = `Давай начнем урок по теме "\${currentLesson?.title || 'Урок'}". Поздоровайся, представься (Юлия) и кратко скажи, чем мы будем заниматься.`;
+
+      const prompt = initialMessage;
+
+          const response = await fetch('/api/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [
+            { role: 'system', content: systemPrompt },
+                { role: 'user', content: prompt }
+              ],
+              model: 'gpt-4o',
+              temperature: 0.7,
+          max_tokens: 300
+            })
+          });
+
+      if (!response.ok) throw new Error(`API Error: ${response.status}`);
+
+            const data = await response.json();
+      const rawContent = data.choices[0].message.content;
+      console.log('📥 Raw greeting response:', rawContent);
+
+      // Parse JSON response - expect simple array with greeting
+      let notes;
+      try {
+        // Remove markdown code blocks if present
+        let cleanedText = rawContent.replace(/```json\\s*/g, '').replace(/```\\s*$/g, '').trim();
+
+        const parsed = JSON.parse(cleanedText);
+
+        if (!Array.isArray(parsed)) {
+          throw new Error('Parsed result is not an array');
+        }
+
+        notes = parsed;
+
+        if (!notes || notes.length === 0) {
+          throw new Error('Empty greeting');
+        }
+
+        console.log('✅ Generated greeting:', notes);
+        return notes;
+
+      } catch (parseError) {
+        console.warn('❌ Failed to parse greeting JSON:', parseError);
+        // Simple fallback greeting
+        const fallbackNotes = ['Привет! Я Юля. Давай начнем урок!'];
+        console.log('💬 Using fallback greeting:', fallbackNotes);
+        return fallbackNotes;
       }
 
-      const prompt = `Создай ПОДРОБНЫЙ и РАЗВЕРНУТЫЙ урок для ученика по теме: "${currentLesson.title}" (${currentLesson.topic})
-
-Описание: ${step.description}
-Продолжительность: ${step.duration} минут
-Уровень: ${currentPlan.objective}
-
-СТРУКТУРА УРОКА (обязательно следи!):
-1. ОПРЕДЕЛЕНИЕ И ОСНОВЫ (большой блок с подробным объяснением, 3-5 абзацев)
-2. ПРИМЕРЫ (5-7 конкретных примеров с подробным разбором каждого)
-3. ПРАКТИЧЕСКИЙ ПРИМЕР В УРОКЕ (1 интерактивное задание внутри теории)
-4. ТИПИЧНЫЕ ОШИБКИ (2-3 частых ошибки с объяснением)
-5. ПРАКТИЧЕСКИЕ УПРАЖНЕНИЯ (3-4 задания для закрепления)
-6. РЕЗЮМЕ (краткое повторение ключевых моментов)
-
-Формат ответа ТОЛЬКО JSON:
-{
-  "sections": [
-    {
-      "title": "Определение и основы",
-      "content": "БОЛЬШОЙ блок текста (5-10 предложений минимум). Подробное объяснение что это такое, зачем это нужно, как это работает. Объясни все доступным языком, разжевывая каждую мелочь.",
-      "examples": [
-        {"example": "Пример 1", "explanation": "Подробное объяснение этого примера"},
-        {"example": "Пример 2", "explanation": "Подробное объяснение этого примера"}
-      ],
-      "practiceInside": {
-        "type": "exercise",
-        "instruction": "Что нужно сделать (для закрепления в процессе урока)",
-        "hint": "Подсказка"
-      }
-    },
-    {
-      "title": "Типичные ошибки",
-      "content": "Подробное объяснение ошибок (2-3 абзаца)",
-      "mistakes": [
-        {"mistake": "Ошибка 1", "explanation": "Почему это ошибка и как правильно"},
-        {"mistake": "Ошибка 2", "explanation": "Почему это ошибка и как правильно"}
-      ]
-    },
-    {
-      "title": "Практика и закрепление",
-      "tasks": [
-        {"type": "exercise", "task": "Задание 1", "hint": "Подсказка"},
-        {"type": "test", "question": "Вопрос", "options": ["A", "B", "C", "D"]}
-      ]
-    },
-    {
-      "title": "Резюме",
-      "summary": "Краткое резюме всего урока (5-7 предложений). Повтори самые важные моменты."
+        } catch (error) {
+      console.error('❌ Failed to generate greeting:', error);
+      // Fallback greeting from Юля
+      const fallbackNotes = ['Привет! Я Юля. Давай начнем урок!'];
+      return fallbackNotes;
+    } finally {
+      setIsGeneratingLesson(false);
     }
-  ]
-}
+  }, [currentLesson]);
 
-ТРЕБОВАНИЯ К КОНТЕНТУ:
-- Подробность и ясность выше всего!
-- Каждый пример должен быть разобран детально
-- Объясни не только ЧТО, но и ПОЧЕМУ
-- Используй аналогии, сравнения
-- Напиши так, чтобы ученик ПОНЯЛ материал полностью`;
+  // Generate lesson notes for call
+  const generateLessonNotesForCall = useCallback(async () => {
+    try {
+      console.log('📝 Generating lesson notes for call...');
 
-      console.log('📝 Generated prompt:', prompt.substring(0, 200) + '...');
+      const systemPrompt = `Ты - Юля, дружелюбный и терпеливый репетитор. Твоя задача - объяснить тему "${currentLesson?.title || 'Урок'}" (${currentLesson?.topic || 'Тема'}).
+ВАЖНО:
+1. Веди урок в формате живого диалога.
+2. НЕ выдавай весь материал сразу. Объясняй шаг за шагом.
+3. Говори кратко (1-3 предложения), чтобы ученику было легко воспринимать информацию на слух.
+4. После каждого объяснения задавай простой вопрос, чтобы проверить понимание или удержать внимание.
+5. Будь эмоциональной и поддерживающей.
+6. Если ученик молчит или не знает ответа, подбодри его и объясни проще.
+
+Создай приветствие для начала урока. Верни ответ в формате JSON массива строк, где ПЕРВЫЙ элемент - приветствие от Юли.`;
+
+      const initialMessage = `Давай начнем урок по теме "${currentLesson?.title || 'Урок'}". Поздоровайся, представься (Юлия) и кратко скажи, чем мы будем заниматься.`;
+
+          const response = await fetch('/api/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [
+            {
+              role: 'system',
+              content: systemPrompt
+            },
+            {
+              role: 'user',
+              content: initialMessage
+            }
+              ],
+              model: 'gpt-4o',
+          temperature: 0.7,
+          max_tokens: 300
+            })
+          });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+            const data = await response.json();
+      const content = data.choices[0]?.message?.content || '';
+
+      // Parse JSON response or use fallback
+      try {
+        const notes = JSON.parse(content);
+        if (Array.isArray(notes) && notes.length > 0) {
+          console.log('✅ Приветствие от Юли:', notes[0].substring(0, 50));
+          setLessonNotes(notes);
+          console.log('📝 Lesson notes generated:', notes.length, 'items');
+        } else {
+          // Fallback greeting
+          setLessonNotes(['Привет! Я Юля. Давай начнем урок!']);
+          console.log('✅ Fallback greeting used');
+        }
+      } catch (parseError) {
+        // Fallback greeting
+        setLessonNotes(['Привет! Я Юля. Давай начнем урок!']);
+        console.log('✅ Fallback greeting used (parse error)');
+      }
+
+        } catch (error) {
+      console.error('Error generating lesson greeting:', error);
+      // Fallback greeting
+      setLessonNotes(['Привет! Я Юля. Давай начнем урок!']);
+      console.log('✅ Fallback greeting used (error)');
+    } finally {
+      setIsProcessing(false);
+      setIsGeneratingLesson(false);
+    }
+  }, [currentLesson]);
+
+  // Speak greeting and start interactive chat
+  const speakGreetingAndStartChat = useCallback(async (greeting: string) => {
+    try {
+      console.log('🎤 Speaking greeting:', greeting.substring(0, 50) + '...');
+      setIsLessonSpeaking(true);
+
+      // Speak the greeting
+      await OpenAITTS.speak(greeting, {
+        voice: 'nova',
+        speed: 1.0,
+        onStart: () => {
+          console.log('🎤 Greeting TTS started');
+        },
+        onEnd: async () => {
+          console.log('✅ Greeting TTS ended, starting voice recognition');
+        setIsLessonSpeaking(false);
+
+          // After greeting, immediately start voice recognition for user response
+          try {
+            await VoiceComm.startListening();
+          } catch (error) {
+            console.error('❌ Failed to start voice recognition after greeting:', error);
+          }
+        },
+        onError: (error) => {
+          console.error('❌ Greeting TTS error:', error);
+          setIsLessonSpeaking(false);
+        }
+      });
+    } catch (error) {
+      console.error('❌ Failed to speak greeting:', error);
+      setIsLessonSpeaking(false);
+    }
+  }, []);
+
+  // Save lesson session to database
+  const saveLessonSession = async (notes: string[]) => {
+    try {
+      console.log('💾 Saving lesson session to database...');
+      const response = await fetch('/api/lesson-sessions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+          user_id: null, // можно добавить user_id если есть авторизация
+          course_name: personalizedCourseData?.courseName || 'Unknown Course',
+          lesson_title: currentLesson?.title || 'Unknown Lesson',
+          lesson_topic: currentLesson?.topic || '',
+          lesson_number: currentLesson?.number || null,
+          lesson_notes: notes,
+          current_note_index: currentNoteIndex,
+          call_transcript: callTranscript
+                })
+              });
+
+              if (response.ok) {
+                const data = await response.json();
+        setCurrentSessionId(data.session_id);
+        console.log('✅ Lesson session saved, ID:', data.session_id);
+              } else {
+        console.error('❌ Failed to save session:', await response.text());
+      }
+            } catch (error) {
+      console.error('❌ Error saving session:', error);
+    }
+  };
+
+  // Update lesson progress in database
+  const updateLessonProgress = async (noteIndex: number, transcript?: string) => {
+    if (!currentSessionId) return;
+    
+    try {
+      await fetch(`/api/lesson-sessions/${currentSessionId}/progress`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_note_index: noteIndex,
+          call_transcript: transcript || callTranscript
+        })
+      });
+      console.log('✅ Progress updated:', noteIndex);
+    } catch (error) {
+      console.error('❌ Error updating progress:', error);
+    }
+  };
+
+  // Complete lesson session
+  const completeLessonSession = async () => {
+    if (!currentSessionId) return;
+    
+    try {
+      await fetch(`/api/lesson-sessions/${currentSessionId}/complete`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      console.log('✅ Lesson session completed');
+      setCurrentSessionId(null);
+    } catch (error) {
+      console.error('❌ Error completing session:', error);
+    }
+  };
+
+  // Handle text message input
+  const handleTextMessage = async (message: string) => {
+    if (!message.trim() || isProcessingTextMessage) return;
+
+    console.log('💬 Processing text message:', message);
+
+    setIsProcessingTextMessage(true);
+    const userMessage = message.trim();
+    setTextMessage('');
+
+    try {
+      // Add to conversation history
+      setConversationHistory(prev => [...prev, { role: 'student', text: userMessage }]);
+
+      // Get lesson context
+      const lessonContext = lessonNotes.slice(0, currentNoteIndex + 1).join(' ');
+
+      const prompt = `Ты - Юля, учительница на интерактивном уроке "${currentLesson?.title || 'Урок'}".
+
+Контекст урока (что уже было рассказано):
+${lessonContext}
+
+Недавний диалог:
+${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : 'Ученик'}: ${h.text}`).join('\n')}
+
+Ученик спросил: "${userMessage}"
+
+Твоя задача:
+1. Дай подробный и понятный ответ на вопрос
+2. Если нужно, используй примеры из урока
+3. Добавь новую информацию, которая дополнит урок
+4. Ответь так, чтобы это можно было добавить в конспект урока
+
+Ответь подробно (3-5 предложений), чтобы ответ был ценным дополнением к уроку.`;
 
       const response = await fetch('/api/chat/completions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'gpt-5.1',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.8,
-          max_completion_tokens: 4000
+        messages: [
+            { role: 'system', content: 'Ты - Юля, опытная педагог. Давай подробные и полезные ответы, которые можно добавить в конспект урока.' },
+            { role: 'user', content: prompt }
+        ],
+          model: 'gpt-4o',
+          temperature: 0.7,
+          max_tokens: 300
         })
       });
 
-      const data = await response.json();
+      if (response.ok) {
+        const data = await response.json();
+        const teacherResponse = data.choices[0].message.content;
 
-      if (!response.ok) {
-        console.error('❌ API response error:', data);
-        throw new Error(`API Error: ${response.status} - ${data.message || 'Unknown error'}`);
-      }
+        console.log('✅ Teacher response for text message:', teacherResponse);
 
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        console.error('❌ Invalid API response structure:', data);
-        throw new Error('Invalid API response structure');
-      }
+        // Add response to conversation history
+        setConversationHistory(prev => [...prev, { role: 'teacher', text: teacherResponse }]);
 
-      const rawContent = data.choices[0].message.content;
-      console.log('📥 Raw AI response:', rawContent);
+        // Add response to lesson notes
+        const newNote = `💬 ${userMessage}\n\n👩‍🏫 ${teacherResponse}`;
+        const updatedNotes = [...lessonNotes];
+        // Insert after current note
+        const insertIndex = currentNoteIndex + 1;
+        updatedNotes.splice(insertIndex, 0, newNote);
+        setLessonNotes(updatedNotes);
 
-      // Parse JSON response with sections
-      let lessonSections;
-      try {
-        const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          lessonSections = JSON.parse(jsonMatch[0]);
-          console.log('✅ Parsed lesson sections:', lessonSections);
-          
-          // Validate structure
-          if (!lessonSections.sections || !Array.isArray(lessonSections.sections)) {
-            throw new Error('Invalid structure: missing sections array');
-          }
-        } else {
-          throw new Error('No JSON found in response');
-        }
-      } catch (parseError) {
-        console.warn('❌ Failed to parse JSON response, using fallback format:', parseError);
-        // Fallback: create comprehensive section from raw text
-        lessonSections = {
-          sections: [{
-            title: "Теоретический материал",
-            content: rawContent,
-            examples: [],
-            tasks: [{
-              type: "question",
-              question: "Расскажи, что ты узнал(а) из этого урока?"
-            }]
-          }]
-        };
-      }
-
-      // Store sections for interactive display
-      setCurrentLessonSections(lessonSections.sections);
-      setCurrentSectionIndex(0);
-
-      // Start with first section
-      if (lessonSections.sections && lessonSections.sections.length > 0) {
-        const firstSection = lessonSections.sections[0];
-        let sectionContent = `🎓 **${firstSection.title}**\n\n${firstSection.content}`;
-
-        // Add examples if they exist
-        if (firstSection.examples && firstSection.examples.length > 0) {
-          firstSection.examples.forEach((example, idx) => {
-            sectionContent += `\n\n📝 Пример ${idx + 1}: ${example.example}\n`;
-            if (example.explanation) {
-              sectionContent += `💡 ${example.explanation}`;
-            }
-          });
-        }
-
-        // Add practice inside if it exists
-        if (firstSection.practiceInside) {
-          sectionContent += `\n\n💪 Практическое задание: ${firstSection.practiceInside.instruction}`;
-          if (firstSection.practiceInside.hint) {
-            sectionContent += `\n💡 Подсказка: ${firstSection.practiceInside.hint}`;
-          }
-        }
-
-        // Add mistakes if they exist
-        if (firstSection.mistakes && firstSection.mistakes.length > 0) {
-          firstSection.mistakes.forEach((mistake) => {
-            sectionContent += `\n\n⚠️ Ошибка: ${mistake.mistake}\n`;
-            sectionContent += `💡 ${mistake.explanation}`;
-          });
-        }
-
-        // Add tasks if they exist
-        if (firstSection.tasks && firstSection.tasks.length > 0) {
-          sectionContent += `\n\n📋 Практические упражнения:`;
-          firstSection.tasks.forEach((task, idx) => {
-            sectionContent += `\n\n${idx + 1}. ${task.task}`;
-            if (task.hint) {
-              sectionContent += `\n💡 Подсказка: ${task.hint}`;
-            }
-          });
-        }
-
-        // Add summary if it exists
-        if (firstSection.summary) {
-          sectionContent += `\n\n📌 Резюме: ${firstSection.summary}`;
-        }
-
-        setLessonContent(sectionContent);
-
-        // Add first section to chat
-        const teacherMessage: Message = {
-          id: `lesson-section-0-${Date.now()}`,
-          role: 'assistant',
-          content: sectionContent,
-          timestamp: new Date(),
-          ttsPlayed: false
-        };
-
-        console.log('💬 Adding first section to chat');
-
-        // Add message through ChatContainer ref if available, otherwise use state
-        if (chatContainerRef.current?.addMessage) {
-          chatContainerRef.current.addMessage(teacherMessage);
-        } else {
-          setMessages(prev => [...prev, teacherMessage]);
-        }
-
-        // Add TTS for the first section
-        if (isTTSAvailable() && isTtsEnabled) {
-          console.log('🔊 Playing TTS for first section...');
+        // Save updated lesson notes to database
+        if (currentSessionId) {
           try {
-            await OpenAITTS.speak(sectionContent, teacherMessage.id);
-          } catch (ttsError) {
-            console.error('TTS error:', ttsError);
+            await fetch(`/api/lesson-sessions/${currentSessionId}/progress`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                current_note_index: currentNoteIndex + 1,
+                call_transcript: callTranscript,
+                lesson_notes: updatedNotes
+              })
+            });
+            console.log('💾 Updated lesson notes saved to database');
+          } catch (error) {
+            console.error('❌ Error saving updated lesson notes:', error);
           }
         }
 
-        // Show task for first section
-        if (firstSection.task) {
-          setCurrentSectionTask(firstSection.task);
-          setWaitingForAnswer(true);
+        console.log('📝 Added teacher response to lesson notes');
+
+        // Speak the response
+        await OpenAITTS.speak(teacherResponse, {});
+
+        // Continue lesson from next note if not waiting for answer
+        if (!isWaitingForStudentAnswer && currentNoteIndex + 2 < lessonNotes.length) {
+          console.log('▶️ Continuing lesson after text response');
+          setTimeout(async () => {
+            await speakLessonNotes(lessonNotes.slice(currentNoteIndex + 2), currentNoteIndex + 2);
+          }, 1000);
         }
       }
     } catch (error) {
-      console.error('Failed to generate step content:', error);
-
-      // Show user-friendly error message
-      const errorMessage = error instanceof Error && error.message.includes('API key')
-        ? 'Не удалось сгенерировать контент урока: OpenAI API ключ не настроен. Обратитесь к администратору.'
-        : 'Не удалось сгенерировать контент урока. Используем резервный контент.';
-
-      // Fallback content
-      const fallbackContent = `Привет! Мы начинаем изучение темы "${currentLesson.title}". ${step.description}`;
-      setLessonContent(fallbackContent);
-
-      // Show error message to user
-      alert(errorMessage);
-
-      const teacherMessage: Message = {
-        id: `lesson-step-${stepIndex}-${Date.now()}`,
-        role: 'assistant',
-        content: `🎓 **Шаг ${step.step}: ${step.title}**\n\n${fallbackContent}`,
-        timestamp: new Date(),
-        ttsPlayed: false
-      };
-
-      setMessages(prev => [...prev, teacherMessage]);
+      console.error('❌ Error processing text message:', error);
     } finally {
-      setIsGeneratingContent(false);
+      setIsProcessingTextMessage(false);
     }
   };
 
-  // Move to next lesson step
-  // Handle next section within current lesson step
-  const nextSection = async () => {
-    console.log('📍 Next section called, current:', currentSectionIndex, 'total sections:', currentLessonSections.length);
-
-    // Prevent double-click and concurrent navigation
-    if (isGeneratingContent || isNavigatingRef.current) {
-      console.log('⚠️ Already navigating or generating, ignoring click');
-      return;
-    }
-
-    // Set navigation flag
-    isNavigatingRef.current = true;
-
+  // Load saved lessons
+  const loadSavedLessons = async () => {
     try {
-      // Check if we have more sections in current lesson step
-      if (currentSectionIndex < currentLessonSections.length - 1) {
-      // Move to next section within current step
-      const nextSectionIndex = currentSectionIndex + 1;
-      const nextSectionData = currentLessonSections[nextSectionIndex];
-
-      console.log('🔄 Moving to next section:', nextSectionIndex, nextSectionData.title);
-
-      let sectionContent = `🎓 **${nextSectionData.title}**\n\n${nextSectionData.content}`;
-
-      // Add examples if they exist
-      if (nextSectionData.examples && nextSectionData.examples.length > 0) {
-        nextSectionData.examples.forEach((example, idx) => {
-          sectionContent += `\n\n📝 Пример ${idx + 1}: ${example.example}\n`;
-          if (example.explanation) {
-            sectionContent += `💡 ${example.explanation}`;
-          }
-        });
+      const response = await fetch('/api/generated-lessons?limit=20');
+      if (response.ok) {
+        const data = await response.json();
+        setSavedLessons(data.lessons || []);
+        console.log('📚 Loaded saved lessons:', data.lessons?.length);
       }
-
-      // Add practice inside if it exists
-      if (nextSectionData.practiceInside) {
-        sectionContent += `\n\n💪 Практическое задание: ${nextSectionData.practiceInside.instruction}`;
-        if (nextSectionData.practiceInside.hint) {
-          sectionContent += `\n💡 Подсказка: ${nextSectionData.practiceInside.hint}`;
-        }
-      }
-
-      // Add mistakes if they exist
-      if (nextSectionData.mistakes && nextSectionData.mistakes.length > 0) {
-        nextSectionData.mistakes.forEach((mistake) => {
-          sectionContent += `\n\n⚠️ Ошибка: ${mistake.mistake}\n`;
-          sectionContent += `💡 ${mistake.explanation}`;
-        });
-      }
-
-      // Add tasks if they exist
-      if (nextSectionData.tasks && nextSectionData.tasks.length > 0) {
-        sectionContent += `\n\n📋 Практические упражнения:`;
-        nextSectionData.tasks.forEach((task, idx) => {
-          sectionContent += `\n\n${idx + 1}. ${task.task}`;
-          if (task.hint) {
-            sectionContent += `\n💡 Подсказка: ${task.hint}`;
-          }
-        });
-      }
-
-      // Add summary if it exists
-      if (nextSectionData.summary) {
-        sectionContent += `\n\n📌 Резюме: ${nextSectionData.summary}`;
-      }
-
-      const teacherMessage: Message = {
-        id: `lesson-section-${nextSectionIndex}-${Date.now()}`,
-        role: 'assistant',
-        content: sectionContent,
-        timestamp: new Date(),
-        ttsPlayed: false
-      };
-
-      if (chatContainerRef.current?.addMessage) {
-        chatContainerRef.current.addMessage(teacherMessage);
-      } else {
-        setMessages(prev => [...prev, teacherMessage]);
-      }
-
-      // TTS for next section
-      if (isTTSAvailable() && isTtsEnabled) {
-        try {
-          await OpenAITTS.speak(sectionContent, teacherMessage.id);
-        } catch (ttsError) {
-          console.error('TTS error:', ttsError);
-        }
-      }
-
-      setCurrentSectionIndex(nextSectionIndex);
-      setLessonContent(sectionContent);
-
-      // Set next task if available
-      const nextTask = nextSectionData.tasks && nextSectionData.tasks.length > 0 ? nextSectionData.tasks[0] : null;
-      setCurrentSectionTask(nextTask);
-      setWaitingForAnswer(!!nextTask);
-      } else {
-        // All sections completed - move to next lesson step
-        await nextLessonStep();
-      }
-    } finally {
-      // Reset navigation flag
-      isNavigatingRef.current = false;
+    } catch (error) {
+      console.error('❌ Error loading saved lessons:', error);
     }
   };
 
-  // Generate teacher system prompt based on course and lesson
-  const getTeacherSystemPrompt = () => {
-    let prompt = `Ты - опытный учитель английского языка. `;
-
-    // Special prompt for interactive lesson mode
-    if (isLessonMode && lessonPlan) {
-      prompt = `Ты - интерактивный учитель, проводящий урок по теме "${currentLesson?.title}".
-
-Ты должен создавать урок непосредственно для ученика, а не план для учителя.
-Представляй материал ученику, задавай вопросы, проверяй понимание.
-
-Текущий шаг урока: ${lessonPlan.steps[currentLessonStep]?.title || 'Введение'}
-Тип шага: ${lessonPlan.steps[currentLessonStep]?.type || 'introduction'}
-
-Твоя задача:
-1. Проводить урок шаг за шагом
-2. Объяснять материал ясно и доступно
-3. Задавать вопросы для проверки понимания
-4. Исправлять ошибки и объяснять правила
-5. Делать урок увлекательным и интерактивным
-6. Переходить к следующему шагу только после подтверждения ученика
-
-Отвечай на русском языке, но используй английские термины и примеры в обучении где это уместно.`;
-      return prompt;
-    }
-
-    if (personalizedCourseData) {
-      prompt += `Ученик проходит персонализированный курс "${personalizedCourseData.courseInfo?.title || 'Английский язык'}" для ${personalizedCourseData.courseInfo?.grade ? `${personalizedCourseData.courseInfo.grade} класса` : 'соответствующего уровня'}. `;
-
-      if (personalizedCourseData.foundTopic) {
-        prompt += `Последняя изученная тема: "${personalizedCourseData.foundTopic.title}" (${personalizedCourseData.foundTopic.topic}). `;
-      } else if (personalizedCourseData.userDescription && personalizedCourseData.userDescription !== 'Не указано (пропущено)') {
-        prompt += `Ученик описал свою подготовку: "${personalizedCourseData.userDescription}". `;
-      }
-    }
-
-    if (currentLesson) {
-      prompt += `Сейчас изучается урок: "${currentLesson.title}" (${currentLesson.topic}). `;
-      prompt += `Тема урока: ${currentLesson.aspects}. `;
-    }
-
-    prompt += `
-Правила общения:
-- Будь дружелюбным, терпеливым и поддерживающим
-- Объясняй сложные концепции простыми словами
-- Используй примеры из реальной жизни
-- Задавай вопросы, чтобы проверить понимание
-- Корректируй ошибки мягко и объясняй почему
-- Поощряй прогресс ученика
-- Адаптируй сложность под уровень ученика
-- Используй разнообразные методы обучения (диалоги, игры, упражнения)
-
-Твой ответ должен быть на русском языке, но можешь использовать английские слова и фразы для обучения.`;
-
-    return prompt;
-  };
-
-  // Function to split text into sentences
-  const splitIntoSentences = (text: string): string[] => {
-    // Split by sentence endings, but keep the punctuation
-    const sentences = text.split(/(?<=[.!?])\s+/);
-    return sentences.filter(sentence => sentence.trim().length > 0);
-  };
-
-  // Function to speak text sentence by sentence for faster TTS
-  const speakTextBySentences = async (text: string, messageId: string) => {
-    if (!isTTSAvailable()) {
-      alert('OpenAI API ключ не настроен. Проверьте переменные окружения.');
-      return;
-    }
-
-    ttsContinueRef.current = true; // Reset continuation flag
-
+  // Save current text-based lesson
+  const saveCurrentLesson = async () => {
     try {
-      // Stop any currently speaking
-      OpenAITTS.stop();
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-        currentAudioRef.current.currentTime = 0;
-        currentAudioRef.current = null;
-      }
-
-      setSpeakingMessageId(messageId);
-      setIsGeneratingTTS(true);
-
-      // Split text into sentences
-      const sentences = splitIntoSentences(text).filter(s => s.trim().length > 0);
-      console.log('📝 Split into sentences:', sentences);
-
-      if (sentences.length === 0) {
-        setSpeakingMessageId(null);
-        setIsGeneratingTTS(false);
+      if (!lessonNotes.length || !conversationHistory.length) {
+        alert('Нет данных для сохранения. Начните урок и пообщайтесь с учителем.');
         return;
       }
 
-      // Set total sentences for UI
-      setTotalSentences(sentences.length);
-      setCurrentSentence(0);
-
-      console.log('🚀 Starting parallel TTS generation for', sentences.length, 'sentences');
-
-      // Start continuous TTS generation sound (same pattern as LLM)
-      startContinuousSound(500, 1800);
-
-      // Generate all audio buffers in parallel
-      const generationPromises = sentences.map(async (sentence, index) => {
-        try {
-          console.log(`📤 Generating TTS for sentence ${index + 1}:`, sentence.substring(0, 50) + '...');
-          const audioBuffer = await OpenAITTS.generateSpeech(sentence, {
-            voice: 'alloy',
-            speed: 0.9,
-            model: 'tts-1'
-          });
-          console.log(`✅ TTS generated for sentence ${index + 1}`);
-          return { audioBuffer, sentence, index };
-        } catch (error) {
-          console.error(`❌ Failed to generate TTS for sentence ${index + 1}:`, error);
-          return { audioBuffer: null, sentence, index, error };
-        }
+      const response = await fetch('/api/generated-lessons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          course_name: currentLesson?.courseName || 'General',
+          lesson_title: currentLesson?.title || 'Text Lesson',
+          lesson_topic: currentLesson?.topic || '',
+          lesson_number: currentLesson?.number || null,
+          lesson_notes: lessonNotes,
+          generation_prompt: `Text-based lesson with conversation history`,
+          conversation_history: conversationHistory,
+          interaction_type: 'text',
+          is_template: false
+        })
       });
 
-      // Wait for all generations to complete
-      const audioResults = await Promise.allSettled(generationPromises);
-      const successfulResults = audioResults
-        .filter((result): result is PromiseFulfilledResult<{ audioBuffer: ArrayBuffer | null; sentence: string; index: number; error?: any }> =>
-          result.status === 'fulfilled' && result.value.audioBuffer !== null
-        )
-        .map(result => result.value);
-
-      console.log('🎉 All TTS generation completed');
-
-      // Stop continuous TTS generation sound
-      stopContinuousSound();
-
-      // Helper function to play a sentence
-      const playSentence = async (audioBuffer: ArrayBuffer, sentence: string, sentenceNumber: number, totalSentences: number): Promise<void> => {
-        return new Promise<void>((resolve, reject) => {
-          // Check if TTS was interrupted before starting playback
-          if (!ttsContinueRef.current) {
-            console.log('🛑 TTS interrupted before playback');
-            reject(new Error('TTS interrupted'));
-            return;
-          }
-
-          setCurrentSentence(sentenceNumber);
-          console.log(`🔊 Playing sentence ${sentenceNumber}/${totalSentences}:`, sentence.substring(0, 50) + '...');
-
-          // Silent playback
-
-          try {
-            const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-            const audioUrl = URL.createObjectURL(blob);
-            const audio = new Audio(audioUrl);
-
-            const checkInterruption = () => {
-                if (!ttsContinueRef.current) {
-                  console.log('🛑 TTS interrupted during playback');
-                  audio.pause();
-                  URL.revokeObjectURL(audioUrl);
-                  currentAudioRef.current = null;
-                  reject(new Error('TTS interrupted'));
-                }
-            };
-
-            // Check for interruption every 100ms
-            const interruptionCheck = setInterval(checkInterruption, 100);
-            // Register the interval for cleanup
-            interruptionCheckIntervalsRef.current.add(interruptionCheck);
-
-            audio.onended = () => {
-                clearInterval(interruptionCheck);
-                interruptionCheckIntervalsRef.current.delete(interruptionCheck);
-                URL.revokeObjectURL(audioUrl);
-                currentAudioRef.current = null;
-                resolve();
-            };
-
-            audio.onerror = (error) => {
-                clearInterval(interruptionCheck);
-                interruptionCheckIntervalsRef.current.delete(interruptionCheck);
-                URL.revokeObjectURL(audioUrl);
-                currentAudioRef.current = null;
-                reject(error);
-            };
-
-            // Store reference to current audio for interruption
-            currentAudioRef.current = audio;
-
-            audio.play().catch((error) => {
-                clearInterval(interruptionCheck);
-                interruptionCheckIntervalsRef.current.delete(interruptionCheck);
-                URL.revokeObjectURL(audioUrl);
-                currentAudioRef.current = null;
-                reject(error);
-            });
-          } catch (playError) {
-            console.error(`Error setting up audio for sentence ${sentenceNumber}:`, playError);
-            reject(playError);
-          }
-        });
-      };
-
-      // Play sentences sequentially
-      for (let i = 0; i < successfulResults.length; i++) {
-        const result = successfulResults[i];
-
-        // Check if TTS was interrupted before starting next sentence
-        if (!ttsContinueRef.current) {
-          console.log('🛑 TTS interrupted before playing sentence', i + 1);
-          break;
-        }
-
-        try {
-          await playSentence(result.audioBuffer!, result.sentence, i + 1, successfulResults.length);
-
-          // Small pause between sentences (only if not interrupted)
-          if (i < successfulResults.length - 1 && ttsContinueRef.current) {
-            await new Promise<void>((resolve, reject) => {
-                const pauseCheck = setInterval(() => {
-                  if (!ttsContinueRef.current) {
-                    clearInterval(pauseCheck);
-                    interruptionCheckIntervalsRef.current.delete(pauseCheck);
-                    reject(new Error('TTS interrupted during pause'));
-                  }
-                }, 50);
-
-                // Register the pause check interval
-                interruptionCheckIntervalsRef.current.add(pauseCheck);
-
-                setTimeout(() => {
-                  clearInterval(pauseCheck);
-                  interruptionCheckIntervalsRef.current.delete(pauseCheck);
-                  if (ttsContinueRef.current) {
-                    resolve();
-    } else {
-                    reject(new Error('TTS interrupted during pause'));
-                  }
-                }, 150);
-            });
-          }
-        } catch (playError) {
-          if (playError.message === 'TTS interrupted') {
-            console.log('🛑 TTS playback interrupted by user');
-            break;
-          }
-          console.error(`Error playing sentence ${i + 1}:`, playError);
-          // Continue with next sentence
-        }
+      if (response.ok) {
+        const data = await response.json();
+        console.log('💾 Text lesson saved with ID:', data.lesson_id);
+        alert('Урок сохранен! Теперь вы можете загрузить его из "📚 Сохраненные уроки"');
+      } else {
+        throw new Error('Failed to save lesson');
       }
-
-      // Reset counters and state only if not interrupted
-      if (ttsContinueRef.current) {
-        setCurrentSentence(0);
-        setTotalSentences(0);
-        setIsGeneratingTTS(false);
-        setSpeakingMessageId(null);
-      }
-
     } catch (error) {
-      console.error('Parallel TTS error:', error);
-      alert('Ошибка при генерации речи. Попробуйте еще раз.');
-      setSpeakingMessageId(null);
-      setCurrentSentence(0);
-      setTotalSentences(0);
-      setIsGeneratingTTS(false);
+      console.error('❌ Error saving current lesson:', error);
+      alert('Ошибка при сохранении урока');
     }
   };
 
-  // Function to speak text using OpenAI TTS (legacy function)
-  const speakText = async (text: string, messageId: string, showVisualFeedback: boolean = true) => {
-    if (!isTTSAvailable()) {
-      alert('OpenAI API ключ не настроен. Проверьте переменные окружения.');
-      return;
-    }
-
+  // Delete saved lesson
+  const deleteSavedLesson = async (lessonId: number) => {
     try {
-      // Stop any currently speaking
-      OpenAITTS.stop();
+      const response = await fetch(`/api/generated-lessons/${lessonId}`, {
+        method: 'DELETE'
+      });
 
-      if (showVisualFeedback && speakingMessageId === messageId) {
-        // If already speaking this message, stop it
-        setSpeakingMessageId(null);
-        return;
+      if (response.ok) {
+        // Remove from local state
+        setSavedLessons(prev => prev.filter(lesson => lesson.id !== lessonId));
+        console.log('🗑️ Deleted saved lesson:', lessonId);
+      } else {
+        throw new Error('Failed to delete lesson');
       }
-
-      if (showVisualFeedback) {
-        setSpeakingMessageId(messageId);
-      }
-
-      // Use sentence-by-sentence speaking for better performance
-      await speakTextBySentences(text, messageId);
-
     } catch (error) {
-      console.error('OpenAI TTS error:', error);
-      alert('Ошибка при генерации речи. Попробуйте еще раз.');
-      if (showVisualFeedback) {
-        setSpeakingMessageId(null);
-      }
+      console.error('❌ Error deleting saved lesson:', error);
+      alert('Ошибка при удалении урока');
     }
   };
 
-  // Function to toggle TTS mode
-  const toggleTts = () => {
-    if (isTtsEnabled) {
-      // Disable TTS
-      setIsTtsEnabled(false);
-      setSpeakingMessageId(null);
-      OpenAITTS.stop();
-    } else {
-      // Enable TTS
-      setIsTtsEnabled(true);
-    }
-  };
+  // Load specific saved lesson
+  const loadSavedLesson = async (lessonId: number) => {
+    try {
+      const response = await fetch(`/api/generated-lessons/${lessonId}`);
+      if (response.ok) {
+        const data = await response.json();
+        const lesson = data.lesson;
 
-  // Function to start voice chat
+        console.log('📖 Loaded saved lesson:', lesson.lesson_title, 'Type:', lesson.interaction_type);
 
+        if (lesson.interaction_type === 'text' && lesson.conversation_history) {
+          // Текстовое общение - загрузить историю чата и конспект
+          console.log('💬 Loading text-based lesson with conversation history');
 
+          setLessonNotes(lesson.lesson_notes);
+          setConversationHistory(JSON.parse(lesson.conversation_history));
+          setCurrentNoteIndex(lesson.lesson_notes.length - 1); // Начать с последней заметки
+          setLessonGenerationComplete(true);
 
+          // Clear voice-related state
+          setIsWaitingForStudentAnswer(false);
+          setCurrentTeacherQuestion('');
 
+          // Показать сообщение о загрузке
+          setTimeout(() => {
+            alert(`Урок "${lesson.lesson_title}" загружен с историей переписки. Продолжайте общение в чате.`);
+          }, 100);
 
+        } else {
+          // Голосовое общение - напомнить на чем закончили
+          console.log('🎤 Loading voice-based lesson, reminding about last state');
 
+          setLessonNotes(lesson.lesson_notes);
+          setCurrentNoteIndex(0);
+          setLessonGenerationComplete(true);
 
-  // Function to parse **bold green text** within a string
-  const parseBoldGreenText = (text: string, keyPrefix: string) => {
-    const parts = text.split(/(\*\*.*?\*\*)/g);
-    return parts.map((part, index) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        // This is a **bold green text** block
-        const greenText = part.slice(2, -2); // Remove ** from both sides
-        return (
-          <span key={`${keyPrefix}-green-${index}`} className="text-green-600 font-semibold">
-            {greenText}
-          </span>
-        );
-      }
-      // Regular text
-      return part;
-    });
-  };
+          // Clear any existing state
+          setIsWaitingForStudentAnswer(false);
+          setCurrentTeacherQuestion('');
+          setConversationHistory([]);
 
-  // Function to parse and format message content with ### blocks and **green text**
-  const formatMessageContent = (content: string) => {
-    // Split by lines to process each line individually
-    const lines = content.split('\n');
-    const result: JSX.Element[] = [];
-    let currentBlock: string[] = [];
+          // Напомнить на чем закончили через TTS
+          setTimeout(async () => {
+            try {
+              const lastNote = lesson.lesson_notes[lesson.lesson_notes.length - 1] || 'Мы закончили урок.';
+              const reminder = `Привет! Это Юля. Напоминаю, на чем мы остановились в уроке "${lesson.lesson_title}": ${lastNote.substring(0, 100)}... Продолжим урок?`;
 
-    lines.forEach((line, index) => {
-      if (line.trim().startsWith('### ')) {
-        // If we were in a regular block, close it first
-        if (currentBlock.length > 0) {
-          const blockText = currentBlock.join('\n');
-          result.push(
-            <span key={`text-${result.length}`} className="whitespace-pre-wrap">
-                {parseBoldGreenText(blockText, `text-${result.length}`)}
-            </span>
-          );
-          currentBlock = [];
+              await OpenAITTS.speak(reminder, {});
+              console.log('🎤 Reminded about lesson state');
+            } catch (error) {
+              console.error('❌ Failed to remind about lesson state:', error);
+              alert(`Урок "${lesson.lesson_title}" загружен. Мы остановились на последней теме урока.`);
+            }
+          }, 500);
         }
 
-        // Start or continue a ### block
-        const blockContent = line.trim().replace(/^### /, '');
-        result.push(
-          <div key={`block-${result.length}`} className="text-green-600 font-bold text-lg my-2 bg-green-50 dark:bg-green-950/20 px-3 py-2 rounded-md border-l-4 border-green-500">
-            {parseBoldGreenText(blockContent, `block-${result.length}`)}
-          </div>
-        );
-      } else {
-        // Regular line
-        currentBlock.push(line);
+        setShowSavedLessons(false);
       }
-    });
-
-    // Add any remaining regular text
-    if (currentBlock.length > 0) {
-      const blockText = currentBlock.join('\n');
-      result.push(
-        <span key={`text-${result.length}`} className="whitespace-pre-wrap">
-          {parseBoldGreenText(blockText, `text-${result.length}`)}
-        </span>
-      );
+    } catch (error) {
+      console.error('❌ Error loading saved lesson:', error);
     }
-
-    return result.length > 0 ? result : [<span key="empty" className="whitespace-pre-wrap">{parseBoldGreenText(content, 'empty')}</span>];
   };
 
-  // Assessment testing functions
-  const handleAssessmentAnswer = (selectedAnswer: string) => {
-    if (!assessmentQuestions[currentQuestionIndex]) return;
-
-    const currentQuestion = assessmentQuestions[currentQuestionIndex];
-    const isCorrect = selectedAnswer === currentQuestion.correctAnswer;
-
-    // Save result
-    setAssessmentResults(prev => [...prev, {
-      question: currentQuestion.question,
-      userAnswer: selectedAnswer,
-      correctAnswer: currentQuestion.correctAnswer,
-      isCorrect
-    }]);
-
-    // Move to next question or complete assessment
-    if (currentQuestionIndex < assessmentQuestions.length - 1) {
-      setCurrentQuestionIndex(prev => prev + 1);
+  // Handle video call with voice transcription and lesson
+  const handleCall = async () => {
+    if (isCallActive) {
+      // End call
+      console.log('📞 Ending call...');
+      VoiceComm.stopListening();
+      OpenAITTS.stop();
+      setIsCallActive(false);
+      setCallTranscript('');
+      setLessonNotes([]);
+      setCurrentNoteIndex(0);
+      setIsLessonSpeaking(false);
     } else {
-      setAssessmentCompleted(true);
-    }
-  };
+      // Start call
+      console.log('📞 Starting call...');
 
-  const restartAssessment = () => {
-    setCurrentQuestionIndex(0);
-    setAssessmentResults([]);
-    setAssessmentCompleted(false);
-  };
-
-  const getAssessmentScore = () => {
-    const correctAnswers = assessmentResults.filter(result => result.isCorrect).length;
-    return Math.round((correctAnswers / assessmentResults.length) * 100);
-  };
-
-  const handleAssessmentCompleted = () => {
-    // Преобразовать результаты в формат для analyzerа
-    const formattedAnswers = assessmentResults.map((result, index) => ({
-      questionIndex: index,
-      isCorrect: result.isCorrect,
-      question: result.question
-    }));
-
-    // Создать персонализированный курс
-    const courseData = createPersonalizedCourseData(
-      formattedAnswers,
-      assessmentQuestions,
-      selectedCourseId || 0,
-      selectedGrade || 1
-    );
-
-    setPersonalizedCourseData(courseData);
-  };
-
-  const shuffleOptions = (options: string[]): string[] => {
-    const shuffled = [...options];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  };
-
-
-
-
-
-  // Initialize assessment testing if grade parameter is present
-  useEffect(() => {
-    const gradeParam = searchParams.get('grade');
-    const courseIdParam = searchParams.get('courseId');
-    const startParam = searchParams.get('start');
-
-    if (gradeParam && courseIdParam && startParam === 'true') {
-      const grade = parseInt(gradeParam);
-      const courseId = parseInt(courseIdParam);
-
-      setSelectedGrade(grade);
-      setSelectedCourseId(courseId);
-
-      // Load questions for this grade
-      if (COURSE_TEST_QUESTIONS[courseId] && COURSE_TEST_QUESTIONS[courseId][grade]) {
-        setAssessmentQuestions(COURSE_TEST_QUESTIONS[courseId][grade]);
-        setIsAssessmentMode(true);
-        setCurrentQuestionIndex(0);
-        setAssessmentResults([]);
-        setAssessmentCompleted(false);
-      } else {
-        console.warn(`No questions found for course ${courseId}, grade ${grade}`);
-      }
-    }
-  }, [searchParams]);
-
-  // Check OpenAI API key on mount
-  useEffect(() => {
-    const checkApiKey = async () => {
-      const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-      if (!apiKey || apiKey === 'your_openai_api_key_here') {
-        console.warn('API key not configured');
-        setApiKeyStatus('invalid');
-        return;
-      }
-
-      // Проверяем доступность API через health endpoint сервера
+      // Activate audio context first (important for browser autoplay policies)
       try {
-        // Используем абортивный контроллер с таймаутом 3 сек
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 3000);
-        
-        const response = await fetch(`${window.location.origin}/health`, {
-          signal: controller.signal
-        });
-        clearTimeout(timeout);
-        
-        if (response.ok) {
-          // Если сервер отвечает, считаем что API ключ настроен
-          setApiKeyStatus('valid');
+        console.log('🔊 Activating audio context...');
+
+        // Try Web Audio API first
+        if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined') {
+          const AudioContextClass = AudioContext || webkitAudioContext;
+          const audioContext = new AudioContextClass();
+          if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+          }
+          console.log('✅ Web Audio API context activated');
         } else {
-          setApiKeyStatus('error');
+          // Fallback to HTML5 Audio (may fail on some browsers)
+          const audio = new Audio();
+          audio.volume = 0.01;
+          audio.muted = true;
+          audio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+
+          // Don't await, just try to play briefly
+          audio.play().then(() => {
+            audio.pause();
+            console.log('✅ HTML5 Audio context activated');
+          }).catch((err) => {
+            console.warn('⚠️ HTML5 Audio activation failed, continuing anyway:', err.message);
+          });
+
+          // Wait a bit for potential activation
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       } catch (error) {
-        console.warn('API key check timeout or failed, continuing anyway:', error);
-        // Не блокируем работу даже если API недоступен
-        setApiKeyStatus('valid');
+        console.warn('⚠️ Failed to activate audio context, continuing anyway:', error.message);
       }
-    };
 
-    checkApiKey();
-  }, []);
+      try {
+        // Generate simple greeting
+        console.log('📚 Starting conversation...');
+        setIsGeneratingLesson(true);
+        const notes = ['Привет! Я Юля. Давай начнем урок по теме "' + (currentLesson?.title || 'математике') + '". Что ты уже знаешь по этой теме?'];
+        setIsGeneratingLesson(false);
+        console.log('✅ Greeting ready, count:', notes?.length);
 
+        // Save the generated lesson
+        try {
+          const saveResponse = await fetch('/api/generated-lessons', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              course_name: currentLesson?.courseName || 'General',
+              lesson_title: currentLesson?.title || 'Generated Lesson',
+              lesson_topic: currentLesson?.topic || '',
+              lesson_number: currentLesson?.number || null,
+              lesson_notes: notes,
+              generation_prompt: 'Simple greeting',
+              conversation_history: conversationHistory,
+              interaction_type: 'voice',
+              is_template: false
+            })
+          });
 
-
-
-
-
-  // Check if message contains audio task keywords
-
-  // Check if message contains test question with options
-  const checkForLearningPlan = (message: string): { isLearningPlan: boolean } => {
-    // Check if message contains learning plan with "Готовы начать обучение?" question
-    const hasPlan = message.includes('2-недельный план обучения:') || message.includes('📋 Темы:');
-    const hasQuestion = message.includes('🚀 Готовы начать обучение?');
-
-    return {
-      isLearningPlan: hasPlan && hasQuestion
-    };
-  };
-
-
-
-  // Handle test question answer selection
-
-
-
-
-  const sendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return;
-
-    // Stop any ongoing sounds when user sends a new message
-    stopContinuousSound();
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: inputMessage,
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInputMessage('');
-    setIsLoading(true);
-
-
-    // Создать базовый системный промпт для чата
-    const systemPrompt = `Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Вы можете "разжевывать" сложные концепции, приводить примеры из реальной жизни, использовать аналогии и пошаговые объяснения.
-
-Особенности вашего стиля:
-- Объясняйте сложное простыми словами
-- Используйте примеры и аналогии
-- Разбивайте информацию на логические блоки
-- Задавайте наводящие вопросы для лучшего понимания
-- Будьте терпеливы и поддерживающи
-- Адаптируйте объяснения под уровень ученика
-- Поощряйте самостоятельное мышление
-
-КРИТИЧНО ВАЖНО: АКТИВНО ИСПОЛЬЗУЙТЕ ИСТОРИЮ БЕСЕДЫ!
-- Всегда ссылайтесь на предыдущие сообщения
-- Помните, что обсуждалось ранее
-- Продолжайте логическую нить разговора
-- Избегайте повторений уже объясненного
-- Используйте фразы типа "как мы обсуждали ранее", "продолжая нашу тему", "на основе предыдущего объяснения"`;
-
-    try {
-      const response = await fetch(`${window.location.origin}/api/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-5.1',
-          messages: [
-            {
-                role: 'system',
-                content: systemPrompt,
-            },
-            ...messages.slice(-29).map(msg => ({
-                role: msg.role,
-                content: msg.content,
-            })),
-            {
-                role: 'user',
-                content: userMessage.content,
-            },
-          ],
-          max_completion_tokens: 8000,
-          temperature: 0.7,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('OpenAI API Error:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorData
-        });
-
-        // Handle specific error codes
-        if (response.status === 401) {
-          throw new Error('Неверный API ключ OpenAI. Проверьте настройки.');
-        } else if (response.status === 429) {
-          throw new Error('Превышен лимит запросов к OpenAI. Попробуйте позже.');
-        } else if (response.status === 500) {
-          throw new Error('Ошибка сервера OpenAI. Попробуйте еще раз.');
-        } else {
-          throw new Error(`Ошибка OpenAI: ${response.status} ${response.statusText}`);
+          if (saveResponse.ok) {
+            const saveData = await saveResponse.json();
+            console.log('💾 Generated lesson saved with ID:', saveData.lesson_id);
+          } else {
+            console.warn('⚠️ Failed to save generated lesson:', await saveResponse.text());
+          }
+        } catch (saveError) {
+          console.warn('⚠️ Error saving generated lesson:', saveError);
         }
+
+        // Start the conversation with greeting after generation completes
+        console.log('🎓 Starting conversation with greeting...');
+        setTimeout(async () => {
+          try {
+            // Speak the greeting and then start interactive chat
+            await speakGreetingAndStartChat(notes[0]);
+          } catch (error) {
+            console.error('❌ Failed to start conversation:', error);
+          }
+        }, 500);
+
+        // Initialize VoiceComm with callbacks
+        const isInitialized = VoiceComm.init(
+          {
+            language: 'ru-RU',
+            continuous: true
+          },
+          {
+            onListeningStart: () => {
+              console.log('🎤 Call listening started (callback fired)');
+              console.log('🎤 Notes available:', !!notes, 'Notes length:', notes?.length);
+              setIsCallActive(true);
+
+              // Lesson already started automatically after generation, just ensure voice recognition is active
+            },
+            onListeningEnd: () => {
+              console.log('🎤 Call listening ended');
+              setIsCallActive(false);
+              setIsLessonSpeaking(false);
+            },
+          onTranscript: (text: string, isFinal: boolean) => {
+            if (isFinal && text.trim()) {
+              console.log('📝 Call transcript:', text);
+              handleUserTranscript(text, isFinal);
+            }
+          },
+            onError: (error: string) => {
+              console.error('❌ Call error:', error);
+              setIsCallActive(false);
+              setIsLessonSpeaking(false);
+            }
+          }
+        );
+
+        if (!isInitialized) {
+          throw new Error('Speech Recognition not supported in this browser');
+        }
+
+        // Start voice recognition (without parameters)
+        console.log('🎙️ Calling VoiceComm.startListening()...');
+        const started = VoiceComm.startListening();
+        console.log('🎙️ VoiceComm.startListening() returned:', started);
+      } catch (error) {
+        console.error('❌ Failed to start call:', error);
+        setIsCallActive(false);
+        setIsGeneratingLesson(false); // Скрыть индикатор при ошибке
       }
-
-      const data = await response.json();
-
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        console.error('Invalid OpenAI response:', data);
-        throw new Error('Некорректный ответ от OpenAI');
-      }
-
-      const aiContent = data.choices[0].message.content;
-      
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: aiContent,
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error('Error sending message:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'Извините, произошла ошибка при обработке вашего сообщения. Попробуйте еще раз.',
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
     }
   };
-
-  // Functions for lesson mode management
-
-
-
-
-
-  // Assessment Mode UI
-  if (isAssessmentMode) {
-    const currentQuestion = assessmentQuestions[currentQuestionIndex];
-
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
-        {/* Header */}
-        <Header />
-
-        {/* Assessment Container */}
-        <div className="container mx-auto px-4 py-8 max-w-2xl">
-          {personalizedCourseData ? (
-            <div className="space-y-6 animate-fade-in-up">
-              <AssessmentResults 
-                data={personalizedCourseData}
-                onStartCourse={() => {
-                  // Сохранить данные курса и перейти к обучению
-                  localStorage.setItem('personalizedCourse', JSON.stringify(personalizedCourseData));
-                  window.location.href = '/courses';
-                }}
-              />
-            </div>
-          ) : !assessmentCompleted ? (
-            <div className="space-y-6">
-              {/* Progress Section */}
-              <Card className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border-blue-200 shadow-lg">
-                <CardContent className="p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-sm font-medium text-blue-800">
-                      Вопрос {currentQuestionIndex + 1} из {assessmentQuestions.length}
-                    </span>
-                    <span className="text-sm text-blue-600 font-semibold">
-                      {Math.round(((currentQuestionIndex + 1) / assessmentQuestions.length) * 100)}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-white/60 rounded-full h-3 shadow-inner">
-                    <div
-                      className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500 ease-out shadow-sm"
-                      style={{ width: `${((currentQuestionIndex + 1) / assessmentQuestions.length) * 100}%` }}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Question Card */}
-              <Card className="bg-gradient-to-br from-white via-blue-50/30 to-indigo-50/30 border-2 border-blue-100 shadow-xl hover:shadow-2xl transition-all duration-300">
-                <CardHeader className="text-center pb-2">
-                  <CardTitle className="text-2xl font-bold text-blue-900 leading-tight">
-                    {currentQuestion?.question}
-                  </CardTitle>
-                </CardHeader>
-
-                <CardContent className="pt-2">
-                  <div className="space-y-3">
-                    {currentQuestion?.options.map((option, index) => (
-                      <Button
-                        key={index}
-                        onClick={() => handleAssessmentAnswer(option)}
-                        variant="outline"
-                        className="w-full text-left justify-start h-14 text-base font-medium border-2 border-blue-200 hover:border-blue-400 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:shadow-md transition-all duration-200 group"
-                        size="lg"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-6 h-6 rounded-full border-2 border-blue-300 group-hover:border-blue-500 flex items-center justify-center text-xs font-bold text-blue-600 group-hover:text-blue-700 transition-colors">
-                            {String.fromCharCode(65 + index)}
-                          </div>
-                          <span className="group-hover:text-blue-800 transition-colors">{option}</span>
-                        </div>
-                      </Button>
-                    ))}
-                  </div>
-
-                  <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-                    <p className="text-sm text-blue-700 text-center">
-                      <span className="font-medium">💡 Совет:</span> Выберите вариант, который считаете наиболее правильным
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {/* Results Header */}
-              <Card className="bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 border-2 border-green-200 shadow-xl">
-                <CardContent className="p-8 text-center">
-                  <div className="mb-6">
-                    <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full shadow-lg mb-4">
-                      <span className="text-3xl">🎉</span>
-                    </div>
-                    <CardTitle className="text-3xl font-bold text-green-900 mb-2">
-                      Тестирование завершено!
-                    </CardTitle>
-                  </div>
-
-                  <div className="bg-white/70 rounded-2xl p-6 shadow-inner">
-                    <div className="text-7xl font-bold text-transparent bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text mb-3">
-                      {getAssessmentScore()}%
-                    </div>
-                    <p className="text-green-700 font-medium text-lg">
-                      {assessmentResults.filter(r => r.isCorrect).length} из {assessmentResults.length} правильных ответов
-                    </p>
-                    <div className="mt-4">
-                      {getAssessmentScore() >= 80 ? (
-                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                          <span>🌟</span> Отличный результат!
-                        </div>
-                      ) : getAssessmentScore() >= 60 ? (
-                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
-                          <span>👍</span> Хороший результат
-                        </div>
-                      ) : (
-                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-800 rounded-full text-sm font-medium">
-                          <span>📚</span> Есть над чем работать
-                        </div>
-                      )}
-                    </div>
-
-                    <Button
-                      onClick={handleAssessmentCompleted}
-                      className="mt-6 h-12 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold text-base"
-                    >
-                      📊 Посмотреть результаты и рекомендации
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Detailed Results */}
-              <Card className="bg-gradient-to-br from-white via-green-50/20 to-emerald-50/20 border-2 border-green-100 shadow-lg">
-                <CardHeader>
-                  <CardTitle className="text-xl text-green-900 flex items-center gap-2">
-                    <span>📋</span> Подробные результаты
-                  </CardTitle>
-                </CardHeader>
-
-                <CardContent className="space-y-4">
-                  <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {assessmentResults.map((result, index) => (
-                      <div key={index} className="flex items-start gap-4 p-4 rounded-xl bg-white/60 border border-green-100 hover:shadow-md transition-all duration-200">
-                        <div className="flex-shrink-0 mt-1">
-                          {result.isCorrect ? (
-                            <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center shadow-sm">
-                              <CheckCircle className="w-5 h-5 text-white" />
-                            </div>
-                          ) : (
-                            <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center shadow-sm">
-                              <X className="w-5 h-5 text-white" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900 mb-2 leading-tight">{result.question}</p>
-                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                            <span className="text-sm text-gray-600">Ваш ответ:</span>
-                            <span className={`font-medium ${result.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
-                              {result.userAnswer}
-                            </span>
-                            {!result.isCorrect && (
-                              <>
-                                <span className="hidden sm:block text-gray-400">•</span>
-                                <span className="text-sm text-green-600">
-                                  Правильно: <span className="font-medium">{result.correctAnswer}</span>
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-green-200">
-                    <Button
-                      onClick={restartAssessment}
-                      variant="outline"
-                      className="flex-1 h-12 border-2 border-green-300 hover:border-green-400 hover:bg-green-50 transition-all duration-200"
-                    >
-                      🔄 Пройти заново
-                    </Button>
-                    <Button
-                      onClick={() => window.history.back()}
-                      className="flex-1 h-12 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 shadow-lg hover:shadow-xl transition-all duration-200"
-                    >
-                      ← Вернуться назад
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
@@ -1923,18 +1437,40 @@ const Chat = () => {
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               {/* Start Lesson Button (for lesson mode) */}
               {isLessonMode && !lessonStarted && (
-                <Button
-                  size="lg"
-                  className="flex-1 sm:flex-none text-lg px-8 py-4 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-300 gap-3 font-semibold"
-                  onClick={generateLessonPlan}
-                  disabled={isGeneratingPlan}
-                >
-                  {isGeneratingPlan ? (
-                    <>Генерирую урок...</>
-                  ) : (
-                    <>🎓 Начать интерактивный урок</>
-                  )}
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <Button
+                    size="lg"
+                    className="flex-1 sm:flex-none text-lg px-8 py-4 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-300 gap-3 font-semibold"
+                    onClick={generateLessonPlan}
+                    disabled={isGeneratingPlan}
+                  >
+                    {isGeneratingPlan ? (
+                      <>Генерирую урок...</>
+                    ) : (
+                      <>Начать интерактивный урок</>
+                    )}
+                  </Button>
+
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="flex-1 sm:flex-none text-lg px-8 py-4 border-2 border-green-500/50 hover:border-green-500 hover:bg-green-50 hover:text-green-700 transition-all duration-300 gap-3 font-semibold"
+                    onClick={saveCurrentLesson}
+                  >
+                    💾 Сохранить урок
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="flex-1 sm:flex-none text-lg px-8 py-4 border-2 border-blue-500/50 hover:border-blue-500 hover:bg-blue-50 hover:text-blue-700 transition-all duration-300 gap-3 font-semibold"
+                    onClick={() => {
+                      loadSavedLessons();
+                      setShowSavedLessons(true);
+                    }}
+                  >
+                    📚 Сохраненные уроки
+                  </Button>
+                </div>
               )}
 
               {/* Call Teacher Button (for lesson mode) */}
@@ -1942,15 +1478,15 @@ const Chat = () => {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="flex-1 sm:flex-none text-lg px-8 py-4 border-2 border-primary/30 hover:border-primary hover:bg-primary/5 transition-all duration-300 gap-3 font-semibold"
+                  className="flex-1 sm:flex-none text-lg px-8 py-4 border-2 border-primary/30 hover:border-primary hover:bg-primary/5 hover:text-black transition-all duration-300 gap-3 font-semibold"
                   onClick={() => setShowVideoCall(true)}
                 >
                   <Phone className="w-5 h-5 text-primary" />
-                  📞 Звонок учителю
+                  Звонок учителю
                 </Button>
               )}
 
-              {/* Error message */}
+              {/* Error Message */}
               {generationError && (
                 <div className="mt-4 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
                   <div className="flex items-start gap-3">
@@ -1965,8 +1501,7 @@ const Chat = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="mt-3 border-red-300 text-red-700 hover:bg-red-50"
-                        onClick={() => setGenerationError('')}
+                        onClick={() => setGenerationError(null)}
                       >
                         Закрыть
                       </Button>
@@ -1980,9 +1515,7 @@ const Chat = () => {
             {isLessonMode && lessonStarted && lessonPlan && lessonContent && (
               <LessonDisplay
                 stepTitle={lessonPlan.steps[currentLessonStep]?.title || 'Урок'}
-                stepNumber={currentSectionIndex + 1}
-                totalSteps={currentLessonSections.length}
-                content={lessonContent}
+                structuredContent={currentLessonSections}
                 duration={lessonPlan.steps[currentLessonStep]?.duration || '5'}
                 onNext={waitingForAnswer ? undefined : nextSection}
                 isGenerating={isGeneratingContent}
@@ -1992,9 +1525,9 @@ const Chat = () => {
               />
             )}
 
-            {/* Lesson Progress Header */}
-            {isLessonMode && personalizedCourseData && currentLesson && (
-              <Card className="border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-accent/5">
+            {/* Current Lesson Info */}
+            {isLessonMode && currentLesson && (
+              <Card className="border-2 border-primary/20 bg-card/95 backdrop-blur-xl">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -2008,15 +1541,26 @@ const Chat = () => {
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm text-muted-foreground">Прогресс</p>
-                      <p className="font-medium text-primary">
-                        Урок {currentLesson.number || 1}
-                      </p>
-                    </div>
                   </div>
                 </CardContent>
               </Card>
+            )}
+
+            {/* Voice Call Interface */}
+            {showVideoCall && (
+              <VoiceTeacherChat
+                lessonTitle={currentLesson?.title || 'Урок'}
+                lessonTopic={currentLesson?.topic || 'Тема'}
+                lessonAspects={currentLesson?.aspects || currentLesson?.description || ''}
+                onComplete={() => {
+                  setShowVideoCall(false);
+                  setIsCallActive(false);
+                }}
+                onClose={() => {
+                  setShowVideoCall(false);
+                  setIsCallActive(false);
+                }}
+              />
             )}
 
             {/* Thinking message display during plan generation */}
@@ -2027,18 +1571,19 @@ const Chat = () => {
                     <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
                     <span className="font-medium text-foreground">ИИ анализирует</span>
                   </div>
-                  <div className="text-sm text-muted-foreground ml-8">
-                    {generationStep}{thinkingDots}
-                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Генерирую план урока на основе ваших требований...
+                  </p>
                 </div>
               </div>
             )}
 
+            {/* Chat Interface */}
             {/* Chat Container - hidden in lesson mode */}
             {!isLessonMode && (
             <ChatContainer
                 ref={chatContainerRef}
-              initialSystemPrompt={`Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Вы можете "разжевывать" сложные концепции, приводить примеры из реальной жизни, использовать аналогии и пошаговые объяснения.
+              initialSystemPrompt={`Вы - профессиональный педагог и эксперт в образовании. Ваша задача - объяснять любые темы быстро, понятно и доступно. Вы можете "разжевывать" сложные концепции, приводить примеры из реальной жизни, использовать аналогии и пошаговые объяснения.                                         
 
 Особенности вашего стиля:
 - Объясняйте сложное простыми словами
@@ -2053,27 +1598,152 @@ const Chat = () => {
               onChatEnd={() => console.log('Chat ended')}
             />
             )}
-          </div>
 
-          {/* Voice Teacher Chat */}
-          {showVideoCall && (
-            <div className="mt-8" data-video-call>
-              <VoiceTeacherChat
-                lessonTitle={currentLesson?.title || 'Урок'}
-                lessonTopic={currentLesson?.topic || 'Тема'}
-                lessonAspects={currentLesson?.aspects || currentLesson?.description || 'Материал урока'}
-                onComplete={() => {
-                  setShowVideoCall(false);
-                  setLessonStarted(false);
-                }}
-                onClose={() => setShowVideoCall(false)}
-              />
+            {/* Video Call */}
+            {showVideoCall && (
+              <div className="mt-8" data-video-call>
+                <div className="bg-card border border-border rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold">Видео звонок с учителем</h3>
+                    <div className="flex gap-2">
+                      <Button
+                        variant={isCallActive ? "destructive" : "default"}
+                        size="sm"
+                        onClick={handleCall}
+                        className="gap-2"
+                      >
+                        {isCallActive ? <PhoneOff className="w-4 h-4" /> : <Phone className="w-4 h-4" />}
+                        {isCallActive ? 'Завершить звонок' : 'Позвонить'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowVideoCall(false)}
+                      >
+                        ✕ Закрыть
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="w-[300px] h-[300px] bg-black rounded-full overflow-hidden mx-auto">
+                    <video
+                      ref={videoRef}
+                      className="w-full h-full object-cover"
+                      muted
+                      loop
+                      src="/Untitled Video.mp4"
+                      onError={(e) => {
+                        console.error('Video load error:', e);
+                        // Fallback: show message if video not found
+                        e.currentTarget.style.display = 'none';
+                        const parent = e.currentTarget.parentElement;
+                        if (parent) {
+                          parent.innerHTML = `
+                            <div class="flex items-center justify-center h-full text-white">
+                              <div class="text-center">
+                                <p class="text-lg mb-2">🎥 Видео не найдено</p>
+                                <p class="text-sm opacity-75">Поместите файл "Untitled Video.mp4" в папку public</p>
+                              </div>
+                            </div>
+                          `;
+                        }
+                      }}
+                    >
+                      Ваш браузер не поддерживает видео.
+                    </video>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Saved Lessons */}
+            {/* Saved Lessons Modal */}
+            {showSavedLessons && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
+                  <div className="p-6 border-b">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-xl font-bold">📚 Сохраненные уроки</h2>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowSavedLessons(false)}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        ✕
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="p-6 overflow-y-auto max-h-[60vh]">
+                    {savedLessons.length === 0 ? (
+                      <div className="text-center py-8">
+                        <p className="text-muted-foreground">У вас пока нет сохраненных уроков.</p>
+                        <p className="text-sm text-muted-foreground mt-2">
+                          Завершите урок и нажмите "💾 Сохранить урок" чтобы сохранить его для последующего использования.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {savedLessons.map((lesson) => (
+                          <div key={lesson.id} className="border border-border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <h3 className="font-semibold text-lg">{lesson.lesson_title}</h3>
+                                <p className="text-muted-foreground text-sm mt-1">
+                                  {lesson.course_name} • {lesson.interaction_type === 'voice' ? '🎤 Голосовой урок' : '💬 Текстовый урок'}
+                                </p>
+                                <p className="text-muted-foreground text-xs mt-2">
+                                  Создан: {new Date(lesson.created_at).toLocaleString('ru-RU')}
+                                </p>
+                                {lesson.lesson_topic && (
+                                  <p className="text-muted-foreground text-sm mt-2">
+                                    Тема: {lesson.lesson_topic}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex gap-2 ml-4">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    loadSavedLesson(lesson.id);
+                                  }}
+                                  className="gap-2"
+                                >
+                                  📖 Загрузить
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    if (confirm('Вы уверены, что хотите удалить этот урок?')) {
+                                      deleteSavedLesson(lesson.id);
+                                    }
+                                  }}
+                                  className="gap-2 text-red-600 hover:text-red-700"
+                                >
+                                  🗑️ Удалить
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="mt-8 pt-6 border-t border-border">
+              <div className="text-center text-sm text-muted-foreground">
+                <p>🎓 AI-Помощник в обучении • Создано с ❤️ для лучших учеников</p>
+              </div>
             </div>
-          )}
+          </div>
         </div>
-    </div>
-  );
-};
-
+      </div>
+    );
+  }
 export default Chat;
-

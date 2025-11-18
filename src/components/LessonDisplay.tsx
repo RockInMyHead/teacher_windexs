@@ -2,13 +2,29 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertCircle, CheckCircle, BookOpen, Lightbulb, MessageSquare, Send, AlertTriangle, Target, Trophy } from 'lucide-react';
+import { AlertCircle, CheckCircle, BookOpen, Lightbulb, MessageSquare, Send, AlertTriangle, Target, Trophy, Volume2, VolumeX } from 'lucide-react';
+import { OpenAITTS } from '@/lib/openaiTTS';
+
+interface LessonSection {
+  title: string;
+  content: string;
+  examples?: Array<{example: string, explanation: string}>;
+  practiceInside?: {
+    type: string;
+    instruction: string;
+    hint?: string;
+  };
+  mistakes?: Array<{mistake: string, explanation: string}>;
+  tasks?: Array<{type: string, task: string, hint?: string}>;
+  summary?: string;
+}
 
 interface LessonDisplayProps {
   stepTitle: string;
   stepNumber: number;
   totalSteps: number;
   content: string;
+  structuredContent?: LessonSection[];
   duration: string;
   onNext?: () => void;
   isGenerating?: boolean;
@@ -22,6 +38,7 @@ export const LessonDisplay: React.FC<LessonDisplayProps> = ({
   stepNumber,
   totalSteps,
   content,
+  structuredContent,
   duration,
   onNext,
   isGenerating = false,
@@ -33,6 +50,7 @@ export const LessonDisplay: React.FC<LessonDisplayProps> = ({
   const [isTyping, setIsTyping] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [taskAnswer, setTaskAnswer] = useState('');
+  const [playingSections, setPlayingSections] = useState<Set<number>>(new Set());
 
   // Reset animation when content changes
   useEffect(() => {
@@ -62,6 +80,64 @@ export const LessonDisplay: React.FC<LessonDisplayProps> = ({
     setDisplayedContent(content);
     setCurrentIndex(content.length);
     setIsTyping(false);
+  };
+
+  // TTS functionality for sections
+  const speakSection = async (sectionIndex: number, section: LessonSection) => {
+    if (playingSections.has(sectionIndex)) {
+      console.log('🔇 Stopping TTS for section', sectionIndex);
+      OpenAITTS.stop();
+      setPlayingSections(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(sectionIndex);
+        return newSet;
+      });
+      return;
+    }
+
+    try {
+      console.log('🔊 Starting TTS for section', sectionIndex);
+      setPlayingSections(prev => new Set(prev).add(sectionIndex));
+
+      // Build text to speak
+      let textToSpeak = `${section.title}. ${section.content}`;
+
+      if (section.examples && section.examples.length > 0) {
+        textToSpeak += ' Примеры: ';
+        section.examples.forEach((example, idx) => {
+          textToSpeak += `Пример ${idx + 1}: ${example.example}. Объяснение: ${example.explanation}. `;
+        });
+      }
+
+      if (section.practiceInside) {
+        textToSpeak += ` Практическое задание: ${section.practiceInside.instruction}`;
+        if (section.practiceInside.hint) {
+          textToSpeak += ` Подсказка: ${section.practiceInside.hint}`;
+        }
+      }
+
+      try {
+        await OpenAITTS.speak(textToSpeak, `section-${sectionIndex}`);
+      } catch (error) {
+        // Если ошибка связана с autoplay, показываем специальное сообщение
+        if (error.message.includes('NotAllowedError') || error.message.includes('blocked by browser')) {
+          console.warn('TTS blocked by browser autoplay policy - user interaction required');
+          // Можно добавить уведомление пользователю здесь
+          throw new Error('Для озвучки требуется взаимодействие с страницей. Нажмите в любом месте страницы.');
+        }
+        throw error;
+      }
+
+      console.log('✅ TTS finished for section', sectionIndex);
+    } catch (error) {
+      console.error('❌ TTS error for section', sectionIndex, error);
+    } finally {
+      setPlayingSections(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(sectionIndex);
+        return newSet;
+      });
+    }
   };
 
   // Helper function to process markdown in text
@@ -125,7 +201,153 @@ export const LessonDisplay: React.FC<LessonDisplayProps> = ({
     return text;
   };
 
-  // Parse and render content with smart formatting
+  // Render structured content with TTS buttons
+  const renderStructuredContent = () => {
+    if (!structuredContent || structuredContent.length === 0) return null;
+
+    return (
+      <div className="space-y-6">
+        {structuredContent.map((section, index) => (
+          <Card key={`section-${index}`} className="border-2 border-primary/10 hover:border-primary/30 transition-colors">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
+                  <BookOpen className="w-5 h-5 text-primary" />
+                  {section.title}
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => speakSection(index, section)}
+                  className="gap-2"
+                  disabled={isGenerating}
+                >
+                  {playingSections.has(index) ? (
+                    <>
+                      <VolumeX className="w-4 h-4 text-red-500" />
+                      <span className="text-red-500">Стоп</span>
+                    </>
+                  ) : (
+                    <>
+                      <Volume2 className="w-4 h-4 text-primary" />
+                      <span>Озвучить</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Main content */}
+              <div className="text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                {section.content}
+              </div>
+
+              {/* Examples */}
+              {section.examples && section.examples.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-foreground flex items-center gap-2">
+                    <Lightbulb className="w-4 h-4 text-yellow-500" />
+                    Примеры:
+                  </h4>
+                  {section.examples.map((example, exIdx) => (
+                    <Card key={`example-${exIdx}`} className="bg-yellow-50 border-yellow-200">
+                      <CardContent className="pt-4">
+                        <div className="space-y-2">
+                          <p className="font-medium text-yellow-900">{example.example}</p>
+                          <p className="text-sm text-yellow-800">{example.explanation}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              {/* Practice inside */}
+              {section.practiceInside && (
+                <Card className="bg-blue-50 border-blue-200">
+                  <CardContent className="pt-4">
+                    <div className="flex items-start gap-3">
+                      <Target className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                      <div className="space-y-2">
+                        <p className="font-semibold text-blue-900">💪 Практическое задание:</p>
+                        <p className="text-sm text-blue-800">{section.practiceInside.instruction}</p>
+                        {section.practiceInside.hint && (
+                          <p className="text-sm text-blue-700 italic">
+                            💡 Подсказка: {section.practiceInside.hint}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Mistakes */}
+              {section.mistakes && section.mistakes.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-foreground flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-500" />
+                    Типичные ошибки:
+                  </h4>
+                  {section.mistakes.map((mistake, misIdx) => (
+                    <Card key={`mistake-${misIdx}`} className="bg-red-50 border-red-200">
+                      <CardContent className="pt-4">
+                        <div className="space-y-2">
+                          <p className="font-medium text-red-900">{mistake.mistake}</p>
+                          <p className="text-sm text-red-800">{mistake.explanation}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              {/* Tasks */}
+              {section.tasks && section.tasks.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-foreground flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    Практические упражнения:
+                  </h4>
+                  {section.tasks.map((task, taskIdx) => (
+                    <Card key={`task-${taskIdx}`} className="bg-green-50 border-green-200">
+                      <CardContent className="pt-4">
+                        <div className="space-y-2">
+                          <p className="font-medium text-green-900">{taskIdx + 1}. {task.task}</p>
+                          {task.hint && (
+                            <p className="text-sm text-green-800 italic">
+                              💡 Подсказка: {task.hint}
+                            </p>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              {/* Summary */}
+              {section.summary && (
+                <Card className="bg-purple-50 border-purple-200 border-l-4 border-l-purple-500">
+                  <CardContent className="pt-4">
+                    <div className="flex items-start gap-3">
+                      <Trophy className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                      <div className="space-y-2">
+                        <p className="font-semibold text-purple-900">📌 Резюме:</p>
+                        <p className="text-sm text-purple-800">{section.summary}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  };
+
+  // Parse and render content with smart formatting (fallback)
   const renderContent = () => {
     if (!displayedContent) return null;
 
@@ -398,7 +620,7 @@ export const LessonDisplay: React.FC<LessonDisplayProps> = ({
 
       {/* Контент урока */}
       <div className="space-y-4">
-        {renderContent()}
+        {structuredContent && structuredContent.length > 0 ? renderStructuredContent() : renderContent()}
 
         {/* Курсор печати */}
         {isTyping && (

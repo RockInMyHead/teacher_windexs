@@ -9,6 +9,7 @@ export interface TTSOptions {
 export class OpenAITTS {
   private static audioContext: AudioContext | null = null;
   private static currentAudio: HTMLAudioElement | null = null;
+  private static videoElement: HTMLVideoElement | null = null;
 
   static async generateSpeech(text: string, options: TTSOptions = {}): Promise<ArrayBuffer> {
     const {
@@ -17,9 +18,21 @@ export class OpenAITTS {
       model = 'tts-1'
     } = options;
 
+    console.log('🎤 generateSpeech called:', {
+      textLength: text.length,
+      textPreview: text.substring(0, 50) + '...',
+      voice,
+      speed,
+      model
+    });
+
     // Преобразуем цифры в слова
     const processedText = replaceNumbersInText(text);
+    console.log('📝 Original text:', text.substring(0, 100) + '...');
+    console.log('📝 Processed text:', processedText.substring(0, 100) + '...');
+    console.log('📝 Text changed:', text !== processedText);
 
+    console.log('📡 Fetching TTS from:', `${window.location.origin}/api/audio/speech`);
     const response = await fetch(`${window.location.origin}/api/audio/speech`, {
       method: 'POST',
       headers: {
@@ -34,12 +47,17 @@ export class OpenAITTS {
       }),
     });
 
+    console.log('📡 TTS API response status:', response.status);
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      console.error('❌ TTS API error:', errorData);
       throw new Error(`OpenAI TTS API error: ${response.status} ${response.statusText}. ${errorData.error?.message || ''}`);
     }
 
-    return await response.arrayBuffer();
+    const arrayBuffer = await response.arrayBuffer();
+    console.log('✅ TTS audio received, size:', arrayBuffer.byteLength, 'bytes');
+    return arrayBuffer;
   }
 
   static async speak(text: string, options: TTSOptions = {}): Promise<void> {
@@ -47,53 +65,114 @@ export class OpenAITTS {
   }
 
   static async speakText(text: string, options: TTSOptions = {}): Promise<void> {
+    console.log('🎙️ speakText called with text:', text.substring(0, 50) + '...');
+    
     try {
       // Проверяем доступность TTS
       if (!isTTSAvailable()) {
+        console.error('❌ TTS not available');
         throw new Error('TTS not available: missing API key or browser does not support Audio API');
       }
+      console.log('✅ TTS is available');
 
       // Останавливаем текущее воспроизведение
       this.stop();
 
       // Генерируем речь
+      console.log('🎤 Calling generateSpeech...');
       const audioBuffer = await this.generateSpeech(text, options);
+      console.log('✅ generateSpeech completed');
 
-      // Создаем blob и audio элемент
-      const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-      const audioUrl = URL.createObjectURL(blob);
+      // Преобразуем ArrayBuffer в base64 для лучшей совместимости с Safari
+      console.log('🔄 Converting to base64...');
+      const base64Audio = this.arrayBufferToBase64(audioBuffer);
+      console.log('✅ Base64 conversion completed, length:', base64Audio.length);
+      
+      const audioUrl = `data:audio/mpeg;base64,${base64Audio}`;
+      console.log('📝 Created data URL, length:', audioUrl.length);
 
-      this.currentAudio = new Audio(audioUrl);
+      this.currentAudio = new Audio();
+      console.log('✅ Audio element created');
+      
+      // Устанавливаем источник
+      this.currentAudio.src = audioUrl;
+      this.currentAudio.preload = 'auto';
+      this.currentAudio.volume = 1.0;
+      console.log('✅ Audio src set, volume:', this.currentAudio.volume);
 
       // Настраиваем обработчики событий
       return new Promise((resolve, reject) => {
         if (!this.currentAudio) return reject(new Error('Audio not created'));
 
         this.currentAudio.onended = () => {
-          URL.revokeObjectURL(audioUrl);
+          console.log('✅ Audio playback ended');
+          this.pauseVideo();
           this.currentAudio = null;
           resolve();
         };
 
         this.currentAudio.onerror = (error) => {
-          URL.revokeObjectURL(audioUrl);
+          console.error('❌ Audio error event:', error);
+          this.pauseVideo();
           this.currentAudio = null;
           reject(new Error('Audio playback failed'));
         };
 
+        this.currentAudio.oncanplaythrough = () => {
+          // Аудио готово к воспроизведению
+          console.log('✅ Audio ready to play (canplaythrough)');
+        };
+
+        this.currentAudio.onloadedmetadata = () => {
+          console.log('✅ Audio metadata loaded, duration:', this.currentAudio?.duration);
+        };
+
+        // Загружаем аудио
+        console.log('🔄 Loading audio...');
+        this.currentAudio.load();
+
         // Воспроизводим с обработкой ошибок
-        this.currentAudio.play().catch((playError) => {
-          console.error('Play error:', playError);
-          URL.revokeObjectURL(audioUrl);
+        console.log('▶️ Attempting to play audio...');
+        this.currentAudio.play().then(() => {
+          console.log('✅ Audio play() succeeded');
+          this.playVideo();
+        }).catch((playError) => {
+          console.error('❌ Play error:', playError);
+          console.error('❌ Play error details:', {
+            name: playError.name,
+            message: playError.message,
+            stack: playError.stack?.substring(0, 200)
+          });
+          this.pauseVideo();
           this.currentAudio = null;
-          reject(new Error(`Audio play failed: ${playError.message}`));
+
+          // Проверяем тип ошибки
+          let errorMessage = `Audio play failed: ${playError.message}`;
+          if (playError.name === 'NotAllowedError') {
+            errorMessage = 'Audio playback blocked by browser. Click anywhere on the page to enable audio.';
+          } else if (playError.name === 'NotSupportedError') {
+            errorMessage = 'Audio format not supported by this browser.';
+          }
+
+          reject(new Error(errorMessage));
         });
       });
 
     } catch (error) {
-      console.error('OpenAI TTS error:', error);
+      console.error('❌ OpenAI TTS error:', error);
       throw error;
     }
+  }
+
+  // Вспомогательная функция для конвертации ArrayBuffer в base64
+  private static arrayBufferToBase64(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
   }
 
   static stop(): void {
@@ -102,10 +181,40 @@ export class OpenAITTS {
       this.currentAudio.currentTime = 0;
       this.currentAudio = null;
     }
+    this.pauseVideo();
   }
 
   static isPlaying(): boolean {
     return this.currentAudio !== null && !this.currentAudio.paused;
+  }
+
+  // Set video element to sync with TTS
+  static setVideoElement(video: HTMLVideoElement | null): void {
+    this.videoElement = video;
+    console.log('🎥 Video element set:', !!video);
+    
+    // Pause video initially
+    if (video) {
+      video.pause();
+    }
+  }
+
+  // Play video when TTS starts
+  private static playVideo(): void {
+    if (this.videoElement) {
+      console.log('▶️ Playing video');
+      this.videoElement.play().catch((err) => {
+        console.warn('⚠️ Could not play video:', err.message);
+      });
+    }
+  }
+
+  // Pause video when TTS stops
+  private static pauseVideo(): void {
+    if (this.videoElement) {
+      console.log('⏸️ Pausing video');
+      this.videoElement.pause();
+    }
   }
 }
 
@@ -120,4 +229,42 @@ export function isTTSAvailable(): boolean {
                          typeof window !== 'undefined';
 
   return hasApiKey && hasAudioSupport;
+}
+
+// Функция для проверки, разрешено ли автоматическое воспроизведение аудио
+export async function isAutoplayAllowed(): Promise<boolean> {
+  if (typeof Audio === 'undefined') return false;
+
+  try {
+    const audio = new Audio();
+    audio.volume = 0.01; // Очень тихий звук для теста
+    audio.muted = true;
+
+    // Пытаемся воспроизвести
+    await audio.play();
+    audio.pause();
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+// Функция для активации аудио после пользовательского взаимодействия
+export function activateAudio(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (typeof Audio === 'undefined') {
+      reject(new Error('Audio not supported'));
+      return;
+    }
+
+    const audio = new Audio();
+    audio.volume = 0.01;
+    audio.muted = true;
+    audio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+
+    audio.onended = () => resolve();
+    audio.onerror = () => reject(new Error('Failed to activate audio'));
+
+    audio.play().catch(reject);
+  });
 }
