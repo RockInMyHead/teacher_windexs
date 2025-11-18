@@ -4,6 +4,7 @@ export interface TTSOptions {
   voice?: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
   speed?: number;
   model?: 'tts-1' | 'tts-1-hd';
+  format?: 'aac' | 'mp3' | 'opus' | 'flac';
 }
 
 export class OpenAITTS {
@@ -12,11 +13,23 @@ export class OpenAITTS {
   private static videoElement: HTMLVideoElement | null = null;
   private static currentAudioUrl: string | null = null;
 
+  // Получить правильный MIME тип для аудио формата
+  private static getMimeType(format: string): string {
+    switch (format) {
+      case 'aac': return 'audio/aac';
+      case 'mp3': return 'audio/mpeg';
+      case 'opus': return 'audio/opus';
+      case 'flac': return 'audio/flac';
+      default: return 'audio/mpeg';
+    }
+  }
+
   static async generateSpeech(text: string, options: TTSOptions = {}): Promise<ArrayBuffer> {
     const {
       voice = 'alloy', // alloy - нейтральный мужской голос, хорошо подходит для русского
       speed = 1.0,
-      model = 'tts-1'
+      model = 'tts-1',
+      format = 'aac' // AAC - лучший формат для браузерной совместимости
     } = options;
 
     console.log('🎤 generateSpeech called:', {
@@ -43,7 +56,7 @@ export class OpenAITTS {
         model: model,
         input: processedText,
         voice: voice,
-        response_format: 'mp3',
+        response_format: format,
         speed: speed,
       }),
     });
@@ -67,7 +80,7 @@ export class OpenAITTS {
 
   static async speakText(text: string, options: TTSOptions = {}): Promise<void> {
     console.log('🎙️ speakText called with text:', text.substring(0, 50) + '...');
-    
+
     try {
       // Проверяем доступность TTS
       if (!isTTSAvailable()) {
@@ -75,6 +88,12 @@ export class OpenAITTS {
         throw new Error('TTS not available: missing API key or browser does not support Audio API');
       }
       console.log('✅ TTS is available');
+
+      // Автоматически выбираем лучший поддерживаемый формат, если не указан
+      if (!options.format) {
+        options.format = await getBestSupportedFormat();
+      }
+      console.log('🎵 Using audio format:', options.format);
 
       // Останавливаем текущее воспроизведение
       this.stop();
@@ -86,7 +105,9 @@ export class OpenAITTS {
 
       // Создаем Blob вместо Base64 для лучшей совместимости и производительности
       console.log('🔄 Creating Blob and Object URL...');
-      const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+      const mimeType = this.getMimeType(format);
+      console.log('📝 Using MIME type:', mimeType);
+      const blob = new Blob([audioBuffer], { type: mimeType });
       const audioUrl = URL.createObjectURL(blob);
       this.currentAudioUrl = audioUrl;
       console.log('✅ Object URL created:', audioUrl);
@@ -230,6 +251,41 @@ export class OpenAITTS {
       this.videoElement.pause();
     }
   }
+}
+
+// Функция для проверки поддержки аудио формата
+export async function isAudioFormatSupported(format: string): Promise<boolean> {
+  if (typeof Audio === 'undefined') return false;
+
+  try {
+    const audio = new Audio();
+    const mimeType = format === 'aac' ? 'audio/aac' :
+                     format === 'mp3' ? 'audio/mpeg' :
+                     format === 'opus' ? 'audio/opus' :
+                     format === 'flac' ? 'audio/flac' : 'audio/mpeg';
+
+    const canPlay = audio.canPlayType(mimeType);
+    console.log(`🎵 Format ${format} (${mimeType}) support:`, canPlay);
+    return canPlay !== '';
+  } catch (error) {
+    console.warn('Error checking audio format support:', error);
+    return false;
+  }
+}
+
+// Функция для получения лучшего поддерживаемого формата
+export async function getBestSupportedFormat(): Promise<string> {
+  const formats = ['aac', 'mp3', 'opus', 'flac'];
+
+  for (const format of formats) {
+    if (await isAudioFormatSupported(format)) {
+      console.log(`✅ Best supported format: ${format}`);
+      return format;
+    }
+  }
+
+  console.warn('❌ No supported audio formats found, using mp3 as fallback');
+  return 'mp3'; // fallback
 }
 
 // Функция для проверки доступности TTS
