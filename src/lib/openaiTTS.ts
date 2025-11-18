@@ -24,6 +24,22 @@ export class OpenAITTS {
     }
   }
 
+  // Очистить текст от ударений и специальных символов для TTS
+  private static cleanTextForTTS(text: string): string {
+    if (!text) return text;
+
+    // Удаляем знаки ударений (+) перед гласными
+    let cleaned = text.replace(/\+([аеёиоуыэюя])/gi, '$1');
+
+    // Удаляем другие специальные символы, которые могут мешать TTS
+    cleaned = cleaned.replace(/[«»""''""''""]/g, ''); // Убираем кавычки
+
+    // Убираем лишние пробелы
+    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+    return cleaned;
+  }
+
   static async generateSpeech(text: string, options: TTSOptions = {}): Promise<ArrayBuffer> {
     const {
       voice = 'alloy', // alloy - нейтральный мужской голос, хорошо подходит для русского
@@ -40,8 +56,8 @@ export class OpenAITTS {
       model
     });
 
-    // Преобразуем цифры в слова
-    const processedText = replaceNumbersInText(text);
+    // Преобразуем цифры в слова и удаляем ударения (знаки +)
+    const processedText = this.cleanTextForTTS(replaceNumbersInText(text));
     console.log('📝 Original text:', text.substring(0, 100) + '...');
     console.log('📝 Processed text:', processedText.substring(0, 100) + '...');
     console.log('📝 Text changed:', text !== processedText);
