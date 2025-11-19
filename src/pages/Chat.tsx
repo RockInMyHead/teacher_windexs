@@ -1323,7 +1323,7 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
       if (response.ok) {
         const data = await response.json();
         console.log('💾 Text lesson saved with ID:', data.lesson_id);
-        alert('Урок сохранен! Теперь вы можете загрузить его из "📚 Сохраненные уроки"');
+        alert('Урок сохранен! Теперь вы можете загрузить его из "Сохраненные уроки"');
       } else {
         throw new Error('Failed to save lesson');
       }
@@ -1601,7 +1601,7 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
                     className="flex-1 sm:flex-none text-lg px-8 py-4 border-2 border-green-500/50 hover:border-green-500 hover:bg-green-50 hover:text-green-700 transition-all duration-300 gap-3 font-semibold"
                     onClick={saveCurrentLesson}
                   >
-                    💾 Сохранить урок
+                    Сохранить урок
                   </Button>
                   <Button
                     size="lg"
@@ -1612,7 +1612,7 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
                       setShowSavedLessons(true);
                     }}
                   >
-                    📚 Сохраненные уроки
+                    Сохраненные уроки
                   </Button>
                 </div>
               )}
@@ -1806,7 +1806,7 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
             <div className="p-6 border-b">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold">📚 Сохраненные уроки</h2>
+                <h2 className="text-xl font-bold">Сохраненные уроки</h2>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1823,7 +1823,7 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
                 <div className="text-center py-8">
                   <p className="text-muted-foreground">У вас пока нет сохраненных уроков.</p>
                   <p className="text-sm text-muted-foreground mt-2">
-                          Завершите урок и нажмите "💾 Сохранить урок" чтобы сохранить его для последующего использования.
+                          Завершите урок и нажмите "Сохранить урок" чтобы сохранить его для последующего использования.
                   </p>
                 </div>
               ) : (
