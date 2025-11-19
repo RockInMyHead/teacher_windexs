@@ -75,6 +75,7 @@ export const VoiceTeacherChat = React.memo(({
   const [isReadingLesson, setIsReadingLesson] = useState(false);
   const [userTranscript, setUserTranscript] = useState('');
   const [conversationHistory, setConversationHistory] = useState<Array<{role: 'teacher' | 'student', text: string}>>([]);
+  const [lessonStarted, setLessonStarted] = useState(false);
 
   // Refs
   const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
@@ -347,15 +348,15 @@ ${lessonAspects}
 
   // Auto-start reading lesson when notes are ready
   useEffect(() => {
-    if (lessonNotes.length > 0 && !isProcessing && !isReadingLesson && currentNoteIndex === 0) {
-      // Начинаем урок сразу с материала (приветствие больше не требуется)
+    if (lessonNotes.length > 0 && lessonStarted && !isProcessing && !isReadingLesson && currentNoteIndex === 0) {
+      // Начинаем урок только после того, как пользователь начал взаимодействие
       console.log('🎤 Начинаем урок с материала:', lessonNotes[0]?.substring(0, 50));
       const timer = setTimeout(() => {
         readNextNote();
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [lessonNotes.length, isProcessing, isReadingLesson, currentNoteIndex, readNextNote, lessonNotes]);
+  }, [lessonNotes.length, lessonStarted, isProcessing, isReadingLesson, currentNoteIndex, readNextNote, lessonNotes]);
 
   // Initialize speech recognition
   useEffect(() => {
@@ -487,9 +488,16 @@ ${lessonAspects}
         setIsSpeaking(false);
         isInterruptedRef.current = true;
       }
+
+      // Start the lesson on first interaction
+      if (!lessonStarted) {
+        console.log('🎤 Starting lesson on first user interaction');
+        setLessonStarted(true);
+      }
+
       speechRecognitionRef.current.start();
     }
-  }, [isListening, isSpeaking]);
+  }, [isListening, isSpeaking, lessonStarted]);
 
   return (
     <Card className="w-full h-full flex flex-col border-2 border-primary/20 bg-card/95 backdrop-blur-xl">
@@ -534,38 +542,73 @@ ${lessonAspects}
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col items-center justify-center space-y-6">
-        {/* Loading indicator when generating lesson or dynamic content */}
-        {isGeneratingLesson && (
-          <div className="w-full max-w-md bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
-            <div className="flex items-center justify-center mb-3">
-              <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        {/* Start screen - before lesson begins */}
+        {!lessonStarted && (
+          <div className="w-full max-w-md text-center space-y-6">
+            <div className="space-y-4">
+              <div className="w-20 h-20 mx-auto bg-primary/10 rounded-full flex items-center justify-center">
+                <Brain className="w-10 h-10 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Готовы начать урок?</h3>
+                <p className="text-sm text-muted-foreground">
+                  Нажмите на микрофон, чтобы задать вопрос или начать разговор с Юлей
+                </p>
+              </div>
             </div>
-            <p className="text-sm font-medium text-blue-900">
-              {lessonNotes.length === 0 ? 'Генерирую урок...' : 'Думаю над ответом...'}
-            </p>
-            <p className="text-xs text-blue-700 mt-1">
-              {lessonNotes.length === 0
-                ? 'AI создает персональный урок специально для вас'
-                : 'AI адаптирует урок под ваш вопрос'
-              }
+
+            {/* Start lesson button */}
+            <div className="relative flex items-center justify-center">
+              <Button
+                onClick={toggleListening}
+                disabled={isProcessing || isSpeaking}
+                className="w-32 h-32 rounded-full bg-green-400 hover:bg-green-500 shadow-lg transition-all"
+              >
+                <Mic className="w-12 h-12 text-white" />
+              </Button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Нажмите на микрофон, чтобы начать звонок учителю
             </p>
           </div>
         )}
 
-        {/* User transcript display */}
-        {userTranscript && !isProcessing && !isGeneratingLesson && (
-          <div className="w-full max-w-md bg-muted/50 rounded-lg p-4 border">
-            <p className="text-sm text-center text-foreground">
-              <span className="font-medium">Вы сказали:</span>
-            </p>
-            <p className="text-sm text-center mt-2 italic text-muted-foreground">
-              "{userTranscript}"
-            </p>
-          </div>
-        )}
+        {/* Lesson interface - after lesson starts */}
+        {lessonStarted && (
+          <>
+            {/* Loading indicator when generating lesson or dynamic content */}
+            {isGeneratingLesson && (
+              <div className="w-full max-w-md bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+                <div className="flex items-center justify-center mb-3">
+                  <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+                <p className="text-sm font-medium text-blue-900">
+                  {lessonNotes.length === 0 ? 'Генерирую урок...' : 'Думаю над ответом...'}
+                </p>
+                <p className="text-xs text-blue-700 mt-1">
+                  {lessonNotes.length === 0
+                    ? 'AI создает персональный урок специально для вас'
+                    : 'AI адаптирует урок под ваш вопрос'
+                  }
+                </p>
+              </div>
+            )}
 
-        {/* Pulsing green circle for voice input */}
-        {!isProcessing && !isGeneratingLesson && (
+            {/* User transcript display */}
+            {userTranscript && !isProcessing && !isGeneratingLesson && (
+              <div className="w-full max-w-md bg-muted/50 rounded-lg p-4 border">
+                <p className="text-sm text-center text-foreground">
+                  <span className="font-medium">Вы сказали:</span>
+                </p>
+                <p className="text-sm text-center mt-2 italic text-muted-foreground">
+                  "{userTranscript}"
+                </p>
+              </div>
+            )}
+
+            {/* Pulsing green circle for voice input */}
+            {!isProcessing && !isGeneratingLesson && (
           <div className="relative flex items-center justify-center">
           <Button
             onClick={toggleListening}
@@ -592,9 +635,12 @@ ${lessonAspects}
           )}
         </div>
         )}
+          </>
+        )}
 
         {/* Status text */}
-        <div className="text-center space-y-2">
+        {lessonStarted && (
+          <div className="text-center space-y-2">
           {isProcessing && (
             <p className="text-sm text-muted-foreground animate-pulse">
               Обработка вопроса...
@@ -615,16 +661,19 @@ ${lessonAspects}
               Слушаю вас...
             </p>
           )}
-        </div>
+          </div>
+        )}
 
-        {/* Complete button */}
-        <Button
-          onClick={onComplete}
-          variant="outline"
-          className="gap-2"
-        >
-          Завершить урок
-        </Button>
+        {/* Complete button - only show when lesson is active */}
+        {lessonStarted && (
+          <Button
+            onClick={onComplete}
+            variant="outline"
+            className="gap-2"
+          >
+            Завершить урок
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
