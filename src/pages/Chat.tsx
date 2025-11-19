@@ -1875,16 +1875,10 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
                 </div>
               )}
             </div>
-                </div>
-              </div>
-            )}
-
-            {/* Footer */}
-            <div className="mt-8 pt-6 border-t border-border">
-              <div className="text-center text-sm text-muted-foreground">
-                <p>🎓 AI-Помощник в обучении • Создано с ❤️ для лучших учеников</p>
-            </div>
           </div>
+        </div>
+      )}
+
         </div>
         </div>
     </div>
