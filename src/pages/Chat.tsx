@@ -111,6 +111,114 @@ const Chat = () => {
   // Lesson sections for interactive learning
   const [currentLessonSections, setCurrentLessonSections] = useState<any[]>([]);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+
+  // Generate content sections for a lesson step
+  const generateStepContent = useCallback(async (stepIndex: number, step: any, lessonPlan: any) => {
+    try {
+      console.log('🎯 Generating content for step:', step.title);
+
+      // Parse the description into sections
+      const sections = parseLessonContent(step.description);
+
+      // Set the sections for display
+      setCurrentLessonSections(sections);
+      setCurrentSectionIndex(0);
+      setCurrentSectionTask(null);
+      setWaitingForAnswer(false);
+
+      console.log('✅ Generated', sections.length, 'sections for step:', step.title);
+    } catch (error) {
+      console.error('❌ Error generating step content:', error);
+      // Fallback: create single section with the description
+      setCurrentLessonSections([{
+        title: step.title,
+        content: step.description || 'Контент урока временно недоступен.'
+      }]);
+      setCurrentSectionIndex(0);
+      setCurrentSectionTask(null);
+      setWaitingForAnswer(false);
+    }
+  }, []);
+
+  // Parse lesson content into sections
+  const parseLessonContent = useCallback((content: string): any[] => {
+    if (!content) return [{ title: 'Содержание', content: 'Контент не найден.' }];
+
+    const sections: any[] = [];
+    const lines = content.split('\n');
+
+    let currentSection: any = null;
+    let currentContent = '';
+
+    for (const line of lines) {
+      // Check for headers (### or ##)
+      if (line.startsWith('### ')) {
+        // Save previous section if exists
+        if (currentSection) {
+          currentSection.content = currentContent.trim();
+          sections.push(currentSection);
+        }
+
+        // Start new section
+        currentSection = {
+          title: line.replace(/^###\s*/, '').trim(),
+          content: ''
+        };
+        currentContent = '';
+      } else if (line.startsWith('## ')) {
+        // Save previous section if exists
+        if (currentSection) {
+          currentSection.content = currentContent.trim();
+          sections.push(currentSection);
+        }
+
+        // Start new section
+        currentSection = {
+          title: line.replace(/^##\s*/, '').trim(),
+          content: ''
+        };
+        currentContent = '';
+      } else if (line.startsWith('# ')) {
+        // Save previous section if exists
+        if (currentSection) {
+          currentSection.content = currentContent.trim();
+          sections.push(currentSection);
+        }
+
+        // Start new section
+        currentSection = {
+          title: line.replace(/^#\s*/, '').trim(),
+          content: ''
+        };
+        currentContent = '';
+      } else if (currentSection) {
+        // Add to current section content
+        currentContent += line + '\n';
+      } else {
+        // No section started yet, create default
+        currentSection = {
+          title: 'Основной материал',
+          content: line + '\n'
+        };
+      }
+    }
+
+    // Save the last section
+    if (currentSection) {
+      currentSection.content = currentContent.trim();
+      sections.push(currentSection);
+    }
+
+    // If no sections were found, create one
+    if (sections.length === 0) {
+      sections.push({
+        title: 'Содержание урока',
+        content: content
+      });
+    }
+
+    return sections;
+  }, []);
   const [currentSectionTask, setCurrentSectionTask] = useState<any>(null);
   const [waitingForAnswer, setWaitingForAnswer] = useState(false);
   const [thinkingDots, setThinkingDots] = useState('');
