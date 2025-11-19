@@ -11,14 +11,13 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Brain, Send, User, MessageCircle, Volume2, VolumeX, CheckCircle, X, BookOpen, Target, ArrowLeft, Phone, PhoneOff } from 'lucide-react';
+import { Brain, Send, User, MessageCircle, Volume2, VolumeX, CheckCircle, X, BookOpen, Target, ArrowLeft } from 'lucide-react';
 import { OpenAITTS, isTTSAvailable } from '@/lib/openaiTTS';
 import { VoiceComm, VoiceUtils } from '@/lib/voiceComm';
 import { COURSE_TEST_QUESTIONS, TestQuestion, COURSE_PLANS } from '@/utils/coursePlans';
 import { AssessmentResults } from '@/components/AssessmentResults';
 import { createPersonalizedCourseData } from '@/utils/assessmentAnalyzer';
 import { ChatContainer } from '@/components/Chat';
-import { VoiceTeacherChat } from '@/components/VoiceTeacherChat';
 import LessonDisplay from '@/components/LessonDisplay';
 // Stub for lesson context manager
 interface LessonBlock {
@@ -222,8 +221,6 @@ const Chat = () => {
   const [currentSectionTask, setCurrentSectionTask] = useState<any>(null);
   const [waitingForAnswer, setWaitingForAnswer] = useState(false);
   const [thinkingDots, setThinkingDots] = useState('');
-  const [showVideoCall, setShowVideoCall] = useState(false);
-  const [isCallActive, setIsCallActive] = useState(false);
   const [callTranscript, setCallTranscript] = useState('');
   const [lessonNotes, setLessonNotes] = useState<string[]>([]);
   const [currentNoteIndex, setCurrentNoteIndex] = useState(0);
@@ -243,36 +240,8 @@ const Chat = () => {
   const [isProcessingTextMessage, setIsProcessingTextMessage] = useState(false);
   const [savedLessons, setSavedLessons] = useState<any[]>([]);
   const [showSavedLessons, setShowSavedLessons] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Auto-scroll to video call when it opens
-  useEffect(() => {
-    if (showVideoCall) {
-      setTimeout(() => {
-        const videoCallElement = document.querySelector('[data-video-call]');
-        if (videoCallElement) {
-          videoCallElement.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-          });
-        }
-      }, 100);
-    }
-  }, [showVideoCall]);
 
-  // Set video element for TTS synchronization
-  useEffect(() => {
-    if (showVideoCall && videoRef.current) {
-      console.log('🎥 Setting video element for TTS sync');
-      OpenAITTS.setVideoElement(videoRef.current);
-    } else {
-      OpenAITTS.setVideoElement(null);
-    }
-    
-    return () => {
-      OpenAITTS.setVideoElement(null);
-    };
-  }, [showVideoCall]);
   const ttsContinueRef = useRef<boolean>(true);
   const audioContextRef = useRef<AudioContext | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -1524,155 +1493,6 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
     }
   };
 
-  // Handle video call with voice transcription and lesson
-  const handleCall = async () => {
-    if (isCallActive) {
-      // End call
-      console.log('📞 Ending call...');
-      VoiceComm.stopListening();
-      OpenAITTS.stop();
-      setIsCallActive(false);
-      setCallTranscript('');
-      setLessonNotes([]);
-      setCurrentNoteIndex(0);
-      setIsLessonSpeaking(false);
-    } else {
-      // Start call
-      console.log('📞 Starting call...');
-
-      // Activate audio context first (important for browser autoplay policies)
-      try {
-        console.log('🔊 Activating audio context...');
-
-        // Try Web Audio API first
-        if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined') {
-          const AudioContextClass = AudioContext || webkitAudioContext;
-          const audioContext = new AudioContextClass();
-          if (audioContext.state === 'suspended') {
-            await audioContext.resume();
-          }
-          console.log('✅ Web Audio API context activated');
-        } else {
-          // Fallback to HTML5 Audio (may fail on some browsers)
-          const audio = new Audio();
-          audio.volume = 0.01;
-          audio.muted = true;
-          audio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-
-          // Don't await, just try to play briefly
-          audio.play().then(() => {
-            audio.pause();
-            console.log('✅ HTML5 Audio context activated');
-          }).catch((err) => {
-            console.warn('⚠️ HTML5 Audio activation failed, continuing anyway:', err.message);
-          });
-
-          // Wait a bit for potential activation
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      } catch (error) {
-        console.warn('⚠️ Failed to activate audio context, continuing anyway:', error.message);
-      }
-
-      try {
-        // Generate simple greeting
-        console.log('📚 Starting conversation...');
-        setIsGeneratingLesson(true);
-        const notes = ['Привет! Я Юля. Давай начнем урок по теме "' + (currentLesson?.title || 'математике') + '". Что ты уже знаешь по этой теме?'];
-        setIsGeneratingLesson(false);
-        console.log('✅ Greeting ready, count:', notes?.length);
-
-        // Save the generated lesson
-        try {
-          const saveResponse = await fetch('/api/generated-lessons', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              course_name: currentLesson?.courseName || 'General',
-              lesson_title: currentLesson?.title || 'Generated Lesson',
-              lesson_topic: currentLesson?.topic || '',
-              lesson_number: currentLesson?.number || null,
-              lesson_notes: notes,
-              generation_prompt: 'Simple greeting',
-              conversation_history: conversationHistory,
-              interaction_type: 'voice',
-              is_template: false
-            })
-          });
-
-          if (saveResponse.ok) {
-            const saveData = await saveResponse.json();
-            console.log('💾 Generated lesson saved with ID:', saveData.lesson_id);
-          } else {
-            console.warn('⚠️ Failed to save generated lesson:', await saveResponse.text());
-          }
-        } catch (saveError) {
-          console.warn('⚠️ Error saving generated lesson:', saveError);
-        }
-
-        // Start the conversation with greeting after generation completes
-        console.log('🎓 Starting conversation with greeting...');
-        setTimeout(async () => {
-          try {
-            // Speak the greeting and then start interactive chat
-            await speakGreetingAndStartChat(notes[0]);
-          } catch (error) {
-            console.error('❌ Failed to start conversation:', error);
-          }
-        }, 500);
-
-        // Initialize VoiceComm with callbacks
-        const isInitialized = VoiceComm.init(
-          {
-            language: 'ru-RU',
-            continuous: true
-          },
-          {
-            onListeningStart: () => {
-              console.log('🎤 Call listening started (callback fired)');
-              console.log('🎤 Notes available:', !!notes, 'Notes length:', notes?.length);
-              setIsCallActive(true);
-
-              // Stop TTS immediately when user starts speaking to avoid conflicts
-              console.log('🛑 Stopping TTS because user started speaking');
-              OpenAITTS.stop();
-
-              // Lesson already started automatically after generation, just ensure voice recognition is active
-            },
-            onListeningEnd: () => {
-              console.log('🎤 Call listening ended');
-              setIsCallActive(false);
-              setIsLessonSpeaking(false);
-            },
-          onTranscript: (text: string, isFinal: boolean) => {
-            if (isFinal && text.trim()) {
-              console.log('📝 Call transcript:', text);
-              handleUserTranscript(text, isFinal);
-            }
-          },
-            onError: (error: string) => {
-              console.error('❌ Call error:', error);
-              setIsCallActive(false);
-              setIsLessonSpeaking(false);
-            }
-          }
-        );
-
-        if (!isInitialized) {
-          throw new Error('Speech Recognition not supported in this browser');
-        }
-
-        // Start voice recognition (without parameters)
-        console.log('🎙️ Calling VoiceComm.startListening()...');
-        const started = VoiceComm.startListening();
-        console.log('🎙️ VoiceComm.startListening() returned:', started);
-      } catch (error) {
-        console.error('❌ Failed to start call:', error);
-        setIsCallActive(false);
-        setIsGeneratingLesson(false); // Скрыть индикатор при ошибке
-      }
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
@@ -1725,18 +1545,6 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
                 </div>
               )}
 
-              {/* Call Teacher Button (for lesson mode) */}
-              {isLessonMode && (
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="flex-1 sm:flex-none text-lg px-8 py-4 border-2 border-primary/30 hover:border-primary hover:bg-primary/5 hover:text-black transition-all duration-300 gap-3 font-semibold"
-                  onClick={() => setShowVideoCall(true)}
-                >
-                  <Phone className="w-5 h-5 text-primary" />
-                  Звонок учителю
-                </Button>
-              )}
 
               {/* Error Message */}
               {generationError && (
@@ -1798,22 +1606,6 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
               </Card>
             )}
 
-            {/* Voice Call Interface */}
-            {showVideoCall && (
-              <VoiceTeacherChat
-                lessonTitle={currentLesson?.title || 'Урок'}
-                lessonTopic={currentLesson?.topic || 'Тема'}
-                lessonAspects={currentLesson?.aspects || currentLesson?.description || ''}
-                onComplete={() => {
-                  setShowVideoCall(false);
-                  setIsCallActive(false);
-                }}
-                onClose={() => {
-                  setShowVideoCall(false);
-                  setIsCallActive(false);
-                }}
-              />
-            )}
 
             {/* Thinking message display during plan generation */}
             {isLessonMode && isGeneratingPlan && (
@@ -1851,61 +1643,6 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
             />
             )}
 
-          {/* Video Call */}
-          {showVideoCall && (
-            <div className="mt-8" data-video-call>
-              <div className="bg-card border border-border rounded-lg p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold">Видео звонок с учителем</h3>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={isCallActive ? "destructive" : "default"}
-                      size="sm"
-                      onClick={handleCall}
-                      className="gap-2"
-                    >
-                      {isCallActive ? <PhoneOff className="w-4 h-4" /> : <Phone className="w-4 h-4" />}
-                      {isCallActive ? 'Завершить звонок' : 'Позвонить'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowVideoCall(false)}
-                    >
-                      ✕ Закрыть
-                    </Button>
-                  </div>
-                </div>
-                <div className="w-[300px] h-[300px] bg-black rounded-full overflow-hidden mx-auto">
-                  <video
-                    ref={videoRef}
-                    className="w-full h-full object-cover"
-                    muted
-                    loop
-                    src="/Untitled Video.mp4"
-                    onError={(e) => {
-                      console.error('Video load error:', e);
-                      // Fallback: show message if video not found
-                      e.currentTarget.style.display = 'none';
-                      const parent = e.currentTarget.parentElement;
-                      if (parent) {
-                        parent.innerHTML = `
-                          <div class="flex items-center justify-center h-full text-white">
-                            <div class="text-center">
-                              <p class="text-lg mb-2">🎥 Видео не найдено</p>
-                              <p class="text-sm opacity-75">Поместите файл "Untitled Video.mp4" в папку public</p>
-                            </div>
-                          </div>
-                        `;
-                      }
-                    }}
-                  >
-                    Ваш браузер не поддерживает видео.
-                  </video>
-                </div>
-                      </div>
-                        </div>
-                      )}
 
             {/* Saved Lessons */}
       {/* Saved Lessons Modal */}
