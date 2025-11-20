@@ -32,7 +32,7 @@ const HeaderWithHero = ({ title, subtitle, showHero = true }: HeaderWithHeroProp
     <div className="bg-gradient-to-br from-background via-secondary/30 to-background">
     <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
       <div className="container mx-auto px-4 py-4">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
           {/* Левая часть - Логотип */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <div
@@ -44,43 +44,45 @@ const HeaderWithHero = ({ title, subtitle, showHero = true }: HeaderWithHeroProp
           </div>
 
           {/* Центральная часть - Навигация */}
-          <nav className="hidden md:flex items-center space-x-6 lg:space-x-8">
-            <Button
-              variant="ghost"
-              className="flex items-center gap-2"
-              onClick={() => navigate('/courses')}
-            >
-              <Home className="w-4 h-4" />
-              Библиотека
-            </Button>
-            <Button
-              variant="ghost"
-              className="flex items-center gap-2"
-              onClick={() => navigate('/available-courses')}
-            >
-              <BookOpen className="w-4 h-4" />
-              Курсы
-            </Button>
-            <Button
-              variant="ghost"
-              className="flex items-center gap-2"
-              onClick={() => {
-                console.log('🗣️ Chat button clicked, navigating to /chat');
-                navigate('/chat');
-              }}
-            >
-              <MessageCircle className="w-4 h-4" />
-              Чат
-            </Button>
-            <Button
-              variant="ghost"
-              className="flex items-center gap-2"
-              onClick={() => navigate('/achievements')}
-            >
-              <Award className="w-4 h-4" />
-              Достижения
-            </Button>
-          </nav>
+          <div className="flex-1 flex justify-center">
+            <nav className="hidden md:flex items-center space-x-6 lg:space-x-8">
+              <Button
+                variant="ghost"
+                className="flex items-center gap-2"
+                onClick={() => navigate('/courses')}
+              >
+                <Home className="w-4 h-4" />
+                Библиотека
+              </Button>
+              <Button
+                variant="ghost"
+                className="flex items-center gap-2"
+                onClick={() => navigate('/available-courses')}
+              >
+                <BookOpen className="w-4 h-4" />
+                Курсы
+              </Button>
+              <Button
+                variant="ghost"
+                className="flex items-center gap-2"
+                onClick={() => {
+                  console.log('🗣️ Chat button clicked, navigating to /chat');
+                  navigate('/chat');
+                }}
+              >
+                <MessageCircle className="w-4 h-4" />
+                Чат
+              </Button>
+              <Button
+                variant="ghost"
+                className="flex items-center gap-2"
+                onClick={() => navigate('/achievements')}
+              >
+                <Award className="w-4 h-4" />
+                Достижения
+              </Button>
+            </nav>
+          </div>
 
           {/* Мобильная навигация */}
           <nav className="md:hidden">
@@ -94,7 +96,7 @@ const HeaderWithHero = ({ title, subtitle, showHero = true }: HeaderWithHeroProp
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem
                   onClick={() => {
-                    navigate('/');
+                    navigate('/courses');
                     setIsMobileMenuOpen(false);
                   }}
                   className="flex items-center gap-2"
@@ -240,7 +242,7 @@ const Header = () => {
             <Button
               variant="ghost"
               className="flex items-center gap-2"
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/courses')}
             >
               <BookOpen className="w-4 h-4" />
               Библиотека
@@ -282,7 +284,7 @@ const Header = () => {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem
-                  onClick={() => navigate('/')}
+                  onClick={() => navigate('/courses')}
                   className="flex items-center gap-2"
                 >
                   <BookOpen className="w-4 h-4" />

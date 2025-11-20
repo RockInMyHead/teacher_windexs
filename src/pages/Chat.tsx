@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Brain, Send, User, MessageCircle, Volume2, VolumeX, CheckCircle, X, BookOpen, Target, ArrowLeft } from 'lucide-react';
+import { Brain, Send, User, MessageCircle, Volume2, VolumeX, CheckCircle, X, BookOpen, Target, ArrowLeft, Phone, PhoneOff } from 'lucide-react';
 import { OpenAITTS, isTTSAvailable } from '@/lib/openaiTTS';
 import { VoiceComm, VoiceUtils } from '@/lib/voiceComm';
 import { COURSE_TEST_QUESTIONS, TestQuestion, COURSE_PLANS } from '@/utils/coursePlans';
@@ -96,6 +96,7 @@ const Chat = () => {
   const [currentLesson, setCurrentLesson] = useState<any>(null);
   const [lessonProgress, setLessonProgress] = useState(0);
   const [isLessonMode, setIsLessonMode] = useState(false);
+  const [autoGenerateLesson, setAutoGenerateLesson] = useState(false);
 
   // Lesson plan and interactive lesson states
   const [lessonPlan, setLessonPlan] = useState<any>(null);
@@ -242,6 +243,28 @@ const Chat = () => {
   const [showSavedLessons, setShowSavedLessons] = useState(false);
 
 
+  // Handle URL parameters for loading lesson and starting voice call
+  useEffect(() => {
+    const loadLessonParam = searchParams.get('loadLesson');
+    const voiceCallParam = searchParams.get('voiceCall');
+
+    if (loadLessonParam) {
+      const lessonId = parseInt(loadLessonParam);
+      console.log('📖 Loading lesson from URL:', lessonId);
+      
+      // Load the lesson
+      loadSavedLesson(lessonId);
+
+      // If voiceCall parameter is present, open video call
+      if (voiceCallParam === 'true') {
+        console.log('📞 Opening voice call from URL');
+        setTimeout(() => {
+          setShowVideoCall(true);
+        }, 500);
+      }
+    }
+  }, [searchParams]);
+
   const ttsContinueRef = useRef<boolean>(true);
   const audioContextRef = useRef<AudioContext | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -346,6 +369,14 @@ const Chat = () => {
   // Initialize lesson mode and load data
   useEffect(() => {
     const mode = searchParams.get('mode');
+    const auto = searchParams.get('auto');
+    console.log('🎯 Chat useEffect triggered:', {
+      mode: mode,
+      auto: auto,
+      searchParamsString: searchParams.toString(),
+      currentURL: window.location.href
+    });
+
     const isLessonModeParam = mode === 'lesson';
     setIsLessonMode(isLessonModeParam);
 
@@ -376,6 +407,26 @@ const Chat = () => {
           console.error('Failed to parse course info:', error);
         }
       }
+
+      // Auto-start lesson generation if requested
+      if (auto === 'true' && storedLesson) {
+        console.log('🚀 Auto-starting lesson generation...');
+        console.log('Current lesson state:', currentLesson);
+        console.log('Stored lesson data:', JSON.parse(storedLesson));
+
+        // Set a flag to auto-generate when lesson is loaded
+        setTimeout(() => {
+          console.log('⏰ Timeout fired, setting auto-generate flag to true');
+          setAutoGenerateLesson(true);
+        }, 100); // Small delay to ensure state is set
+      } else {
+        console.log('ℹ️ Auto-start conditions not met:', {
+          auto: auto,
+          autoIsTrue: auto === 'true',
+          storedLesson: !!storedLesson,
+          storedLessonContent: storedLesson ? 'present' : 'missing'
+        });
+      }
     }
 
     // For regular chat mode (not lesson mode), don't load course context
@@ -386,6 +437,16 @@ const Chat = () => {
       setPersonalizedCourseData(null);
     }
   }, [searchParams]);
+
+  // Auto-generate lesson when both conditions are met
+  useEffect(() => {
+    if (isLessonMode && autoGenerateLesson && currentLesson && !lessonStarted) {
+      console.log('🎯 Auto-generating lesson: conditions met');
+      console.log('Current lesson:', currentLesson);
+      generateLessonPlan();
+      setAutoGenerateLesson(false); // Reset flag
+    }
+  }, [isLessonMode, autoGenerateLesson, currentLesson, lessonStarted]);
 
   // Generate lesson plan using AI
   const generateLessonPlan = async () => {
@@ -442,10 +503,10 @@ const Chat = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gemini-3-pro-preview',
+          model: 'gpt-4o',
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.7,
-          max_completion_tokens: 2000
+          max_tokens: 2000
         })
       });
 
@@ -807,31 +868,41 @@ const Chat = () => {
     
     console.log('📝 User said (final):', text);
     setCallTranscript(prev => prev + (prev ? ' ' : '') + text);
-
+    
     // 3. Smart History Update: Combine with previous if it was pending
     setConversationHistory(prev => {
       const lastMsg = prev[prev.length - 1];
       if (lastMsg && lastMsg.role === 'student') {
-         console.log('🔗 Appending to previous unanswered student message');
-         const newHistory = [...prev];
-         newHistory[newHistory.length - 1] = { 
-           ...lastMsg, 
-           text: lastMsg.text + ' ' + text 
-         };
-         return newHistory;
+         // Если предыдущее сообщение ученика, но мы уже получили ответ учителя на него, то это новое сообщение
+         // Проверяем, было ли сообщение ученика последним в истории
+         // Но здесь логика немного сложнее: мы хотим объединять, только если ответ еще не получен
+         
+         // В данной реализации мы просто добавляем новое сообщение, так как предыдущее уже могло быть обработано
+         // или мы хотим разделить их логически
+         return [...prev, { role: 'student', text: text }];
       } else {
          return [...prev, { role: 'student', text: text }];
       }
     });
 
-    // Generate next step in conversation
+        // Generate next step in conversation
     console.log('🎯 Generating next conversation step...');
 
     // Small debounce to allow rapid-fire sentences to merge before sending
     processingTimeoutRef.current = setTimeout(async () => {
+        const startTime = Date.now();
         try {
+          console.log('⏱️ [TIMING] T+0ms: Function started');
+
+          // Skip processing if this is just the initial greeting response
+          if (text.toLowerCase().includes('ничего') || text.toLowerCase().includes('nothing')) {
+            console.log('🚫 Skipping greeting response for "ничего" - continuing with lesson content');
+            setIsProcessingQuestion(false);
+            return;
+          }
+
           setIsProcessingQuestion(true);
-          
+
           const controller = new AbortController();
           abortControllerRef.current = controller;
           
@@ -840,28 +911,39 @@ const Chat = () => {
             `${h.role === 'teacher' ? 'Юля' : 'Ученик'}: ${h.text}`
           ).join('\n');
           
+          console.log('⏱️ [TIMING] T+' + (Date.now() - startTime) + 'ms: Context prepared');
+          
           const lastStudentMsg = historyRef.current[historyRef.current.length - 1];
           const textToSend = lastStudentMsg?.role === 'student' ? lastStudentMsg.text : text;
 
-          const systemPrompt = `Ты - Юля, профессиональный школьный учитель с 15-летним стажем. Твоя задача - ВЕСТИ УРОК ПО ПЛАНУ, а не просто поддерживать разговор.
+          const systemPrompt = `Ты - Юля, профессиональный школьный учитель с 15-летним стажем. Твоя главная задача - ВЕСТИ УРОК ПО ПЛАНУ и объяснять все "на пальцах" - доступно и понятно, чтобы каждый ученик мог легко понять материал.
 
-ТВОЙ ПОДХОД К ОБУЧЕНИЮ:
-🎯 ТЫ ВЕДЕШЬ УРОК: Рассказывай теорию, объясняй темы, задавай вопросы для проверки понимания.
-📚 СТРУКТУРА УРОКА: Сначала объясняй материал, потом спрашивай у ученика.
+ТВОЙ ПРОФЕССИОНАЛЬНЫЙ ПОДХОД К ОБУЧЕНИЮ:
+
+🎯 ТЫ ВЕДЕШЬ УРОК: Рассказывай теорию, объясняй темы простым языком, задавай вопросы для проверки понимания.
+📚 СТРУКТУРА УРОКА: Сначала объясняй материал "на пальцах" с примерами, потом спрашивай у ученика.
 🚫 НЕ ЖДИ, ПОКА УЧЕНИК ЗАДАСТ ВОПРОС: Ты ведешь урок, ты задаешь вопросы.
 📝 ПЕРЕХОДИ К СЛЕДУЮЩЕМУ: После объяснения и проверки понимания, переходи к следующему пункту плана.
 
+КАК ОБЪЯСНЯТЬ "НА ПАЛЬЦАХ" (ТВОЯ ГЛАВНАЯ СУПЕРСИЛА):
+- Используй простые аналогии из повседневной жизни (например: "Представь, что это как...")
+- Разбивай сложные концепции на маленькие, понятные шаги
+- Приводи конкретные примеры, которые ученик может легко представить
+- Избегай сложных терминов без объяснения - если нужно использовать термин, сначала объясни его простыми словами
+- Связывай новое с уже известным ученику
+- Показывай, как знания применяются в реальной жизни
+
 ПРАВИЛА ПРОВЕДЕНИЯ УРОКА:
-1. РАССКАЗЫВАЙ ТЕОРИЮ: Объясняй темы из плана урока понятным языком.
+1. РАССКАЗЫВАЙ ТЕОРИЮ: Объясняй темы из плана урока простым, понятным языком "на пальцах", с примерами из жизни.
 2. ЗАДАВАЙ ВОПРОСЫ: После объяснения спрашивай у ученика, понял ли он.
 3. ПРОВЕРЯЙ ОТВЕТЫ: Анализируй, правильно ли ответил ученик.
 4. ЕСЛИ ОТВЕТ НЕВЕРНЫЙ:
-   - Скажи: "Не совсем так" или "Давай подумаем еще раз".
-   - Объясни ошибку и правильный ответ.
+   - Скажи: "Не совсем так" или "Давай подумаем еще раз" - мягко и поддерживающе.
+   - Объясни ошибку и правильный ответ "на пальцах", используя простой пример.
    - Переспроси, чтобы проверить понимание.
 5. ЕСЛИ ОТВЕТ НЕПОНЯТЕН:
    - Попробуй найти ОМОФОНЫ: "Грипп грибы" -> "Гриб грибы" (по контексту).
-   - Если совсем непонятно - переспроси.
+   - Если совсем непонятно - объясни по-другому, используя другой пример или аналогию.
 6. ЕСЛИ ОТВЕТ ПРАВИЛЬНЫЙ: Кратко похвали и переходи к следующему.
 7. СЛЕДУЮЩИЙ ШАГ: После проверки всегда переходи к следующему пункту плана.
 
@@ -885,6 +967,8 @@ ${context}
 4. Переходи к следующему пункту плана, когда ученик понял предыдущий.
 `;
 
+          console.log('⏱️ [TIMING] T+' + (Date.now() - startTime) + 'ms: Prompt prepared, starting API call');
+
           const response = await fetch('/api/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -893,17 +977,21 @@ ${context}
               { role: 'system', content: systemPrompt },
               { role: 'user', content: `Ученик только что сказал: "${textToSend}". Продолжи урок.` }
               ],
-              model: 'gemini-3-pro-preview',
+              model: 'gpt-4o',
               temperature: 0.7,
               max_tokens: 300
             }),
             signal: controller.signal
           });
 
+          console.log('⏱️ [TIMING] T+' + (Date.now() - startTime) + 'ms: API response received');
+
           if (response.ok) {
             const data = await response.json();
+            console.log('⏱️ [TIMING] T+' + (Date.now() - startTime) + 'ms: Response parsed');
             const teacherResponse = data.choices[0].message.content;
             console.log('✅ Teacher response:', teacherResponse);
+            console.log('⏱️ [TIMING] T+' + (Date.now() - startTime) + 'ms: TOTAL TIME');
 
             if (controller.signal.aborted) return;
 
@@ -988,7 +1076,7 @@ ${context}
             { role: 'system', content: systemPrompt },
                 { role: 'user', content: prompt }
               ],
-              model: 'gemini-3-pro-preview',
+              model: 'gpt-4o',
               temperature: 0.7,
           max_tokens: 300
             })
@@ -1044,34 +1132,25 @@ ${context}
     try {
       console.log('📝 Generating lesson notes for call...');
 
-      const systemPrompt = `Ты - Юля, профессиональный педагог и методист с 15-летним опытом преподавания английского языка. Ты - мастер создания увлекательных уроков, которые ученики действительно хотят проходить.
+      const systemPrompt = `Ты - Юля, элитный педагог мирового уровня. Ты сочетаешь академическую глубину знаний с невероятной харизмой и чувством юмора.
+      
+ТВОЙ СТИЛЬ:
+🌟 Профессионализм: Ты знаешь предмет лучше Википедии, но говоришь на языке ученика.
+❤️ Чуткость: Ты чувствуешь, когда ученик устал или не понимает, и мгновенно меняешь подход.
+🧠 Интеллект: Ты используешь свой ум, чтобы упрощать, а не усложнять. Ты можешь объяснить теорию относительности на примере пончиков.
+😄 Юмор: Ты шутишь тонко и к месту. Смех - твое секретное оружие против скуки.
+👌 Простота: Твой девиз - "Если это нельзя объяснить на пальцах, значит, я сама этого не понимаю".
 
-ТВОЯ СПЕЦИАЛИЗАЦИЯ:
-Создание персонализированных уроков английского языка, адаптированных под конкретного ученика, его уровень и интересы.
-
-ПЕДАГОГИЧЕСКАЯ ЭКСПЕРТИЗА:
-🎯 Диагностика уровня: Определяешь уровень ученика по первым ответам
-🧠 Когнитивная психология: Используешь принципы эффективного обучения
-📚 Методология: Применяешь современные методики преподавания
-🎭 Психология: Мотивируешь и поддерживаешь учеников
-🌟 Индивидуализация: Адаптируешь материал под конкретного человека
+ТВОЯ МИССИЯ:
+Влюбить ученика в предмет. Превратить урок из обязаловки в самое интересное событие дня.
 
 СТРАТЕГИИ ПРИВЕТСТВИЯ:
-1. 🔥 Эмоциональное вовлечение: Начинай с энтузиазма и интереса
-2. 🎯 Персонализация: Используй имя темы для создания связи
-3. 📋 Планирование: Кратко опиши что будем изучать
-4. 💪 Мотивация: Создай ожидание пользы и удовольствия
-5. 🤝 Установление контакта: Покажи, что ты здесь, чтобы помочь
-
-ФОРМАТ ПРИВЕТСТВИЯ:
-- Будь живой и дружелюбной (используй эмодзи, восклицательные знаки)
-- Покажи энтузиазм по теме
-- Кратко расскажи о пользе урока
-- Задай вопрос, чтобы начать диалог
-- Используй обращение "мы" для создания команды
+1. 🔥 Вау-эффект: Начни с факта, который взрывает мозг.
+2. 🤝 Друг-наставник: Говори так, будто вы знакомы сто лет.
+3. 🤣 Добрая ирония: Пошути над сложностью темы, чтобы она перестала пугать.
 
 ПРИМЕР ХОРОШЕГО ПРИВЕТСТВИЯ:
-"Привет! Я Юля, и мы с тобой сегодня разберемся с артиклями в английском! Это как дорожные знаки в языке - без них легко запутаться, но с ними все становится ясно! 🎯 Готов начать наше путешествие в мир артиклей?"
+"Привет! Я Юля! Говорят, эта тема пугает даже взрослых, но мы с тобой разберем ее на атомы и соберем обратно так, что все обзавидуются! Готов стать гением за 15 минут?"
 
 Создай персонализированное приветствие для темы "${currentLesson?.title || 'Урок'}" (${currentLesson?.topic || 'Тема'}).
 
@@ -1093,7 +1172,7 @@ ${context}
               content: initialMessage
             }
               ],
-              model: 'gemini-3-pro-preview',
+              model: 'gpt-4o',
           temperature: 0.7,
           max_tokens: 300
             })
@@ -1253,19 +1332,28 @@ ${context}
       // Get lesson context
       const lessonContext = lessonNotes.slice(0, currentNoteIndex + 1).join(' ');
 
-      const prompt = `Ты - Юля, профессиональный школьный учитель. Твоя задача - ВЕСТИ УРОК ПО ПЛАНУ, а не просто отвечать на вопросы.
+      const prompt = `Ты - Юля, профессиональный школьный учитель. Твоя главная задача - ВЕСТИ УРОК ПО ПЛАНУ и объяснять все "на пальцах" - доступно и понятно, чтобы каждый ученик мог легко понять материал.
 
-ТВОЙ ПОДХОД К ОБУЧЕНИЮ:
-🎯 ТЫ ВЕДЕШЬ УРОК: Рассказывай теорию, объясняй темы, задавай вопросы для проверки понимания.
-📚 СТРУКТУРА УРОКА: Сначала объясняй материал, потом спрашивай у ученика.
+ТВОЙ ПРОФЕССИОНАЛЬНЫЙ ПОДХОД К ОБУЧЕНИЮ:
+
+🎯 ТЫ ВЕДЕШЬ УРОК: Рассказывай теорию простым языком, объясняй темы "на пальцах", задавай вопросы для проверки понимания.
+📚 СТРУКТУРА УРОКА: Сначала объясняй материал "на пальцах" с примерами из жизни, потом спрашивай у ученика.
 🚫 НЕ ЖДИ ВОПРОСОВ: Ты ведешь урок, ты задаешь вопросы.
 
+КАК ОБЪЯСНЯТЬ "НА ПАЛЬЦАХ" (ТВОЯ ГЛАВНАЯ СУПЕРСИЛА):
+- Используй простые аналогии из повседневной жизни (например: "Представь, что это как...")
+- Разбивай сложные концепции на маленькие, понятные шаги
+- Приводи конкретные примеры, которые ученик может легко представить
+- Избегай сложных терминов без объяснения - если нужно использовать термин, сначала объясни его простыми словами
+- Связывай новое с уже известным ученику
+- Показывай, как знания применяются в реальной жизни
+
 ПРАВИЛА ПРОВЕДЕНИЯ УРОКА:
-1. РАССКАЗЫВАЙ ТЕОРИЮ: Объясняй темы из плана урока понятным языком.
+1. РАССКАЗЫВАЙ ТЕОРИЮ: Объясняй темы из плана урока простым, понятным языком "на пальцах", с примерами из жизни.
 2. ЗАДАВАЙ ВОПРОСЫ: После объяснения спрашивай у ученика, понял ли он.
 3. ПРОВЕРЯЙ ОТВЕТЫ: Анализируй, правильно ли ответил ученик.
-4. ЕСЛИ ОТВЕТ НЕВЕРНЫЙ: Скажи "Не совсем так", объясни ошибку, переспроси.
-5. ЕСЛИ ОТВЕТ НЕПОНЯТЕН: Переспроси четко.
+4. ЕСЛИ ОТВЕТ НЕВЕРНЫЙ: Скажи "Не совсем так" мягко и поддерживающе, объясни ошибку "на пальцах" с простым примером, переспроси.
+5. ЕСЛИ ОТВЕТ НЕПОНЯТЕН: Объясни по-другому, используя другой пример или аналогию.
 6. ЕСЛИ ОТВЕТ ПРАВИЛЬНЫЙ: Кратко похвали и переходи к следующему.
 7. СЛЕДУЮЩИЙ ШАГ: После проверки всегда переходи к следующему пункту плана.
 
@@ -1291,11 +1379,15 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
         messages: [
-            { role: 'system', content: `Ты - Юля, школьный учитель. Твоя цель - УЧИТЬ. 
+            { role: 'system', content: `Ты - Юля, профессиональный школьный учитель. Твоя главная цель - УЧИТЬ, объясняя все "на пальцах" - доступно и понятно.
+
+ТВОЙ ПРОФЕССИОНАЛЬНЫЙ ПОДХОД:
 1. Строго соблюдай тему урока: "${currentLesson?.title || 'Урок географии'}" (${currentLesson?.topic || 'Формы Земли'}). Вопросы не по теме - откладывай.
-2. Честно оценивай ответы. Если ученик ошибается - ПОПРАВЛЯЙ его, а не хвали.
-3. Если речь неразборчива - переспрашивай.
-4. Будь дружелюбной, но требовательной.` },
+2. Объясняй все "на пальцах": используй простые аналогии, примеры из жизни, разбивай сложное на простые шаги.
+3. Честно оценивай ответы. Если ученик ошибается - ПОПРАВЛЯЙ его мягко и поддерживающе, объясни ошибку "на пальцах" с простым примером.
+4. Если речь неразборчива - переспрашивай.
+5. Будь дружелюбной, терпеливой и поддерживающей, но требовательной к пониманию материала.
+6. Всегда используй простой, понятный язык - как будто объясняешь другу.` },
             { role: 'user', content: prompt }
         ],
           model: 'gpt-4o',
@@ -1493,6 +1585,155 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
     }
   };
 
+  // Handle video call with voice transcription and lesson
+  const handleCall = async () => {
+    if (isCallActive) {
+      // End call
+      console.log('📞 Ending call...');
+      VoiceComm.stopListening();
+      OpenAITTS.stop();
+      setIsCallActive(false);
+      setCallTranscript('');
+      setLessonNotes([]);
+      setCurrentNoteIndex(0);
+      setIsLessonSpeaking(false);
+    } else {
+      // Start call
+      console.log('📞 Starting call...');
+
+      // Activate audio context first (important for browser autoplay policies)
+      try {
+        console.log('🔊 Activating audio context...');
+
+        // Try Web Audio API first
+        if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined') {
+          const AudioContextClass = AudioContext || webkitAudioContext;
+          const audioContext = new AudioContextClass();
+          if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+          }
+          console.log('✅ Web Audio API context activated');
+        } else {
+          // Fallback to HTML5 Audio (may fail on some browsers)
+          const audio = new Audio();
+          audio.volume = 0.01;
+          audio.muted = true;
+          audio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+
+          // Don't await, just try to play briefly
+          audio.play().then(() => {
+            audio.pause();
+            console.log('✅ HTML5 Audio context activated');
+          }).catch((err) => {
+            console.warn('⚠️ HTML5 Audio activation failed, continuing anyway:', err.message);
+          });
+
+          // Wait a bit for potential activation
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to activate audio context, continuing anyway:', error.message);
+      }
+
+      try {
+        // Generate simple greeting
+        console.log('📚 Starting conversation...');
+        setIsGeneratingLesson(true);
+        const notes = ['Привет! Я Юля. Давай начнем урок по теме "' + (currentLesson?.title || 'математике') + '". Что ты уже знаешь по этой теме?'];
+        setIsGeneratingLesson(false);
+        console.log('✅ Greeting ready, count:', notes?.length);
+
+        // Save the generated lesson
+        try {
+          const saveResponse = await fetch('/api/generated-lessons', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              course_name: currentLesson?.courseName || 'General',
+              lesson_title: currentLesson?.title || 'Generated Lesson',
+              lesson_topic: currentLesson?.topic || '',
+              lesson_number: currentLesson?.number || null,
+              lesson_notes: notes,
+              generation_prompt: 'Simple greeting',
+              conversation_history: conversationHistory,
+              interaction_type: 'voice',
+              is_template: false
+            })
+          });
+
+          if (saveResponse.ok) {
+            const saveData = await saveResponse.json();
+            console.log('💾 Generated lesson saved with ID:', saveData.lesson_id);
+          } else {
+            console.warn('⚠️ Failed to save generated lesson:', await saveResponse.text());
+          }
+        } catch (saveError) {
+          console.warn('⚠️ Error saving generated lesson:', saveError);
+        }
+
+        // Start the conversation with greeting after generation completes
+        console.log('🎓 Starting conversation with greeting...');
+        setTimeout(async () => {
+          try {
+            // Speak the greeting and then start interactive chat
+            await speakGreetingAndStartChat(notes[0]);
+          } catch (error) {
+            console.error('❌ Failed to start conversation:', error);
+          }
+        }, 500);
+
+        // Initialize VoiceComm with callbacks
+        const isInitialized = VoiceComm.init(
+          {
+            language: 'ru-RU',
+            continuous: true
+          },
+          {
+            onListeningStart: () => {
+              console.log('🎤 Call listening started (callback fired)');
+              console.log('🎤 Notes available:', !!notes, 'Notes length:', notes?.length);
+              setIsCallActive(true);
+
+              // Stop TTS immediately when user starts speaking to avoid conflicts
+              console.log('🛑 Stopping TTS because user started speaking');
+              OpenAITTS.stop();
+
+              // Lesson already started automatically after generation, just ensure voice recognition is active
+            },
+            onListeningEnd: () => {
+              console.log('🎤 Call listening ended');
+              setIsCallActive(false);
+              setIsLessonSpeaking(false);
+            },
+          onTranscript: (text: string, isFinal: boolean) => {
+            if (isFinal && text.trim()) {
+              console.log('📝 Call transcript:', text);
+              handleUserTranscript(text, isFinal);
+            }
+          },
+            onError: (error: string) => {
+              console.error('❌ Call error:', error);
+              setIsCallActive(false);
+              setIsLessonSpeaking(false);
+            }
+          }
+        );
+
+        if (!isInitialized) {
+          throw new Error('Speech Recognition not supported in this browser');
+        }
+
+        // Start voice recognition (without parameters)
+        console.log('🎙️ Calling VoiceComm.startListening()...');
+        const started = VoiceComm.startListening();
+        console.log('🎙️ VoiceComm.startListening() returned:', started);
+      } catch (error) {
+        console.error('❌ Failed to start call:', error);
+        setIsCallActive(false);
+        setIsGeneratingLesson(false); // Скрыть индикатор при ошибке
+      }
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
@@ -1545,6 +1786,16 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
                 </div>
               )}
 
+              {/* Call Teacher Button (for lesson mode) */}
+              <Button
+                size="lg"
+                variant="outline"
+                className="flex-1 sm:flex-none text-lg px-8 py-4 border-2 border-primary/30 hover:border-primary hover:bg-primary/5 hover:text-black transition-all duration-300 gap-3 font-semibold"
+                onClick={() => navigate('/voice-call')}
+              >
+                <Phone className="w-5 h-5 text-primary" />
+                Звонок учителю
+              </Button>
 
               {/* Error Message */}
               {generationError && (
@@ -1695,11 +1946,11 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
                                   variant="outline"
                             size="sm"
                                   onClick={() => {
-                                    loadSavedLesson(lesson.id);
+                                    window.location.href = `/lesson/${lesson.id}`;
                                   }}
                             className="gap-2"
                           >
-                            📖 Загрузить
+                            📖 Открыть
                           </Button>
                           <Button
                             variant="outline"

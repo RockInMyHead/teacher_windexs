@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Header } from '@/components/Header';
-import { VoiceTeacherChat } from '@/components/VoiceTeacherChat';
 import { ArrowLeft, BookOpen, Clock, Target, MessageCircle } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 
@@ -35,22 +34,10 @@ const Lesson: React.FC<LessonPageProps> = () => {
   const [lessonIndex, setLessonIndex] = useState(0);
   const [totalLessons, setTotalLessons] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [showVideoCall, setShowVideoCall] = useState(false);
+  const [isStartingLesson, setIsStartingLesson] = useState(false);
+  const [isStartingVoiceCall, setIsStartingVoiceCall] = useState(false);
+  const [countdown, setCountdown] = useState(0);
 
-  // Auto-scroll to video call when it opens
-  useEffect(() => {
-    if (showVideoCall) {
-      setTimeout(() => {
-        const videoCallElement = document.querySelector('[data-video-call]');
-        if (videoCallElement) {
-          videoCallElement.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-          });
-        }
-      }, 100);
-    }
-  }, [showVideoCall]);
 
   useEffect(() => {
     // Получаем данные из localStorage
@@ -58,6 +45,7 @@ const Lesson: React.FC<LessonPageProps> = () => {
     const storedCourseInfo = localStorage.getItem('courseInfo');
     const storedLessonIndex = localStorage.getItem('lessonIndex');
     const storedTotalLessons = localStorage.getItem('totalLessons');
+    const voiceCallFlag = localStorage.getItem('lessonVoiceCall');
 
     if (storedData) {
       const data = JSON.parse(storedData);
@@ -79,6 +67,34 @@ const Lesson: React.FC<LessonPageProps> = () => {
       if (storedLessonIndex) {
         const index = parseInt(storedLessonIndex, 10);
         setProgress((index / total) * 100);
+      }
+    }
+
+    // Автоматически запускаем урок или голосовой звонок
+    if (storedData) {
+      if (voiceCallFlag === 'true') {
+        // Удаляем флаг и автоматически переходим к голосовому звонку
+        localStorage.removeItem('lessonVoiceCall');
+        setTimeout(() => {
+          navigate('/voice-call');
+        }, 500);
+      } else {
+        // Автоматически переходим к интерактивному уроку
+        setIsStartingLesson(true);
+        setCountdown(2); // 2 секунды для показа страницы
+
+        // Обратный отсчет
+        const interval = setInterval(() => {
+          setCountdown(prev => {
+            if (prev <= 1) {
+              clearInterval(interval);
+              setIsStartingLesson(false);
+              navigate('/chat?mode=lesson');
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
       }
     }
 
@@ -272,27 +288,68 @@ const Lesson: React.FC<LessonPageProps> = () => {
             </CardContent>
           </Card>
 
+          {/* Loading States */}
+          {(isStartingLesson || isStartingVoiceCall) && (
+            <div className="flex flex-col items-center justify-center py-12 space-y-6">
+              <div className="relative">
+                <div className="w-20 h-20 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-2xl font-bold text-primary">{countdown}</span>
+                </div>
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-xl font-bold text-foreground">
+                  {isStartingLesson ? 'Создание интерактивного урока...' : 'Подготовка голосового звонка...'}
+                </h3>
+                <p className="text-muted-foreground max-w-md">
+                  {isStartingLesson
+                    ? 'Подготавливаем персонализированный урок специально для вас'
+                    : 'Настраиваем голосовое общение с вашим персональным учителем'
+                  }
+                </p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              </div>
+            </div>
+          )}
+
           {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row justify-center gap-4 py-8">
-            <Button
-              size="lg"
-              className="text-lg px-8 py-4 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-300 gap-3"
-              onClick={() => navigate('/chat?mode=lesson')}
-            >
-              <MessageCircle className="w-5 h-5" />
-              Начать урок
-              <Target className="w-5 h-5" />
-            </Button>
+          {!isStartingLesson && !isStartingVoiceCall && (
+            <div className="flex flex-col sm:flex-row justify-center gap-4 py-8">
+              <Button
+                size="lg"
+                className="text-lg px-8 py-4 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-300 gap-3"
+                onClick={() => navigate('/chat?mode=lesson')}
+              >
+                <MessageCircle className="w-5 h-5" />
+                Начать урок
+                <Target className="w-5 h-5" />
+              </Button>
 
             <Button
               size="lg"
               variant="outline"
-              className="text-lg px-8 py-4 border-2 border-primary/30 hover:border-primary hover:bg-primary/5 hover:text-black transition-all duration-300"
-              onClick={() => setShowVideoCall(true)}
+              className="text-lg px-8 py-4 border-2 border-purple-300 hover:border-purple-400 hover:bg-purple-50 hover:text-purple-900 transition-all duration-300 gap-3"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('🎯 [LESSON] Button clicked! Starting voice call navigation');
+                console.log('🎯 [LESSON] Current URL:', window.location.href);
+                console.log('🎯 [LESSON] Current pathname:', window.location.pathname);
+                
+                // Direct navigation using window.location for reliability
+                console.log('🎯 [LESSON] Navigating to /voice-call');
+                window.location.href = '/voice-call';
+              }}
             >
+              <Phone className="w-5 h-5" />
               Звонок учителю
             </Button>
-          </div>
+            </div>
+          )}
 
           {/* Navigation Buttons */}
           <div className="flex gap-4 pb-12">
@@ -314,21 +371,6 @@ const Lesson: React.FC<LessonPageProps> = () => {
             </Button>
           </div>
 
-          {/* Voice Teacher Chat */}
-          {showVideoCall && (
-            <div className="mt-8" data-video-call>
-              <VoiceTeacherChat
-                lessonTitle={lesson?.title || 'Урок'}
-                lessonTopic={lesson?.topic || 'Тема'}
-                lessonAspects={lesson?.aspects || lesson?.description || 'Материал урока'}
-                onComplete={() => {
-                  setShowVideoCall(false);
-                  navigate('/personalized-course');
-                }}
-                onClose={() => setShowVideoCall(false)}
-              />
-            </div>
-          )}
         </div>
       </main>
     </div>

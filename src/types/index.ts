@@ -3,10 +3,14 @@
  * Re-export all types for convenient access
  */
 
-// Type safety imports
+// Feature-sliced architecture types
+export * from './domain';
+export * from './api';
+export * from './ui';
+
+// Legacy types (to be migrated)
 export * from './errors';
 export * from './validation';
-export * from './api';
 
 // ============= MESSAGES =============
 
@@ -16,6 +20,8 @@ export interface Message {
   content: string;
   timestamp: Date;
   ttsPlayed?: boolean;
+  images?: File[];
+  imageUrls?: string[];
 }
 
 export enum MessageRole {
@@ -329,7 +335,7 @@ export interface UseVoiceChatReturn {
 export interface UseChatReturn {
   messages: Message[];
   isLoading: boolean;
-  sendMessage: (content: string, systemPrompt?: string, model?: string) => Promise<void>;
+  sendMessage: (content: string, systemPrompt?: string, model?: string, images?: File[]) => Promise<void>;
   addMessage: (message: Message) => void;
   clearMessages: () => void;
   updateMessage: (id: string, updates: Partial<Message>) => void;

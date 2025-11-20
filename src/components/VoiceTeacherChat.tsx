@@ -3,17 +3,19 @@
  * Teacher reads lesson notes via TTS, user can interrupt with voice questions
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Mic,
   MicOff,
   Clock,
   Brain,
-  X
+  X,
+  Languages
 } from 'lucide-react';
 import { OpenAITTS } from '@/lib/openaiTTS';
 
@@ -56,14 +58,16 @@ interface VoiceTeacherChatProps {
   onClose: () => void;
 }
 
-export const VoiceTeacherChat = React.memo(({
+export const VoiceTeacherChat = ({
   lessonTitle,
   lessonTopic,
   lessonAspects,
   onComplete,
   onClose
 }: VoiceTeacherChatProps) => {
-  // State
+  // console.log('🎤 VoiceTeacherChat props:', { lessonTitle, lessonTopic, lessonAspects });
+
+  // Simple state
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isGeneratingLesson, setIsGeneratingLesson] = useState(false);
@@ -76,12 +80,42 @@ export const VoiceTeacherChat = React.memo(({
   const [userTranscript, setUserTranscript] = useState('');
   const [conversationHistory, setConversationHistory] = useState<Array<{role: 'teacher' | 'student', text: string}>>([]);
   const [lessonStarted, setLessonStarted] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState('en-US');
+
+  // Define helper functions BEFORE using them in useEffect
+  
+  // Auto-detect language based on lesson content
+  const detectLanguageFromLesson = (title: string, topic: string, aspects: string) => {
+    const content = `${title} ${topic} ${aspects}`.toLowerCase();
+
+    if (content.includes('китай') || content.includes('china') || content.includes('chinese') || content.includes('中文')) {
+      return 'zh-CN';
+    } else if (content.includes('испан') || content.includes('spanish') || content.includes('español')) {
+      return 'es-ES';
+    } else if (content.includes('француз') || content.includes('french') || content.includes('français')) {
+      return 'fr-FR';
+    } else if (content.includes('немец') || content.includes('german') || content.includes('deutsch')) {
+      return 'de-DE';
+    } else if (content.includes('итальян') || content.includes('italian') || content.includes('italiano')) {
+      return 'it-IT';
+    } else if (content.includes('португал') || content.includes('portuguese') || content.includes('português')) {
+      return 'pt-BR';
+    } else if (content.includes('япон') || content.includes('japan') || content.includes('japanese') || content.includes('日本語')) {
+      return 'ja-JP';
+    } else if (content.includes('корей') || content.includes('korea') || content.includes('korean') || content.includes('한국어')) {
+      return 'ko-KR';
+    } else {
+      return 'en-US'; // Default to English
+    }
+  };
 
   // Refs
   const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const callStartTimeRef = useRef<number | null>(null);
   const isInterruptedRef = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const thinkingSoundIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Timer for call duration
   useEffect(() => {
@@ -99,12 +133,81 @@ export const VoiceTeacherChat = React.memo(({
     };
   }, []);
 
+  // Cleanup thinking sound on unmount
+  useEffect(() => {
+    console.log('🎤 VoiceTeacherChat cleanup effect running');
+    return () => {
+      console.log('🎤 VoiceTeacherChat cleanup function called');
+      stopThinkingSound();
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, [stopThinkingSound]);
+
   // Format duration
-  const formatDuration = useCallback((seconds: number) => {
+  const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  }, []);
+  };
+
+  // Create thinking sound "пик пик пик" (slow beep)
+  const startThinkingSound = () => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+
+      const audioContext = audioContextRef.current;
+      let beepCount = 0;
+
+      const playBeep = () => {
+        if (beepCount >= 3) return; // Stop after 3 beeps
+
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.frequency.setValueAtTime(800, audioContext.currentTime); // 800Hz beep
+        oscillator.type = 'sine';
+
+        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.2);
+
+        beepCount++;
+      };
+
+      // Play beeps with 1 second intervals
+      thinkingSoundIntervalRef.current = setInterval(() => {
+        if (beepCount < 3) {
+          playBeep();
+        } else {
+          // Stop the interval after 3 beeps
+          if (thinkingSoundIntervalRef.current) {
+            clearInterval(thinkingSoundIntervalRef.current);
+            thinkingSoundIntervalRef.current = null;
+          }
+        }
+      }, 1000);
+
+    } catch (error) {
+      console.warn('Could not play thinking sound:', error);
+    }
+  };
+
+  // Stop thinking sound
+  const stopThinkingSound = () => {
+    if (thinkingSoundIntervalRef.current) {
+      clearInterval(thinkingSoundIntervalRef.current);
+      thinkingSoundIntervalRef.current = null;
+    }
+  };
 
   // Generate lesson notes using LLM
   const generateLessonNotes = useCallback(async () => {
@@ -130,7 +233,9 @@ ${lessonAspects}
 
 Каждый пункт конспекта должен быть отдельным предложением или абзацем, подходящим для озвучивания через TTS.
 
-Верни ответ в формате JSON массива строк, где ПЕРВЫЙ элемент - это приветствие, а остальные - содержание урока.`;
+ВАЖНО: Все цифры, числа, формулы и математические выражения ПИШИ СЛОВАМИ, а не цифрами. Например, вместо "2+2=4" пиши "два плюс два равно четыре". Вместо "5 класс" пиши "пятый класс". Вместо "2024 год" пиши "две тысячи двадцать четвертый год".
+
+Верни ответ в формате JSON массива строк, где все элементы - это содержание урока (без приветствий).`;
 
       const response = await fetch('/api/chat/completions', {
         method: 'POST',
@@ -141,16 +246,50 @@ ${lessonAspects}
           messages: [
             {
               role: 'system',
-              content: 'Ты - Юля, опытный педагог. Создай подробный конспект урока в формате JSON массива строк. КРИТИЧЕСКИ ВАЖНО: НЕ добавляй приветствие в начало урока - начинай сразу с материала. Каждый элемент массива должен содержать логически завершенную мысль или абзац, подходящий для озвучивания.'
+              content: `Ты - Юля, профессиональный учитель с многолетним опытом преподавания. Твоя главная задача - объяснять сложные вещи простым и понятным языком, "на пальцах", чтобы каждый ученик мог легко понять материал.
+
+ТВОЙ ПРОФЕССИОНАЛЬНЫЙ ПОДХОД:
+
+1. ОБЪЯСНЕНИЕ "НА ПАЛЬЦАХ":
+   - Используй простые аналогии из повседневной жизни
+   - Разбивай сложные концепции на маленькие шаги
+   - Приводи конкретные примеры, которые ученик может представить
+   - Избегай сложных терминов без объяснения
+   - Если нужно использовать термин - сначала объясни его простыми словами
+
+2. СТРУКТУРА ОБЪЯСНЕНИЯ:
+   - Начинай с простого и постепенно усложняй
+   - Используй принцип "от общего к частному"
+   - Каждое новое понятие связывай с уже известным
+   - Повторяй ключевые моменты для закрепления
+
+3. ПОДДЕРЖКА И ТЕРПЕНИЕ:
+   - Всегда поддерживай ученика, даже если он ошибается
+   - Никогда не осуждай и не критикуй
+   - Если ученик не понял - объясни по-другому, используя другой пример
+   - Верь в способности ученика и показывай это
+
+4. ДОСТУПНОСТЬ ЯЗЫКА:
+   - Говори простыми словами, как будто объясняешь другу
+   - Используй короткие предложения
+   - Избегай сложных конструкций
+   - Все цифры, числа, формулы ПИШИ СЛОВАМИ (например: "два плюс два равно четыре", а не "2+2=4")
+
+5. ПРАКТИЧНОСТЬ:
+   - Показывай, как знания применяются в реальной жизни
+   - Приводи примеры из жизни ученика
+   - Объясняй, зачем это нужно знать
+
+КРИТИЧЕСКИ ВАЖНО: НЕ добавляй приветствие в начало урока - начинай сразу с материала. Каждый элемент массива должен содержать логически завершенную мысль или абзац, подходящий для озвучивания.`
             },
             {
               role: 'user',
               content: prompt
             }
           ],
-          model: 'gpt-4-turbo',
+          model: 'gpt-4o',
           temperature: 0.7,
-          max_completion_tokens: 2000
+          max_tokens: 1200
         })
       });
 
@@ -165,39 +304,33 @@ ${lessonAspects}
       try {
         const notes = JSON.parse(content);
         if (Array.isArray(notes) && notes.length > 0) {
-          // Приветствие больше не требуется - начинаем сразу с материала
+          // Начинаем сразу с материала урока
           console.log('✅ Урок начинается с материала:', notes[0].substring(0, 50));
-          
-          setLessonNotes(notes);
+
+          // Add lesson content after greeting (skip the first note which is greeting)
+          setLessonNotes(prev => [...prev, ...notes]);
           console.log('📝 Lesson notes generated:', notes.length, 'items');
-          console.log('🎤 Первое сообщение (приветствие):', notes[0]);
+          console.log('🎤 Первое сообщение (материал урока):', notes[0]);
         } else {
           // Fallback: split by newlines if not JSON
           const fallbackNotes = content.split('\n').filter(note => note.trim());
           // Приветствие больше не требуется
-          setLessonNotes(fallbackNotes);
+          setLessonNotes(prev => [...prev, ...fallbackNotes]);
           console.log('✅ Добавлено приветствие (fallback режим)');
         }
       } catch (parseError) {
         // Fallback: split by newlines
         const fallbackNotes = content.split('\n').filter(note => note.trim());
-        // ВСЕГДА добавляем приветствие в начало
-        const greeting = `Здравствуй! Меня зовут учитель. Сегодня мы с тобой изучим тему "${lessonTitle}". Давай начнем наш урок!`;
-        fallbackNotes.unshift(greeting);
-        setLessonNotes(fallbackNotes);
-        console.log('✅ Добавлено приветствие (parse error fallback)');
+        // Убираем приветствие - начинаем сразу с материала
+        setLessonNotes(prev => [...prev, ...fallbackNotes]);
+        console.log('✅ Fallback без приветствия (parse error)');
       }
 
     } catch (error) {
       console.error('Error generating lesson notes:', error);
-      // Fallback notes с приветствием ВСЕГДА первым
-      setLessonNotes([
-        `Здравствуй! Меня зовут учитель. Сегодня мы с тобой изучим тему "${lessonTitle}". Давай начнем наш урок!`,
-        `Сегодня мы изучаем тему "${lessonTopic}"`,
-        `Основные аспекты: ${lessonAspects}`,
-        'Готовы начать изучение материала?'
-      ]);
-      console.log('✅ Использованы fallback notes с приветствием');
+      // Fallback notes без приветствия - сразу с материала
+      setLessonNotes(prev => [...prev, `Сегодня мы изучаем тему "${lessonTopic}"`, `Основные аспекты: ${lessonAspects}`]);
+      console.log('✅ Использованы fallback notes без вопроса о знаниях');
     } finally {
       setIsProcessing(false);
       setIsGeneratingLesson(false);
@@ -206,27 +339,51 @@ ${lessonAspects}
 
   // Generate dynamic lesson content based on user response
   const generateDynamicContent = useCallback(async (userResponse: string): Promise<string> => {
+    const startTime = Date.now();
     try {
       setIsGeneratingLesson(true);
-      console.log('🎯 Generating dynamic content for user response:', userResponse);
+      console.log('🎯 [TIMING] Start generating content:', userResponse);
+      console.log('⏱️ [TIMING] T+0ms: Function started');
+
+      // Start thinking sound "пик пик пик"
+      startThinkingSound();
+      console.log('⏱️ [TIMING] T+' + (Date.now() - startTime) + 'ms: Thinking sound started');
 
       const conversationContext = conversationHistory.slice(-4).map(msg =>
         `${msg.role === 'teacher' ? 'Юля' : 'Ученик'}: ${msg.text}`
       ).join('\n');
+      console.log('⏱️ [TIMING] T+' + (Date.now() - startTime) + 'ms: Context prepared');
 
-      const prompt = `Ты - Юля, дружелюбная учительница, ведущая интерактивный урок. Ученик только что сказал: "${userResponse}"
+      const prompt = `Ты - Юля, профессиональный учитель, ведущая интерактивный урок. Ученик только что сказал: "${userResponse}"
 
 КОНТЕКСТ УРОКА:
 - Тема: "${lessonTitle}" (${lessonTopic})
 - Аспекты для изучения: ${lessonAspects}
 - Предыдущий разговор: ${conversationContext}
 
-ЗАДАЧА: Создай 1-2 логически связанных предложения или абзаца, которые:
-1. Отвечают на вопрос/замечание ученика
-2. Объясняют материал по теме
-3. Задают следующий вопрос для продолжения диалога
+ТВОЯ ЗАДАЧА: Продолжи урок, создав 1-2 логически связанных предложения или абзаца, которые:
+
+1. ОТВЕЧАЮТ на вопрос/замечание ученика - объясни "на пальцах", используя простые примеры из жизни
+2. ОБЪЯСНЯЮТ материал по теме - разбей на простые шаги, используй аналогии
+3. ЗАДАЮТ следующий вопрос для продолжения диалога - легкий, наводящий вопрос
+
+КАК ОБЪЯСНЯТЬ "НА ПАЛЬЦАХ":
+- Используй простые аналогии (например: "Представь, что это как...")
+- Приводи конкретные примеры из повседневной жизни
+- Разбивай сложное на простые части
+- Избегай сложных терминов без объяснения
+- Показывай связь с тем, что ученик уже знает
+
+КРИТИЧЕСКИ ВАЖНО: 
+- НИКОГДА НЕ ДОБАВЛЯЙ ПРИВЕТСТВИЯ! Ты уже поздоровалась в начале урока.
+- ПРОДОЛЖАЙ УРОК С МАТЕРИАЛА, БЕЗ ЛЮБЫХ ПРИВЕТСТВИЙ ИЛИ ВВЕДЕНИЙ.
+
+ВАЖНО: 
+- Все цифры, числа, формулы ПИШИ СЛОВАМИ (например: "два плюс два равно четыре", а не "2+2=4")
+- Говори простым, понятным языком, как будто объясняешь другу
 
 Формат ответа: Просто текст для озвучивания, без JSON, без форматирования.`;
+      console.log('⏱️ [TIMING] T+' + (Date.now() - startTime) + 'ms: Prompt prepared, starting API call');
 
       const response = await fetch('/api/chat/completions', {
         method: 'POST',
@@ -237,7 +394,45 @@ ${lessonAspects}
           messages: [
             {
               role: 'system',
-              content: 'Ты - дружелюбная учительница Юля, которая объясняет материал доступно и задает вопросы для проверки понимания.'
+              content: `Ты - Юля, профессиональный учитель с многолетним опытом. Твоя главная задача - объяснять сложные вещи простым и понятным языком, "на пальцах", чтобы каждый ученик мог легко понять материал.
+
+ТВОЙ ПРОФЕССИОНАЛЬНЫЙ ПОДХОД К ОБЪЯСНЕНИЮ:
+
+1. ОБЪЯСНЕНИЕ "НА ПАЛЬЦАХ" - ТВОЯ ГЛАВНАЯ СУПЕРСИЛА:
+   - Используй простые аналогии из повседневной жизни (как будто объясняешь ребенку)
+   - Разбивай сложные концепции на маленькие, понятные шаги
+   - Приводи конкретные примеры, которые ученик может легко представить
+   - Если нужно использовать термин - сначала объясни его простыми словами
+   - Связывай новое с уже известным ученику
+
+2. СТРУКТУРА ТВОЕГО ОТВЕТА:
+   - Начинай с простого объяснения
+   - Приведи 1-2 конкретных примера из жизни
+   - Покажи, как это работает на практике
+   - Задай вопрос для проверки понимания
+
+3. ТОН И СТИЛЬ:
+   - Профессиональный, но очень теплый и дружелюбный
+   - Поддерживающий и терпеливый
+   - Никогда не осуждай и не критикуй
+   - Верь в способности ученика
+
+4. ЕСЛИ УЧЕНИК НЕ ПОНИМАЕТ:
+   - Не повторяй то же самое - объясни по-другому
+   - Используй другой пример или аналогию
+   - Разбей объяснение на еще более мелкие шаги
+   - Покажи связь с тем, что ученик уже знает
+
+5. ЕСЛИ УЧЕНИК МОЛЧИТ ИЛИ ГОВОРИТ "НИЧЕГО", "НЕ ЗНАЮ":
+   - Не начинай новую тему сразу
+   - Пошути про сложность темы (легко и дружелюбно)
+   - Приведи простой жизненный пример
+   - Задай легкий наводящий вопрос, который поможет ученику начать думать
+
+ВАЖНО: 
+- Все цифры, числа, формулы ПИШИ СЛОВАМИ (например: "два плюс два равно четыре", а не "2+2=4")
+- НИКОГДА НЕ ДОБАВЛЯЙ ПРИВЕТСТВИЯ! Ты уже поздоровалась в начале урока.
+- Продолжай урок с материала, без любых приветствий или введений.`
             },
             {
               role: 'user',
@@ -246,237 +441,144 @@ ${lessonAspects}
           ],
           model: 'gpt-4o',
           temperature: 0.7,
-          max_tokens: 500
+          max_tokens: 300
         })
       });
+      console.log('⏱️ [TIMING] T+' + (Date.now() - startTime) + 'ms: API response received');
 
       if (!response.ok) {
         throw new Error(`API Error: ${response.status}`);
       }
 
-      const data = await response.json();
-      const newContent = data.choices?.[0]?.message?.content || 'Извините, не удалось получить ответ.';
+          const data = await response.json();
+          console.log('⏱️ [TIMING] T+' + (Date.now() - startTime) + 'ms: Response parsed');
 
-      console.log('✅ Generated dynamic content:', newContent.substring(0, 100) + '...');
-      return newContent.trim();
+          let newContent = data.choices?.[0]?.message?.content || 'Извините, не удалось получить ответ.';
+
+          // Remove any greetings that might have slipped through
+          const greetingPatterns = [
+            /^Здравствуйте[^.!]*[.!]/i,
+            /^Привет[^.!]*[.!]/i,
+            /^Меня зовут Юля[^.!]*[.!]/i,
+            /^Давайте начнем урок[^.!]*[.!]/i,
+            /^Я Юля[^.!]*[.!]/i
+          ];
+
+          greetingPatterns.forEach(pattern => {
+            newContent = newContent.replace(pattern, '').trim();
+          });
+
+          console.log('✅ Generated dynamic content (filtered):', newContent.substring(0, 100) + '...');
+          console.log('⏱️ [TIMING] T+' + (Date.now() - startTime) + 'ms: TOTAL TIME');
+          return newContent.trim();
 
     } catch (error) {
       console.error('❌ Error generating dynamic content:', error);
       return 'Извините, произошла ошибка. Можете перефразировать свой вопрос?';
     } finally {
       setIsGeneratingLesson(false);
+      // Stop thinking sound
+      stopThinkingSound();
     }
   }, [lessonTitle, lessonTopic, lessonAspects, conversationHistory]);
 
-  // Initialize lesson notes on mount - start empty, generate content dynamically
+  // Initialize lesson with greeting and then generate content
   useEffect(() => {
-    // Start with empty notes, will be filled when user starts speaking
-    setLessonNotes([]);
-    console.log('🎤 Lesson initialized, waiting for user interaction');
-  }, [lessonTitle]);
+    console.log('🎤 VoiceTeacherChat init effect running with deps:', { lessonTitle, lessonTopic, lessonAspects });
+    const initializeLesson = async () => {
+      try {
+        // Auto-detect language based on lesson content
+        const detectedLanguage = detectLanguageFromLesson(lessonTitle, lessonTopic, lessonAspects);
+        setSelectedLanguage(detectedLanguage);
+        console.log('🎯 Auto-detected language:', detectedLanguage, 'for lesson:', lessonTitle);
 
-  // Read current lesson note
-  const readNextNote = useCallback(async () => {
-    if (lessonNotes.length === 0 || currentNoteIndex >= lessonNotes.length) {
-      // Lesson complete
-      setLessonProgress(100);
-      setIsReadingLesson(false);
-      return;
-    }
+        // Start with greeting
+        const greeting = `Привет! Я Юля. Давай начнем урок по теме "${lessonTitle}". ${lessonTopic ? `Тема: ${lessonTopic}.` : ''}`;
+        setLessonNotes([greeting]);
+        // Also add greeting to conversation history for tracking
+        setConversationHistory([{ role: 'teacher', text: greeting }]);
+        console.log('🎤 Lesson initialized with greeting');
 
-    if (isInterruptedRef.current) {
-      // Don't continue if interrupted
-      return;
-    }
-
-    const note = lessonNotes[currentNoteIndex];
-    if (!note || note.trim() === '') {
-      // Skip empty notes
-      if (currentNoteIndex < lessonNotes.length - 1) {
-        setCurrentNoteIndex(prev => prev + 1);
-        setLessonProgress(((currentNoteIndex + 1) / lessonNotes.length) * 100);
-        setTimeout(() => readNextNote(), 500);
+        // Auto-generate lesson content after greeting
+        setTimeout(async () => {
+          console.log('🎯 Auto-generating lesson content after greeting');
+          try {
+            await generateLessonNotes();
+            setLessonStarted(true);
+          } catch (error) {
+            console.error('❌ Error generating lesson notes:', error);
+            setLessonStarted(true); // Continue anyway
+          }
+        }, 2000); // Small delay to let greeting be set first
+      } catch (error) {
+        console.error('❌ Error in initializeLesson:', error);
       }
-      return;
-    }
+    };
+
+    initializeLesson();
+  }, []); // Removed all dependencies to avoid circular dependencies
+
+  // Simple TTS function
+  const speakText = useCallback(async (text: string) => {
+    if (!text || text.trim() === '') return;
 
     try {
-      setIsReadingLesson(true);
-      setIsSpeaking(true);
-
-      // Speak the note
-      await OpenAITTS.speak(note, {
+      console.log('🎤 Speaking:', text.substring(0, 50) + '...');
+      await OpenAITTS.speak(text, {
         voice: 'nova',
         speed: 1.0,
-        onStart: () => {
-          console.log('TTS started for note:', currentNoteIndex);
-        },
-        onEnd: () => {
-          console.log('TTS ended for note:', currentNoteIndex);
-          setIsSpeaking(false);
-
-          // Auto-advance to next note if not interrupted
-          if (!isInterruptedRef.current && currentNoteIndex < lessonNotes.length - 1) {
-            setCurrentNoteIndex(prev => prev + 1);
-            setLessonProgress(((currentNoteIndex + 1) / lessonNotes.length) * 100);
-            
-            // Continue reading after a short pause
-            setTimeout(() => {
-              if (!isInterruptedRef.current) {
-                readNextNote();
-              }
-            }, 1000);
-          } else if (currentNoteIndex >= lessonNotes.length - 1) {
-            // Lesson complete
-            setLessonProgress(100);
-            setIsReadingLesson(false);
-          }
-        },
-        onError: (error) => {
-          console.error('TTS error:', error);
-          setIsSpeaking(false);
-          setIsReadingLesson(false);
-        }
+        onStart: () => console.log('TTS started'),
+        onEnd: () => console.log('TTS ended'),
+        onError: (error) => console.error('TTS error:', error)
       });
-
     } catch (error) {
-      console.error('Error speaking note:', error);
-      setIsSpeaking(false);
-      setIsReadingLesson(false);
+      console.error('Error in speakText:', error);
     }
-  }, [lessonNotes, currentNoteIndex]);
+  }, []);
 
-  // Auto-start reading lesson when notes are ready
+  // Auto-start lesson when ready
   useEffect(() => {
-    if (lessonNotes.length > 0 && lessonStarted && !isProcessing && !isReadingLesson && currentNoteIndex === 0) {
-      // Начинаем урок только после того, как пользователь начал взаимодействие
-      console.log('🎤 Начинаем урок с материала:', lessonNotes[0]?.substring(0, 50));
+    if (lessonNotes.length > 0 && lessonStarted && currentNoteIndex === 0) {
+      console.log('🎤 Auto-starting lesson');
       const timer = setTimeout(() => {
-        readNextNote();
+        if (lessonNotes[0]) {
+          speakText(lessonNotes[0]);
+        }
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [lessonNotes.length, lessonStarted, isProcessing, isReadingLesson, currentNoteIndex, readNextNote, lessonNotes]);
+  }, [lessonNotes.length, lessonStarted, currentNoteIndex, speakText]);
 
-  // Initialize speech recognition
+  // Initialize basic speech recognition
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-      if (SpeechRecognitionAPI) {
-        speechRecognitionRef.current = new SpeechRecognitionAPI();
-        speechRecognitionRef.current.continuous = false;
-        speechRecognitionRef.current.interimResults = true;
-        speechRecognitionRef.current.lang = 'ru-RU';
-
-        speechRecognitionRef.current.onstart = () => {
-          setIsListening(true);
-          setUserTranscript('');
-        };
-
-        speechRecognitionRef.current.onend = () => {
-          setIsListening(false);
-        };
-
-        speechRecognitionRef.current.onresult = (event) => {
-          let finalTranscript = '';
-          let interimTranscript = '';
-
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
-              finalTranscript += transcript;
-            } else {
-              interimTranscript += transcript;
-            }
-          }
-
-          // Update transcript display
-          setUserTranscript(finalTranscript || interimTranscript);
-
-          if (finalTranscript) {
-            handleUserMessage(finalTranscript);
-          }
-        };
-
-        speechRecognitionRef.current.onerror = (event) => {
-          console.error('Speech recognition error:', event.error);
-          setIsListening(false);
-        };
-      }
-    }
-
-    return () => {
-      if (speechRecognitionRef.current) {
-        speechRecognitionRef.current.abort();
-      }
-    };
+    console.log('🎤 Initializing speech recognition');
+    // Simplified - no complex speech recognition for now
   }, []);
 
-  // Handle user voice message
-  const handleUserMessage = useCallback(async (message: string) => {
-    // Stop any ongoing TTS and mark as interrupted
-    if (isSpeaking) {
-      OpenAITTS.stop();
-      setIsSpeaking(false);
-      isInterruptedRef.current = true;
-    }
-
+  // Handle voice input
+  const handleVoiceInput = useCallback(async (message: string) => {
+    console.log('🎤 Voice input received:', message);
     setIsProcessing(true);
-    // Clear transcript after processing starts
-    setUserTranscript('');
 
-    // Add user message to conversation history
+    // Add to history
     setConversationHistory(prev => [...prev, { role: 'student', text: message }]);
 
     try {
-      // Generate dynamic content based on user response
-      const aiResponse = await generateDynamicContent(message);
+      const response = await generateDynamicContent(message);
+      setConversationHistory(prev => [...prev, { role: 'teacher', text: response }]);
+      setLessonNotes(prev => [...prev, response]);
 
-      // Add AI response to conversation history
-      setConversationHistory(prev => [...prev, { role: 'teacher', text: aiResponse }]);
-
-      // Add new content to lesson notes
-      setLessonNotes(prev => [...prev, aiResponse]);
-
-      // Speak AI response
-      try {
-        setIsSpeaking(true);
-        await OpenAITTS.speak(aiResponse, {
-          voice: 'nova',
-          speed: 1.0,
-          onStart: () => console.log('Speaking AI response'),
-        onEnd: () => {
-          setIsSpeaking(false);
-          // Continue with the new content
-          isInterruptedRef.current = false;
-          setTimeout(() => {
-            readNextNote();
-          }, 1000);
-        },
-          onError: (error) => {
-            console.error('TTS error:', error);
-            setIsSpeaking(false);
-            isInterruptedRef.current = false;
-          }
-        });
-      } catch (error) {
-        console.error('Error auto-speaking AI response:', error);
-        setIsSpeaking(false);
-        isInterruptedRef.current = false;
-      }
-
+      // Speak response
+      await speakText(response);
     } catch (error) {
-      console.error('Error getting AI response:', error);
-      setIsSpeaking(false);
-      isInterruptedRef.current = false;
+      console.error('Error handling voice input:', error);
     } finally {
       setIsProcessing(false);
     }
-  }, [lessonTitle, lessonTopic, lessonAspects, currentNoteIndex, lessonNotes.length, readNextNote]);
+  }, [generateDynamicContent]);
 
   // Toggle voice listening
-  const toggleListening = useCallback(() => {
+  const toggleListening = () => {
     if (!speechRecognitionRef.current) return;
 
     if (isListening) {
@@ -497,7 +599,7 @@ ${lessonAspects}
 
       speechRecognitionRef.current.start();
     }
-  }, [isListening, isSpeaking, lessonStarted]);
+  };
 
   return (
     <Card className="w-full h-full flex flex-col border-2 border-primary/20 bg-card/95 backdrop-blur-xl">
@@ -512,6 +614,27 @@ ${lessonAspects}
               <Clock className="w-3 h-3" />
               {formatDuration(callDuration)}
             </Badge>
+            <div className="flex items-center gap-2">
+              <Languages className="w-4 h-4 text-muted-foreground" />
+              <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+                <SelectTrigger className="w-32 h-7 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="en-US">🇺🇸 English</SelectItem>
+                  <SelectItem value="es-ES">🇪🇸 Español</SelectItem>
+                  <SelectItem value="fr-FR">🇫🇷 Français</SelectItem>
+                  <SelectItem value="de-DE">🇩🇪 Deutsch</SelectItem>
+                  <SelectItem value="it-IT">🇮🇹 Italiano</SelectItem>
+                  <SelectItem value="pt-BR">🇧🇷 Português</SelectItem>
+                  <SelectItem value="ru-RU">🇷🇺 Русский</SelectItem>
+                  <SelectItem value="zh-CN">🇨🇳 中文</SelectItem>
+                  <SelectItem value="ja-JP">🇯🇵 日本語</SelectItem>
+                  <SelectItem value="ko-KR">🇰🇷 한국어</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="text-xs text-muted-foreground">(авто)</span>
+            </div>
           </div>
           <Button
             variant="ghost"
@@ -652,14 +775,42 @@ ${lessonAspects}
             </p>
           )}
           {!isListening && !isSpeaking && !isProcessing && (
-            <p className="text-sm text-muted-foreground">
-              Нажмите на микрофон, чтобы задать вопрос
-            </p>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">
+                Нажмите на микрофон, чтобы задать вопрос
+              </p>
+              {selectedLanguage !== 'ru-RU' && (
+                <p className="text-xs text-amber-600">
+                  💡 Говорите на {selectedLanguage === 'zh-CN' ? 'китайском' :
+                                   selectedLanguage === 'ja-JP' ? 'японском' :
+                                   selectedLanguage === 'ko-KR' ? 'корейском' :
+                                   selectedLanguage === 'en-US' ? 'английском' :
+                                   selectedLanguage === 'es-ES' ? 'испанском' :
+                                   selectedLanguage === 'fr-FR' ? 'французском' :
+                                   selectedLanguage === 'de-DE' ? 'немецком' :
+                                   selectedLanguage === 'it-IT' ? 'итальянском' :
+                                   selectedLanguage === 'pt-BR' ? 'португальском' : 'выбранном'} языке
+                </p>
+              )}
+            </div>
           )}
           {isListening && (
-            <p className="text-sm text-primary font-medium animate-pulse">
-              Слушаю вас...
-            </p>
+            <div className="space-y-1">
+              <p className="text-sm text-primary font-medium animate-pulse">
+                Слушаю вас...
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Говорите на {selectedLanguage === 'zh-CN' ? 'китайском' :
+                              selectedLanguage === 'ja-JP' ? 'японском' :
+                              selectedLanguage === 'ko-KR' ? 'корейском' :
+                              selectedLanguage === 'en-US' ? 'английском' :
+                              selectedLanguage === 'es-ES' ? 'испанском' :
+                              selectedLanguage === 'fr-FR' ? 'французском' :
+                              selectedLanguage === 'de-DE' ? 'немецком' :
+                              selectedLanguage === 'it-IT' ? 'итальянском' :
+                              selectedLanguage === 'pt-BR' ? 'португальском' : 'выбранном'} языке
+              </p>
+            </div>
           )}
           </div>
         )}
@@ -677,8 +828,8 @@ ${lessonAspects}
       </CardContent>
     </Card>
   );
-});
+  };
 
-VoiceTeacherChat.displayName = 'VoiceTeacherChat';
+  VoiceTeacherChat.displayName = 'VoiceTeacherChat';
 
 export default VoiceTeacherChat;

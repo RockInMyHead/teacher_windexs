@@ -8,6 +8,18 @@ import { chatService } from '@/services/api';
 import { handleApiError, getUserFriendlyErrorMessage } from '@/services/api/errorHandler';
 import { logger } from '@/utils/logger';
 
+/**
+ * Convert file to base64 data URL
+ */
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
 interface UseChatOptions {
   onMessageReceived?: (message: Message) => void;
   onError?: (error: AppError) => void;
@@ -33,7 +45,7 @@ export const useChat = (options: UseChatOptions = {}): UseChatReturn => {
    * Send message to AI with streaming
    */
   const sendMessage = useCallback(
-    async (content: string, systemPrompt: string, model: string = 'gpt-5.1') => {
+    async (content: string, systemPrompt: string, model: string = 'gpt-4o', images?: File[]) => {
       try {
         setIsLoading(true);
         setError(null);
@@ -44,6 +56,7 @@ export const useChat = (options: UseChatOptions = {}): UseChatReturn => {
           role: 'user',
           content,
           timestamp: new Date(),
+          images: images || [],
         };
 
         setMessages(prev => {
@@ -69,25 +82,76 @@ export const useChat = (options: UseChatOptions = {}): UseChatReturn => {
         // Prepare chat messages
         const chatMessages = messagesRef.current
           .slice(-29) // Keep last 29 messages + new one = 30 total
-          .map(msg => ({
-            role: msg.role,
-            content: msg.content,
-          }));
+          .map(async (msg) => {
+            if (msg.images && msg.images.length > 0) {
+              // Convert images to base64 and create content array
+              const imageUrls = await Promise.all(
+                msg.images.map(file => fileToBase64(file))
+              );
 
-        chatMessages.unshift({
+              const content = [
+                { type: 'text' as const, text: msg.content }
+              ];
+
+              imageUrls.forEach(url => {
+                content.push({
+                  type: 'image_url' as const,
+                  image_url: { url }
+                });
+              });
+
+              return {
+                role: msg.role,
+                content,
+              };
+            }
+
+            return {
+              role: msg.role,
+              content: msg.content,
+            };
+          });
+
+        // Wait for all message conversions
+        const resolvedChatMessages = await Promise.all(chatMessages);
+
+        resolvedChatMessages.unshift({
           role: 'system',
           content: systemPrompt,
         });
 
-        chatMessages.push({
-          role: 'user',
-          content,
-        });
+        // Add current message with images
+        if (images && images.length > 0) {
+          const imageUrls = await Promise.all(
+            images.map(file => fileToBase64(file))
+          );
+
+          const content = [
+            { type: 'text' as const, text: content }
+          ];
+
+          imageUrls.forEach(url => {
+            content.push({
+              type: 'image_url' as const,
+              image_url: { url }
+            });
+          });
+
+          resolvedChatMessages.push({
+            role: 'user',
+            content,
+          });
+        } else {
+          resolvedChatMessages.push({
+            role: 'user',
+            content,
+          });
+        }
 
         // Get AI response with streaming
         const request: ChatCompletionRequest = {
           model,
-          messages: chatMessages as any,
+          messages: resolvedChatMessages as any,
           max_completion_tokens: 2000,
           temperature: 0.7,
         };

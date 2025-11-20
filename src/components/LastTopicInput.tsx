@@ -240,36 +240,37 @@ export const LastTopicInput: React.FC<LastTopicInputProps> = ({
       <Header />
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-4 md:py-8">
         <div className="max-w-2xl mx-auto">
           {/* Back Button */}
           <Button
             onClick={onBack}
             variant="ghost"
-            className="mb-6 gap-2 text-muted-foreground hover:text-foreground"
+            className="mb-4 md:mb-6 gap-2 text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="w-4 h-4" />
-            Вернуться к выбору уровня
+            <span className="hidden sm:inline">Вернуться к выбору уровня</span>
+            <span className="sm:hidden">Назад</span>
           </Button>
 
           {/* Main Card */}
           <Card className="group hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 border-2 hover:border-primary/50 animate-fade-in-up overflow-hidden bg-gradient-to-br from-card via-card/50 to-card/30">
-            <CardHeader className="text-center pb-8">
+            <CardHeader className="text-center pb-6 md:pb-8 px-4 md:px-8">
 
-              <CardTitle className="text-4xl font-bold mb-4 group-hover:text-primary transition-colors bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+              <CardTitle className="text-2xl md:text-4xl font-bold mb-3 md:mb-4 group-hover:text-primary transition-colors bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
                 ЧТО ВЫ ПОСЛЕДНЕЕ ИЗУЧАЛИ?
               </CardTitle>
 
-              <p className="text-lg text-muted-foreground leading-relaxed max-w-lg mx-auto">
+              <p className="text-base md:text-lg text-muted-foreground leading-relaxed max-w-lg mx-auto px-2">
                 Расскажите нам о последней теме, которую вы изучали, чтобы мы смогли подобрать вам персонализированный план обучения
               </p>
             </CardHeader>
 
-            <CardContent className="space-y-6 px-8 pb-8">
+            <CardContent className="space-y-4 md:space-y-6 px-4 md:px-8 pb-6 md:pb-8">
               {/* Textarea Section */}
-              <div className="space-y-4">
+              <div className="space-y-3 md:space-y-4">
                 <div className="flex items-center justify-between">
-                  <label className="text-base font-semibold text-foreground">
+                  <label className="text-sm md:text-base font-semibold text-foreground">
                     Описание темы:
                   </label>
                 </div>
@@ -280,28 +281,29 @@ export const LastTopicInput: React.FC<LastTopicInputProps> = ({
                   onChange={(e) => setTopic(e.target.value.slice(0, 500))}
                   onKeyDown={handleKeyDown}
                   disabled={isSubmitting}
-                  className="min-h-40 text-base border-2 border-border/50 bg-card/80 hover:border-primary/30 focus:border-primary/50 transition-colors resize-none rounded-lg focus:bg-card"
+                  className="min-h-32 md:min-h-40 text-sm md:text-base border-2 border-border/50 bg-card/80 hover:border-primary/30 focus:border-primary/50 transition-colors resize-none rounded-lg focus:bg-card"
                 />
 
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-3 pt-8 border-t border-border/50">
+              <div className="flex flex-col sm:flex-row gap-3 pt-6 md:pt-8 border-t border-border/50">
                 <Button
                   onClick={onBack}
                   variant="outline"
                   disabled={isSubmitting}
-                  className="flex-1 h-12 border-2 hover:border-primary/30 hover:bg-primary/5 transition-all gap-2"
+                  className="flex-1 h-10 md:h-12 border-2 hover:border-primary/30 hover:bg-primary/5 transition-all gap-2 order-3 sm:order-1"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  Назад
+                  <span className="hidden sm:inline">Назад</span>
+                  <span className="sm:hidden">К выбору уровня</span>
                 </Button>
 
                 <Button
                   onClick={handleSkip}
                   disabled={isSubmitting}
                   variant="ghost"
-                  className="flex-1 h-12 border-2 border-muted hover:border-muted/50 hover:bg-muted/20 transition-all gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 h-10 md:h-12 border-2 border-muted hover:border-muted/50 hover:bg-muted/20 transition-all gap-2 disabled:opacity-50 disabled:cursor-not-allowed order-2"
                 >
                   {isSubmitting ? (
                     <>
@@ -316,7 +318,7 @@ export const LastTopicInput: React.FC<LastTopicInputProps> = ({
                 <Button
                   onClick={handleSubmit}
                   disabled={isSubmitting || !topic.trim()}
-                  className="flex-1 h-12 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 h-10 md:h-12 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold gap-2 disabled:opacity-50 disabled:cursor-not-allowed order-1 sm:order-3"
                 >
                   {isSubmitting ? (
                     <>
@@ -333,21 +335,21 @@ export const LastTopicInput: React.FC<LastTopicInputProps> = ({
               </div>
 
               {/* Skip Option */}
-              <div className="pt-4 border-t border-border/30">
+              <div className="pt-3 md:pt-4 border-t border-border/30">
                 <Button
                   onClick={handleSkip}
                   disabled={isSubmitting}
                   variant="link"
-                  className="w-full h-10 text-muted-foreground hover:text-primary transition-colors gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full h-8 md:h-10 text-xs md:text-sm text-muted-foreground hover:text-primary transition-colors gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="w-3 md:w-4 h-3 md:h-4 animate-spin" />
                       <span>Создание...</span>
                     </>
                   ) : (
                     <>
-                      <span>Пропустить и начать с основ</span>
+                      <span className="text-center">Пропустить и начать с основ</span>
                     </>
                   )}
                 </Button>
@@ -357,8 +359,8 @@ export const LastTopicInput: React.FC<LastTopicInputProps> = ({
           </Card>
 
           {/* Bottom Spacing */}
-          <div className="mt-12 text-center">
-            <p className="text-sm text-muted-foreground/50">
+          <div className="mt-8 md:mt-12 text-center px-4">
+            <p className="text-xs md:text-sm text-muted-foreground/50">
               Шаг 2 из 2: Определение уровня и подбор плана
             </p>
           </div>

@@ -58,11 +58,38 @@ export const ChatMessages = React.memo(
                       : 'bg-muted text-foreground'
                   }`}
                 >
-                    {message.role === 'user' ? (
-                  <p className="break-words text-sm">{message.content}</p>
-                    ) : (
-                      <MarkdownRenderer content={message.content} />
-                    )}
+                  {/* Images */}
+                  {(message.images || message.imageUrls) && (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {(message.images || []).map((image, index) => (
+                        <img
+                          key={index}
+                          src={URL.createObjectURL(image)}
+                          alt={`Attachment ${index + 1}`}
+                          className="max-w-32 max-h-32 object-cover rounded-lg border border-border/50"
+                        />
+                      ))}
+                      {(message.imageUrls || []).map((url, index) => (
+                        <img
+                          key={`url-${index}`}
+                          src={url}
+                          alt={`Attachment ${index + 1}`}
+                          className="max-w-32 max-h-32 object-cover rounded-lg border border-border/50"
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Text content */}
+                  {message.content && (
+                    <>
+                      {message.role === 'user' ? (
+                        <p className="break-words text-sm">{message.content}</p>
+                      ) : (
+                        <MarkdownRenderer content={message.content} />
+                      )}
+                    </>
+                  )}
 
                   <div className="flex items-center gap-2 text-xs opacity-70">
                     <span>

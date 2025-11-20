@@ -67,6 +67,12 @@ export const PersonalizedLearningPlan: React.FC<PersonalizedLearningPlanProps> =
       console.log('💾 Saving learning plan to database...');
 
       // Prepare request body
+      console.log('🔍 Preparing request body...', {
+        user_id: user?.id,
+        planData_keys: Object.keys(planData),
+        courseInfo: planData?.courseInfo
+      });
+
       const requestBody = {
         user_id: user.id,
         course_id: planData.courseInfo.courseId,
@@ -74,6 +80,14 @@ export const PersonalizedLearningPlan: React.FC<PersonalizedLearningPlanProps> =
         grade: planData.courseInfo.grade,
         plan_data: planData
       };
+
+      console.log('📋 Request body prepared:', {
+        user_id: requestBody.user_id,
+        course_id: requestBody.course_id,
+        subject_name: requestBody.subject_name,
+        grade: requestBody.grade,
+        plan_data_keys: Object.keys(requestBody.plan_data || {})
+      });
 
       // Log size of data being sent
       const bodyStr = JSON.stringify(requestBody);
@@ -114,20 +128,13 @@ export const PersonalizedLearningPlan: React.FC<PersonalizedLearningPlanProps> =
     // Сохраняем план в БД
     await savePlanToDatabase();
 
-    // Сохраняем первый урок в localStorage
-    const firstLesson = planData.lessons[0];
-    localStorage.setItem('currentLesson', JSON.stringify(firstLesson));
-    localStorage.setItem('courseInfo', JSON.stringify(planData.courseInfo));
-    localStorage.setItem('lessonIndex', '0');
-    localStorage.setItem('totalLessons', String(planData.lessons.length));
-
     // Вызываем пользовательский обработчик если он есть
     if (onStartLearning) {
       onStartLearning();
     }
 
-    // Переходим на страницу урока
-    navigate('/lesson');
+    // Перенаправляем в Библиотеку курсов, где пользователь сможет выбрать курс
+    navigate('/courses');
   };
 
   const getDifficultyColor = (difficulty?: string) => {
@@ -293,22 +300,22 @@ export const PersonalizedLearningPlan: React.FC<PersonalizedLearningPlanProps> =
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between pt-6 border-t border-border/50">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-border/50">
                   <Button
                     onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
                     disabled={currentPage === 0}
                     variant="outline"
-                    className="border-2"
+                    className="w-full sm:w-auto border-2 text-sm sm:text-base"
                   >
                     ← Предыдущая
                   </Button>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 order-first sm:order-none">
                     {Array.from({ length: totalPages }).map((_, i) => (
                       <button
                         key={i}
                         onClick={() => setCurrentPage(i)}
-                        className={`w-10 h-10 rounded-lg font-medium transition-all ${
+                        className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg font-medium transition-all text-sm sm:text-base ${
                           currentPage === i
                             ? 'bg-gradient-to-r from-primary to-accent text-white'
                             : 'border-2 border-border/50 hover:border-primary/30'
@@ -323,7 +330,7 @@ export const PersonalizedLearningPlan: React.FC<PersonalizedLearningPlanProps> =
                     onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
                     disabled={currentPage === totalPages - 1}
                     variant="outline"
-                    className="border-2"
+                    className="w-full sm:w-auto border-2 text-sm sm:text-base"
                   >
                     Следующая →
                   </Button>
@@ -333,11 +340,11 @@ export const PersonalizedLearningPlan: React.FC<PersonalizedLearningPlanProps> =
           </Card>
 
           {/* Action Buttons */}
-          <div className="flex gap-4 pb-12">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pb-12">
             <Button
               onClick={onBack}
               variant="outline"
-              className="flex-1 h-14 border-2 text-base font-semibold hover:border-primary/30 hover:bg-primary/5 transition-all"
+              className="flex-1 h-12 sm:h-14 border-2 text-sm sm:text-base font-semibold hover:border-primary/30 hover:bg-primary/5 transition-all"
             >
               ← Вернуться и изменить
             </Button>
@@ -345,7 +352,7 @@ export const PersonalizedLearningPlan: React.FC<PersonalizedLearningPlanProps> =
             <Button
               onClick={handleStartLearning}
               disabled={isSaving}
-              className="flex-1 h-14 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold text-base gap-2 disabled:opacity-50"
+              className="flex-1 h-12 sm:h-14 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold text-sm sm:text-base gap-2 disabled:opacity-50"
             >
               {isSaving ? 'Сохранение плана...' : 'Начать обучение →'}
             </Button>

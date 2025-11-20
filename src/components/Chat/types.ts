@@ -14,7 +14,7 @@ export interface ChatMessageProps {
 // ============= CHAT INPUT COMPONENT =============
 
 export interface ChatInputProps {
-  onSendMessage: (content: string) => Promise<void>;
+  onSendMessage: (content: string, images?: File[]) => Promise<void>;
   isLoading?: boolean;
   disabled?: boolean;
   placeholder?: string;

@@ -83,7 +83,14 @@ export interface ChatCompletionRequest {
   model: string;
   messages: Array<{
     role: 'system' | 'user' | 'assistant';
-    content: string;
+    content: string | Array<{
+      type: 'text' | 'image_url';
+      text?: string;
+      image_url?: {
+        url: string;
+        detail?: 'low' | 'high' | 'auto';
+      };
+    }>;
   }>;
   temperature?: number;
   max_completion_tokens?: number;

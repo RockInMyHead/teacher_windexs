@@ -337,6 +337,7 @@ const AvailableCourses = () => {
         </div>
 
         {/* Custom Course Creator */}
+        {/*
         <div className="max-w-md mx-auto mb-8">
           <Card className="p-6">
             <div className="space-y-4">
@@ -371,6 +372,7 @@ const AvailableCourses = () => {
             </div>
           </Card>
         </div>
+        */}
 
         {/* Courses Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">

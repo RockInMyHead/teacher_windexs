@@ -60,14 +60,17 @@ export const ChatContainer = React.forwardRef<any, ChatContainerProps>(
      * Handle sending message from input
      */
     const handleSendMessage = useCallback(
-      async (content: string) => {
+      async (content: string, images?: File[]) => {
         try {
-          logger.debug('Sending message from input', { length: content.length });
+          logger.debug('Sending message from input', {
+            length: content.length,
+            imageCount: images?.length || 0
+          });
 
           const messageContent = content;
 
-          // Send message to AI
-          await sendChatMessage(messageContent, systemPrompt);
+          // Send message to AI with images
+          await sendChatMessage(messageContent, systemPrompt, 'gpt-4o-mini', images);
         } catch (error) {
           logger.error('Failed to send message', error as Error);
         }
@@ -127,10 +130,6 @@ export const ChatContainer = React.forwardRef<any, ChatContainerProps>(
 
     return (
       <div className="space-y-4 rounded-lg bg-background p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Чат с AI</h1>
-        </div>
 
         {/* Error display */}
         {chatError && (

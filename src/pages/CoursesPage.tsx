@@ -28,6 +28,7 @@ const CoursesPage = () => {
   const navigate = useNavigate();
   const [loadingCourseId, setLoadingCourseId] = useState<string | null>(null);
   const [savedPlans, setSavedPlans] = useState<{ [key: string]: any }>({});
+  const [virtualCourses, setVirtualCourses] = useState<any[]>([]);
 
   useEffect(() => {
     // Загружаем сохраненные планы при загрузке страницы
@@ -36,7 +37,26 @@ const CoursesPage = () => {
     }
   }, [user?.id]);
 
+  // Перезагружаем планы при возвращении на страницу (после создания плана)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (user?.id) {
+        loadUserPlans();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [user?.id]);
+
   const loadUserPlans = async () => {
+    console.log('🚀 [loadUserPlans] Starting to load plans for user:', user?.id);
+    
+    if (!user?.id) {
+      console.log('❌ [loadUserPlans] No user ID, skipping');
+      return;
+    }
+    
     try {
       console.log('📚 Loading user learning plans for user:', user?.id);
       const response = await fetch(`/api/db/learning-plans/user/${user?.id}`);
@@ -66,9 +86,46 @@ const CoursesPage = () => {
             plansMap[plan.course_id.toString()] = plan; // Добавляем и как строку
           });
           setSavedPlans(plansMap);
+          // Сохраняем планы в localStorage для использования в CourseDetail
+          localStorage.setItem('userLearningPlans', JSON.stringify(plansMap));
+          console.log('💾 Saved plans to localStorage:', Object.keys(plansMap));
+
+          // Создаем виртуальные курсы из планов
+          const virtualCoursesFromPlans = data.plans?.map((plan: any) => {
+            console.log('🔍 Processing plan:', plan.course_id, plan.plan_data?.courseInfo);
+
+            if (!plan.plan_data?.courseInfo) {
+              console.warn('⚠️ Plan missing courseInfo:', plan.course_id);
+              return null;
+            }
+
+            const courseInfo = plan.plan_data.courseInfo;
+            const virtualCourse = {
+              id: plan.course_id,
+              title: courseInfo.title,
+              description: `Персонализированный курс: ${courseInfo.title}`,
+              level: 'Персонализированный',
+              grade: `${courseInfo.grade} класс`,
+              progress: 0,
+              modules: plan.plan_data.lessons?.length || 0,
+              completedModules: 0,
+              students: 1,
+              icon: 'BookOpen', // Default icon
+              color: 'from-purple-500 to-pink-500', // Special color for personalized courses
+              isVirtual: true
+            };
+
+            console.log('✅ Created virtual course:', virtualCourse.title, 'ID:', virtualCourse.id);
+            return virtualCourse;
+          }).filter(Boolean) || [];
+
+          console.log('🎯 Virtual courses created:', virtualCoursesFromPlans.length);
+          setVirtualCourses(virtualCoursesFromPlans);
+
           console.log('✅ Learning plans loaded:', {
             count: data.plans?.length || 0,
             validPlans: Object.keys(plansMap).length,
+            virtualCourses: virtualCoursesFromPlans.length,
             plansMap: Object.keys(plansMap),
             fullData: data
           });
@@ -87,33 +144,36 @@ const CoursesPage = () => {
 
   const handleContinueCourse = async (course: any) => {
     setLoadingCourseId(course.id.toString());
-    console.log('🎯 handleContinueCourse called:', { courseId: course.id, courseTitle: course.title, grade: course.grade, userId: user?.id });
+    console.log('🎯 handleContinueCourse called:', {
+      courseId: course.id,
+      courseTitle: course.title,
+      grade: course.grade,
+      userId: user?.id,
+      isVirtual: course.isVirtual,
+      hasPlan: !!savedPlans[course.id] || !!savedPlans[course.id.toString()]
+    });
 
     try {
-      // Всегда переходить к уроку в режиме чата, независимо от наличия плана
-      // Это позволит пользователю начать интерактивный урок через кнопку в чате
-      console.log('📖 Opening lesson in chat mode for course:', course.title);
-
-      // Создать базовую информацию об уроке из данных курса
-      const lessonData = {
-        number: 1,
+      // Сохраняем данные курса в localStorage для передачи на страницу деталей
+      const courseData = {
+        id: course.id,
         title: course.title,
+        description: course.description,
+        level: course.level,
         grade: course.grade,
-        topic: course.description,
-        aspects: course.description,
-        description: course.description
+        progress: course.progress,
+        modules: course.modules,
+        completedModules: course.completedModules,
+        students: course.students,
+        isVirtual: course.isVirtual
       };
 
-      // Сохранить в localStorage для режима урока
-      localStorage.setItem('currentLesson', JSON.stringify(lessonData));
-      localStorage.setItem('courseInfo', JSON.stringify({
-        courseId: course.id,
-        title: course.title,
-        grade: course.level === 'Начальный' ? 1 : course.level === 'Средний' ? 5 : 10
-      }));
+      localStorage.setItem('selectedCourseData', JSON.stringify(courseData));
+      console.log('💾 Saved course data to localStorage:', courseData);
 
-      console.log('✅ Prepared lesson data for chat mode:', lessonData);
-      navigate('/chat?mode=lesson');
+      // Перейти на страницу деталей курса
+      console.log('📖 Opening course detail page for course:', course.title, 'ID:', course.id);
+      navigate(`/course/${course.id}`);
     } catch (error) {
       console.error('❌ Error continuing course:', error);
       // В случае ошибки перейти к оценке уровня
@@ -142,15 +202,16 @@ const CoursesPage = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8 flex-1">
-        {user?.activeCourses && user.activeCourses.length > 0 ? (
+        {((user?.activeCourses && user.activeCourses.length > 0) || virtualCourses.length > 0) ? (
           <>
             {/* Courses Grid */}
             <div className="mb-8">
               <div className="grid md:grid-cols-2 gap-6">
-                {user.activeCourses.map((course) => {
+                {/* Active courses */}
+                {user?.activeCourses?.map((course) => {
                   const Icon = getIconByName(course.icon);
                   return (
-                    <Card key={course.id} className="hover:shadow-lg transition-shadow">
+                    <Card key={`active-${course.id}`} className="hover:shadow-lg transition-shadow">
                       <CardHeader>
                         <div className="flex items-start justify-between">
                           <div className={`w-12 h-12 bg-gradient-to-br ${course.color} rounded-xl flex items-center justify-center`}>
@@ -189,10 +250,61 @@ const CoursesPage = () => {
                                 Загрузка...
                               </>
                             ) : (
+                              'Продолжить обучение'
+                            )}
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+
+                {/* Virtual courses from plans */}
+                {virtualCourses.map((course) => {
+                  const Icon = getIconByName(course.icon);
+                  return (
+                    <Card key={`virtual-${course.id}`} className="hover:shadow-lg transition-shadow border-2 border-purple-200">
+                      <CardHeader>
+                        <div className="flex items-start justify-between">
+                          <div className={`w-12 h-12 bg-gradient-to-br ${course.color} rounded-xl flex items-center justify-center`}>
+                            <Icon className="w-6 h-6 text-white" />
+                          </div>
+                          <Badge variant="secondary" className="bg-purple-100 text-purple-800">
+                            {course.level}
+                          </Badge>
+                        </div>
+                        <CardTitle className="text-xl">{course.title}</CardTitle>
+                        <CardDescription>{course.description}</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div>
+                            <div className="flex justify-between text-sm mb-2">
+                              <span>Прогресс</span>
+                              <span>{course.progress}%</span>
+                            </div>
+                            <Progress value={course.progress} className="h-2" />
+                          </div>
+                          <div className="flex justify-between text-sm text-muted-foreground">
+                            <span>{course.completedModules} из {course.modules} уроков</span>
+                            <span>Персонализированный</span>
+                          </div>
+                          <Button
+                            className="w-full"
+                            size="sm"
+                            disabled={loadingCourseId === course.id.toString()}
+                            onClick={() => {
+                              console.log('🔍 Virtual course clicked:', { courseId: course.id, courseTitle: course.title });
+                              handleContinueCourse(course);
+                            }}
+                          >
+                            {loadingCourseId === course.id.toString() ? (
                               <>
-                                <Play className="w-4 h-4 mr-2" />
-                                Продолжить обучение
+                                <Loader className="w-4 h-4 mr-2 animate-spin" />
+                                Загрузка...
                               </>
+                            ) : (
+                              'Начать обучение'
                             )}
                           </Button>
                         </div>

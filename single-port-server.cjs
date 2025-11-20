@@ -310,12 +310,13 @@ function startSinglePortServer() {
 
   // Helper function to make curl requests with proxy
   async function curlWithProxy(url, options = {}) {
+    const curlStartTime = Date.now();
     const method = options.method || 'GET';
     const headers = options.headers || {};
     const data = options.data;
     const stream = options.stream || false;
 
-    console.log('🔧 curlWithProxy called for URL:', url, 'method:', method, 'stream:', stream);
+    console.log('🔧 [CURL TIMING] T+0ms: curlWithProxy called for URL:', url, 'method:', method, 'stream:', stream);
 
     let curlCommand = `curl -s -X ${method}`;
 
@@ -372,7 +373,9 @@ function startSinglePortServer() {
     } else {
       try {
         // Execute curl command synchronously
+        console.log('⏱️ [CURL TIMING] T+' + (Date.now() - curlStartTime) + 'ms: Starting curl execution');
         const { stdout, stderr } = await execAsync(curlCommand);
+        console.log('⏱️ [CURL TIMING] T+' + (Date.now() - curlStartTime) + 'ms: Curl execution completed');
 
         if (stderr && !stderr.includes('Warning')) {
           console.error('⚠️ Curl stderr:', stderr);
@@ -382,6 +385,7 @@ function startSinglePortServer() {
           throw new Error('Empty response from curl command');
         }
 
+        console.log('⏱️ [CURL TIMING] T+' + (Date.now() - curlStartTime) + 'ms: Returning response');
         return stdout;
       } catch (error) {
         console.error('❌ curlWithProxy error:', error.message);
@@ -403,7 +407,8 @@ function startSinglePortServer() {
 
   // Chat completions
   app.post('/api/chat/completions', async (req, res) => {
-    console.log('📨 Chat completions request received');
+    const requestStartTime = Date.now();
+    console.log('📨 [BACKEND TIMING] T+0ms: Chat completions request received');
     console.log('📨 Request body:', JSON.stringify(req.body).substring(0, 500) + '...');
 
     // Handle Gemini models
@@ -547,6 +552,7 @@ function startSinglePortServer() {
 
       } else {
         // Handle regular response
+        console.log('⏱️ [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Starting OpenAI API call');
         const responseOutput = await curlWithProxy('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -601,6 +607,7 @@ function startSinglePortServer() {
           });
         }
 
+        console.log('⏱️ [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Sending response to client');
         res.json(response);
       }
     } catch (error) {
@@ -1213,10 +1220,36 @@ grade >= 7 ?
 
   // Save learning plan
   app.post('/api/db/learning-plans', (req, res) => {
+    console.log('🚨 LEARNING PLAN POST REQUEST RECEIVED!');
+    console.log('📦 Raw request body:', JSON.stringify(req.body, null, 2));
+
     try {
+      console.log('📨 Received learning plan POST request');
+      console.log('📦 Request body keys:', Object.keys(req.body));
+      console.log('📦 Request body types:', Object.keys(req.body).map(key => `${key}: ${typeof req.body[key]}`));
+
       const { user_id, course_id, subject_name, grade, plan_data } = req.body;
       
-      if (!user_id || !course_id || !subject_name || !grade || !plan_data) {
+      console.log('🔍 Extracted fields:', {
+        user_id, course_id, subject_name, grade,
+        plan_data_type: typeof plan_data,
+        plan_data_keys: plan_data ? Object.keys(plan_data) : 'null'
+      });
+      
+      if (user_id === undefined || user_id === null ||
+          course_id === undefined || course_id === null ||
+          subject_name === undefined || subject_name === null ||
+          grade === undefined || grade === null ||
+          plan_data === undefined || plan_data === null) {
+
+        console.log('❌ Missing required fields (checking for null/undefined):', {
+          user_id: { value: user_id, type: typeof user_id, isNull: user_id === null, isUndefined: user_id === undefined },
+          course_id: { value: course_id, type: typeof course_id, isNull: course_id === null, isUndefined: course_id === undefined },
+          subject_name: { value: subject_name, type: typeof subject_name, isNull: subject_name === null, isUndefined: subject_name === undefined },
+          grade: { value: grade, type: typeof grade, isNull: grade === null, isUndefined: grade === undefined },
+          plan_data: { value: plan_data, type: typeof plan_data, isNull: plan_data === null, isUndefined: plan_data === undefined }
+        });
+
         return res.status(400).json({
           status: 'error',
           message: 'user_id, course_id, subject_name, grade, and plan_data are required',
@@ -1346,10 +1379,28 @@ grade >= 7 ?
 
       console.log(`📚 Fetching learning plan for user ${user_id}, course ${course_id}`);
 
+      // Extract numeric course_id (in case it comes as "4-10", we need just "4")
+      const baseCourseId = String(course_id).split('-')[0];
+      const numericCourseId = parseInt(baseCourseId);
+      
+      console.log(`🔄 Extracted numeric course_id: ${numericCourseId} from ${course_id}`);
+
+      if (isNaN(numericCourseId)) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'course_id must be a number or contain a number',
+          received: course_id,
+          extracted: baseCourseId
+        });
+      }
+
+      const numericUserId = parseInt(user_id);
+      console.log(`🔄 Converting user_id to numeric: ${numericUserId} from '${user_id}'`);
+
       const plan = db.prepare(`
         SELECT * FROM learning_plans
         WHERE user_id = ? AND course_id = ?
-      `).get(user_id, course_id);
+      `).get(numericUserId, numericCourseId);
 
       if (!plan) {
         return res.status(404).json({
@@ -1379,15 +1430,30 @@ grade >= 7 ?
     }
   });
 
+  // Debug endpoint
+  app.get('/api/debug/all-plans', (req, res) => {
+    try {
+      const allPlans = db.prepare('SELECT id, user_id, course_id, subject_name FROM learning_plans').all();
+      res.json({ 
+        count: allPlans.length,
+        plans: allPlans.map(p => ({ ...p, userIdType: typeof p.user_id, userIdStr: String(p.user_id) }))
+      });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // Get all learning plans for user
   app.get('/api/db/learning-plans/user/:user_id', (req, res) => {
     try {
       const { user_id } = req.params;
 
       console.log(`📚 Fetching all learning plans for user ${user_id}`);
+      console.log(`🔍 User ID type: ${typeof user_id}, value: '${user_id}'`);
 
       // Ensure user exists, create if not
       const userCheck = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
+      console.log(`👤 User check result:`, userCheck);
       if (!userCheck) {
         console.log(`👤 User ${user_id} not found, creating...`);
         const createUser = db.prepare(`
@@ -1397,13 +1463,70 @@ grade >= 7 ?
         createUser.run(user_id, `user_${user_id}`, `user_${user_id}@temp.com`, 'temp_password_hash', 'Temp', 'User');
       }
 
-      const plans = db.prepare(`
+      console.log(`🗃️ Querying database for user_id: '${user_id}' (type: ${typeof user_id})`);
+      
+      // Try using BigInt for user_id to ensure 64-bit integer compatibility
+      let plans = [];
+      try {
+        const bigIntUserId = BigInt(user_id);
+        console.log(`🔄 Converting to BigInt: ${bigIntUserId}`);
+        
+        plans = db.prepare(`
         SELECT * FROM learning_plans
         WHERE user_id = ?
         ORDER BY updated_at DESC
-      `).all(user_id);
+        `).all(bigIntUserId);
+        
+        console.log(`🔍 Found with BigInt query: ${plans.length}`);
+      } catch (e) {
+        console.log('⚠️ Failed to use BigInt query:', e.message);
+      }
 
-      console.log(`📊 Found ${plans.length} plans in database`);
+      if (plans.length === 0) {
+         console.log('🔄 Trying string query...');
+         plans = db.prepare(`
+          SELECT * FROM learning_plans
+          WHERE CAST(user_id AS TEXT) = ?
+          ORDER BY updated_at DESC
+        `).all(String(user_id));
+        console.log(`🔍 Found with CAST(AS TEXT) query: ${plans.length}`);
+      }
+
+      if (plans.length === 0) {
+        console.log('🔄 Trying to load IDs only and filter in JS (fallback 2)...');
+        // Select only minimal fields to avoid memory issues or BLOB problems
+        const allPlanIds = db.prepare('SELECT id, user_id FROM learning_plans ORDER BY updated_at DESC').all();
+        console.log(`🗄️ Loaded ${allPlanIds.length} plan IDs from DB`);
+        
+        const matchingIds = allPlanIds.filter(p => {
+          return String(p.user_id).trim() === String(user_id).trim();
+        }).map(p => p.id);
+        
+        console.log(`🔍 Found matching IDs: ${matchingIds.join(', ')}`);
+        
+        if (matchingIds.length > 0) {
+          const placeholders = matchingIds.map(() => '?').join(',');
+          plans = db.prepare(`SELECT * FROM learning_plans WHERE id IN (${placeholders})`).all(...matchingIds);
+          console.log(`✅ Loaded ${plans.length} full plans by ID`);
+        }
+      }
+
+      console.log(`📊 Found ${plans.length} plans in database for user ${user_id}`);
+      console.log(`📋 Plans details:`, plans.map(p => ({
+        id: p.id,
+        user_id: p.user_id,
+        course_id: p.course_id,
+        subject_name: p.subject_name,
+        created_at: p.created_at
+      })));
+
+      // Debug: check what query returns
+      const allPlansInDb = db.prepare('SELECT COUNT(*) as count FROM learning_plans').get();
+      const userPlansInDb = db.prepare('SELECT COUNT(*) as count FROM learning_plans WHERE user_id = ?').get(numericUserId);
+      console.log(`🗄️ Total plans in DB: ${allPlansInDb.count}, plans for user ${numericUserId}: ${userPlansInDb.count}`);
+
+      // Always return plans, even if empty array
+      console.log(`✅ Returning ${plans.length} plans for user ${user_id}`);
 
       const formattedPlans = plans.map(plan => {
         try {
@@ -1437,8 +1560,15 @@ grade >= 7 ?
       });
 
       console.log(`✅ Formatted ${formattedPlans.length} plans`);
+      console.log(`📊 Plans summary:`, formattedPlans.map(p => ({
+        id: p.id,
+        course_id: p.course_id,
+        subject: p.subject_name,
+        lessons: p.plan_data?.lessons?.length || 0
+      })));
 
       res.json({
+        success: true,
         status: 'ok',
         count: plans.length,
         plans: formattedPlans
@@ -2032,6 +2162,81 @@ grade >= 7 ?
       index: false,
       redirect: false
     })(req, res, next);
+  });
+
+  // Get course details with current lesson
+  app.get('/api/courses/:courseId', (req, res) => {
+    console.log('🔥 API endpoint /api/courses/:courseId called with courseId:', req.params.courseId);
+    try {
+      const { courseId } = req.params;
+
+      console.log('📚 Getting course details:', courseId);
+
+      // Get course info
+      const courseStmt = db.prepare(`
+        SELECT c.*, COUNT(l.id) as lesson_count
+        FROM courses c
+        LEFT JOIN lessons l ON c.id = l.course_id AND l.is_active = 1
+        WHERE c.id = ? AND c.is_active = 1
+        GROUP BY c.id
+      `);
+
+      const course = courseStmt.get(courseId);
+
+      if (!course) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Course not found'
+        });
+      }
+
+      // Get current lesson (first incomplete lesson or first lesson)
+      const lessonStmt = db.prepare(`
+        SELECT l.*,
+               CASE WHEN up.id IS NOT NULL THEN 1 ELSE 0 END as is_completed
+        FROM lessons l
+        LEFT JOIN user_progress up ON l.id = up.lesson_id AND up.user_id = ? AND up.is_completed = 1
+        WHERE l.course_id = ? AND l.is_active = 1
+        ORDER BY l.lesson_number ASC
+      `);
+
+      // For now, get lessons without user progress (we don't have user_id in params)
+      const lessonsStmt = db.prepare(`
+        SELECT l.*
+        FROM lessons l
+        WHERE l.course_id = ? AND l.is_active = 1
+        ORDER BY l.lesson_number ASC
+        LIMIT 1
+      `);
+
+      const currentLesson = lessonsStmt.get(courseId);
+
+      const courseData = {
+        id: course.id,
+        title: course.title,
+        description: course.description,
+        level: course.level,
+        grade: course.level === 'Начальный' ? '1 класс' : course.level === 'Средний' ? '5 класс' : '10 класс',
+        progress: 0, // TODO: Calculate from user progress
+        modules: course.lesson_count || 0,
+        completedModules: 0, // TODO: Calculate from user progress
+        students: 1, // Placeholder
+        currentLesson: currentLesson ? {
+          number: currentLesson.lesson_number,
+          title: currentLesson.title,
+          topic: currentLesson.title,
+          content: currentLesson.content || course.description
+        } : null
+      };
+
+      res.json(courseData);
+    } catch (error) {
+      console.error('❌ Error getting course:', error);
+      res.status(500).json({
+        status: 'error',
+        message: 'Internal server error'
+      });
+    }
   });
 
   // SPA fallback - для всех остальных запросов отправляем index.html
