@@ -6,7 +6,7 @@ import { ArrowLeft, Phone, PhoneOff, Mic, X } from 'lucide-react';
 import Header from '@/components/Header';
 import { OpenAITTS } from '@/lib/openaiTTS';
 import { VoiceComm } from '@/lib/voiceComm';
-import { VoiceTeacherChat } from '@/components/VoiceTeacherChat';
+import { VoiceTeacherChat } from '@/features/voice';
 
 const VoiceCallPage: React.FC = () => {
   const navigate = useNavigate();
@@ -90,7 +90,7 @@ const VoiceCallPage: React.FC = () => {
   }, []);
 
   // Проверяем, есть ли данные урока (для голосового звонка без урока)
-  const hasLessonData = lessonData.title !== 'Урок' || lessonData.topic !== 'Тема урока' || lessonData.description !== 'Содержание урока';
+  const hasLessonData = lessonData.title !== 'Урок' && lessonData.topic !== 'Тема урока' && lessonData.description !== 'Содержание урока';
 
   // Always allow voice call, even without specific lesson data
   const canStartVoiceCall = true;

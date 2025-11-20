@@ -43,19 +43,23 @@ export const VoiceTeacherChat = ({
   onComplete,
   onClose
 }: VoiceTeacherChatProps) => {
-  // Use our custom hooks
-  const lesson = useVoiceLessonModel({ lessonTitle, lessonTopic, lessonAspects });
-  const speech = useSpeechRecognition();
-
   // TTS state
   const [isTtsEnabled, setIsTtsEnabled] = React.useState(false);
 
+  // Use our custom hooks with safe defaults
+  const lesson = useVoiceLessonModel({
+    lessonTitle: lessonTitle || 'Общий урок',
+    lessonTopic: lessonTopic || 'Общение',
+    lessonAspects: lessonAspects || 'Интерактивное обучение с голосом'
+  });
+  const speech = useSpeechRecognition();
+
   // Initialize lesson on mount
   useEffect(() => {
-    if (lessonTitle && lessonTopic && lessonAspects && !lesson.lessonStarted) {
+    if (!lesson.lessonStarted) {
       lesson.initializeLesson();
     }
-  }, [lessonTitle, lessonTopic, lessonAspects, lesson]);
+  }, [lesson]);
 
   // Handle language change
   const handleLanguageChange = useCallback((language: string) => {
@@ -127,6 +131,29 @@ export const VoiceTeacherChat = ({
     }
   }, [lesson.lessonStarted, lesson.currentNoteIndex, lesson.lessonNotes, isTtsEnabled, speakText]);
 
+  // Show loading state while initializing
+  if (lesson.isGeneratingLesson) {
+    return (
+      <Card className="w-full max-w-4xl mx-auto">
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-center gap-3 p-6">
+            <div className="animate-pulse">
+              <Mic className="w-8 h-8 text-primary" />
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-semibold text-primary">
+                Генерирую урок...
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {lesson.generationStep || 'Подготовка материалов'}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="w-full max-w-4xl mx-auto">
       <CardHeader className="flex flex-row items-center justify-between">
@@ -136,7 +163,7 @@ export const VoiceTeacherChat = ({
             Голосовой урок
           </CardTitle>
           <Badge variant="outline">
-            {lessonTitle}
+            {lesson.lessonTitle || 'Общий урок'}
           </Badge>
         </div>
 
@@ -191,7 +218,7 @@ export const VoiceTeacherChat = ({
         />
 
         {/* Lesson progress */}
-        {lesson.lessonStarted && (
+        {lesson.lessonStarted && lesson.lessonNotes.length > 0 && (
           <VoiceLessonProgress
             currentNoteIndex={lesson.currentNoteIndex}
             totalNotes={lesson.lessonNotes.length}
@@ -212,45 +239,45 @@ export const VoiceTeacherChat = ({
 
         {/* Voice controls */}
         <div className="flex justify-center">
-          <Button
-            size="lg"
-            onClick={handleVoiceToggle}
-            disabled={lesson.isProcessing || !lesson.lessonStarted}
-            className={`w-32 h-32 rounded-full text-white font-semibold ${
-              speech.isListening
-                ? 'bg-red-500 hover:bg-red-600 animate-pulse'
-                : 'bg-blue-500 hover:bg-blue-600'
-            }`}
-          >
-            <div className="flex flex-col items-center gap-2">
-              {speech.isListening ? (
-                <>
-                  <MicOff className="w-8 h-8" />
-                  <span className="text-sm">Стоп</span>
-                </>
-              ) : (
-                <>
-                  <Mic className="w-8 h-8" />
-                  <span className="text-sm">Говорить</span>
-                </>
-              )}
-            </div>
-          </Button>
+          {!lesson.lessonStarted ? (
+            <Button
+              size="lg"
+              onClick={() => lesson.initializeLesson()}
+              disabled={lesson.isGeneratingLesson}
+              className="w-32 h-32 rounded-full text-white font-semibold bg-green-500 hover:bg-green-600"
+            >
+              <div className="flex flex-col items-center gap-2">
+                <Mic className="w-8 h-8" />
+                <span className="text-sm">Начать урок</span>
+              </div>
+            </Button>
+          ) : (
+            <Button
+              size="lg"
+              onClick={handleVoiceToggle}
+              disabled={lesson.isProcessing}
+              className={`w-32 h-32 rounded-full text-white font-semibold ${
+                speech.isListening
+                  ? 'bg-red-500 hover:bg-red-600 animate-pulse'
+                  : 'bg-blue-500 hover:bg-blue-600'
+              }`}
+            >
+              <div className="flex flex-col items-center gap-2">
+                {speech.isListening ? (
+                  <>
+                    <MicOff className="w-8 h-8" />
+                    <span className="text-sm">Стоп</span>
+                  </>
+                ) : (
+                  <>
+                    <Mic className="w-8 h-8" />
+                    <span className="text-sm">Говорить</span>
+                  </>
+                )}
+              </div>
+            </Button>
+          )}
         </div>
-
-        {/* Generation indicator */}
-        {lesson.isGeneratingLesson && (
-          <div className="text-center p-4 bg-muted rounded-lg">
-            <div className="animate-pulse">
-              <p className="text-lg font-semibold text-primary">
-                Генерирую урок...
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {lesson.generationStep}
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Error display */}
         {speech.error && (
@@ -264,4 +291,3 @@ export const VoiceTeacherChat = ({
     </Card>
   );
 };
-
