@@ -666,17 +666,17 @@ const VoiceCallPage: React.FC = () => {
       const formData = new FormData();
       formData.append('file', audioBlob, 'audio.webm');
       formData.append('model', 'whisper-1');
-      
+
       // Determine language based on lesson context
       const lessonContext = lessonContextRef.current;
       let language = 'ru'; // Default to Russian
-      
+
       if (lessonContext) {
         const title = lessonContext.title.toLowerCase();
         const description = lessonContext.description?.toLowerCase() || '';
-        
+
         // Check if it's an English lesson
-        if (title.includes('english') || title.includes('английский') || 
+        if (title.includes('english') || title.includes('английский') ||
             title.includes('англ.') || description.includes('english')) {
           language = 'en';
           console.log('🌍 Detected English lesson, using language: en');
@@ -687,8 +687,10 @@ const VoiceCallPage: React.FC = () => {
           console.log('🌍 Using default language: ru');
         }
       }
-      
+
       formData.append('language', language);
+
+      console.log('🎤 Sending transcription request to server...');
 
       const response = await fetch('/api/audio/transcriptions', {
         method: 'POST',
@@ -696,11 +698,14 @@ const VoiceCallPage: React.FC = () => {
       });
 
       if (!response.ok) {
-      throw new Error('Transcription failed');
-    }
+        const errorText = await response.text().catch(() => 'Unknown error');
+        console.error('❌ Transcription request failed:', response.status, errorText);
+        throw new Error(`Transcription failed: ${response.status} ${errorText}`);
+      }
 
-    const result = await response.json();
-    return result.text || '';
+      const result = await response.json();
+      console.log('✅ Transcription result:', result.text?.substring(0, 50) + '...');
+      return result.text || '';
   };
 
   // Extract key theses from LLM response

@@ -342,9 +342,49 @@ function startSinglePortServer() {
 
     // Add data for POST requests
     if (data && (method === 'POST' || method === 'PUT')) {
-      // Escape single quotes in JSON string
-      const jsonData = JSON.stringify(data).replace(/'/g, "'\\''");
-      curlCommand += ` -d '${jsonData}'`;
+      if (data.getBoundary && typeof data.getBoundary === 'function') {
+        // Handle FormData - this is tricky with curl
+        // For FormData, we need to use a different approach
+        console.log('📋 FormData detected, using alternative approach...');
+
+        // Create a temporary file approach for FormData
+        const fs = require('fs');
+        const path = require('path');
+        const os = require('os');
+        const crypto = require('crypto');
+
+        const tempFile = path.join(os.tmpdir(), `formdata_${crypto.randomBytes(8).toString('hex')}.tmp`);
+
+        try {
+          // Write FormData buffer to temp file
+          const buffer = data.getBufferSync ? data.getBufferSync() : data.getBuffer ? data.getBuffer() : null;
+
+          if (buffer) {
+            fs.writeFileSync(tempFile, buffer);
+            curlCommand += ` -F "file=@${tempFile};filename=audio.webm;type=audio/webm"`;
+            curlCommand += ` -F "model=whisper-1"`;
+            curlCommand += ` -F "language=ru"`;
+            curlCommand += ` -F "response_format=json"`;
+
+            console.log('📁 Created temp file for FormData:', tempFile);
+          } else {
+            throw new Error('Cannot get FormData buffer');
+          }
+        } catch (error) {
+          console.error('❌ Failed to create temp file for FormData:', error);
+          // Fallback to simple approach
+          curlCommand += ` -d 'FORMDATA_ERROR'`;
+        }
+
+        // Clean up temp file after curl execution
+        const originalCommand = curlCommand;
+        curlCommand = `bash -c "${originalCommand}; rm -f '${tempFile}'"`;
+
+      } else {
+        // Handle regular JSON data
+        const jsonData = JSON.stringify(data).replace(/'/g, "'\\''");
+        curlCommand += ` -d '${jsonData}'`;
+      }
     }
 
     // Add URL
@@ -1064,62 +1104,59 @@ grade >= 7 ?
       form.append('language', 'ru');
       form.append('response_format', 'json');
 
-      console.log('📡 Making curlWithProxy request to OpenAI...');
-
-      const responseOutput = await curlWithProxy('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': `multipart/form-data; boundary=${form.getBoundary()}`
-        },
-        data: form
-      }).catch(error => {
-        console.error('❌ curlWithProxy error for Whisper:', error);
-        throw new Error(`Whisper API connection failed: ${error.message}`);
-      });
+      console.log('📡 Making direct fetch request to OpenAI Whisper API...');
 
       try {
-        const result = JSON.parse(responseOutput);
+        const fetch = (await import('node-fetch')).default;
 
-        // Check for region blocking error
-        if (result.error && result.error.code === 'unsupported_country_region_territory') {
-          console.warn('⚠️ Whisper API blocked for this region, using fallback...');
-          // Return mock transcription for development
-          res.json({
-            text: 'Привет, я готов учиться!', // Mock response
-            language: 'ru',
-            fallback: true
-          });
-          return;
+        const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+            'Content-Type': `multipart/form-data; boundary=${form.getBoundary()}`
+          },
+          body: form
+        });
+
+        console.log('📡 Whisper response status:', response.status);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ Whisper API error:', errorText);
+
+          // Check for region blocking error
+          if (errorText.includes('unsupported_country_region_territory')) {
+            console.warn('⚠️ Whisper API blocked for this region, using fallback...');
+            res.json({
+              text: 'Привет, я готов учиться!',
+              language: 'ru',
+              fallback: true
+            });
+            return;
+          }
+
+          throw new Error(`Whisper API returned ${response.status}: ${errorText}`);
         }
 
+        const result = await response.json();
         console.log('✅ Transcription successful:', result.text?.substring(0, 50) + '...');
 
         res.json({
           text: result.text || '',
           language: result.language || 'ru'
         });
-      } catch (parseError) {
-        console.error('❌ Failed to parse Whisper response:', responseOutput);
 
-        // If parsing fails, check if it's a region error in raw text
-        if (responseOutput.includes('unsupported_country_region_territory')) {
-          console.warn('⚠️ Whisper API region blocked (raw response), using fallback...');
-          res.json({
-            text: 'Привет, давай начнем урок!', // Mock response
-            language: 'ru',
-            fallback: true
-          });
-          return;
-        }
-
-        throw new Error('Invalid response from Whisper API');
+      } catch (error) {
+        console.error('❌ Transcription error:', error);
+        res.status(500).json({
+          error: 'OpenAI Whisper API error',
+          details: error.message
+        });
       }
-
     } catch (error) {
-      console.error('❌ Transcription error:', error);
+      console.error('❌ Transcription setup error:', error);
       res.status(500).json({
-        error: 'OpenAI Whisper API error',
+        error: 'Failed to process audio file',
         details: error.message
       });
     }
