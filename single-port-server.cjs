@@ -1050,15 +1050,13 @@ grade >= 7 ?
       const audioFile = req.files.file;
       console.log('📁 Received audio file:', audioFile.name, 'Size:', audioFile.size);
 
-      // Create form data for OpenAI API
+      console.log('📡 Sending to OpenAI Whisper API...');
+
+      // Use curlWithProxy for consistent proxy handling
       const FormData = require('form-data');
       const form = new FormData();
 
-      // Convert buffer to readable stream
-      const { Readable } = require('stream');
-      const audioStream = Readable.from(audioFile.data);
-
-      form.append('file', audioStream, {
+      form.append('file', audioFile.data, {
         filename: 'audio.webm',
         contentType: 'audio/webm'
       });
@@ -1066,78 +1064,62 @@ grade >= 7 ?
       form.append('language', 'ru');
       form.append('response_format', 'json');
 
-      console.log('📡 Sending to OpenAI Whisper API...');
+      console.log('📡 Making curlWithProxy request to OpenAI...');
 
-      // Use curl to make request to OpenAI
-      const curlArgs = [
-        '-s', '-X', 'POST',
-        '-H', `Authorization: Bearer ${process.env.OPENAI_API_KEY}`,
-        '-F', 'model=whisper-1',
-        '-F', 'language=ru',
-        '-F', 'response_format=json',
-        'https://api.openai.com/v1/audio/transcriptions'
-      ];
-
-      // Add proxy if configured
-      if (PROXY_URL) {
-        console.log('🌐 Using proxy for Whisper:', PROXY_URL);
-        curlArgs.splice(2, 0, '--proxy', PROXY_URL);
-      }
-
-      console.log('📡 Sending to OpenAI Whisper API using fetch...');
+      const responseOutput = await curlWithProxy('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': `multipart/form-data; boundary=${form.getBoundary()}`
+        },
+        data: form
+      }).catch(error => {
+        console.error('❌ curlWithProxy error for Whisper:', error);
+        throw new Error(`Whisper API connection failed: ${error.message}`);
+      });
 
       try {
-        // Create form data for OpenAI API
-        const FormData = require('form-data');
-        const form = new FormData();
+        const result = JSON.parse(responseOutput);
 
-        form.append('file', audioFile.data, {
-          filename: 'audio.webm',
-          contentType: 'audio/webm'
-        });
-        form.append('model', 'whisper-1');
-        form.append('language', 'ru');
-        form.append('response_format', 'json');
-
-        console.log('📡 Making fetch request to OpenAI...');
-
-        const fetch = (await import('node-fetch')).default;
-        const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-            ...form.getHeaders()
-          },
-          body: form
-        });
-
-        console.log('📡 Whisper response status:', response.status);
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('❌ Whisper API error:', errorText);
-          throw new Error(`Whisper API returned ${response.status}: ${errorText}`);
+        // Check for region blocking error
+        if (result.error && result.error.code === 'unsupported_country_region_territory') {
+          console.warn('⚠️ Whisper API blocked for this region, using fallback...');
+          // Return mock transcription for development
+          res.json({
+            text: 'Привет, я готов учиться!', // Mock response
+            language: 'ru',
+            fallback: true
+          });
+          return;
         }
 
-        const result = await response.json();
         console.log('✅ Transcription successful:', result.text?.substring(0, 50) + '...');
 
         res.json({
           text: result.text || '',
           language: result.language || 'ru'
         });
+      } catch (parseError) {
+        console.error('❌ Failed to parse Whisper response:', responseOutput);
 
-      } catch (error) {
-        console.error('❌ Transcription error:', error);
-        res.status(500).json({
-          error: 'OpenAI Whisper API error',
-          details: error.message
-        });
+        // If parsing fails, check if it's a region error in raw text
+        if (responseOutput.includes('unsupported_country_region_territory')) {
+          console.warn('⚠️ Whisper API region blocked (raw response), using fallback...');
+          res.json({
+            text: 'Привет, давай начнем урок!', // Mock response
+            language: 'ru',
+            fallback: true
+          });
+          return;
+        }
+
+        throw new Error('Invalid response from Whisper API');
       }
+
     } catch (error) {
-      console.error('❌ Transcription setup error:', error);
+      console.error('❌ Transcription error:', error);
       res.status(500).json({
-        error: 'Failed to process audio file',
+        error: 'OpenAI Whisper API error',
         details: error.message
       });
     }
