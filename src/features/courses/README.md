@@ -373,3 +373,5 @@ export function CoursePage({ courseId, grade }: { courseId: number; grade: numbe
 
 **Feature-Sliced Design в действии!** 🚀
 
+
+

@@ -47,3 +47,5 @@ export interface ModalProps extends BaseComponentProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
+
+

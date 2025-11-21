@@ -77,9 +77,6 @@ const Index = () => {
           <div className="text-center max-w-4xl mx-auto">
             {/* Logo */}
             <div className="inline-flex items-center gap-3 mb-8">
-              <div className="hidden md:block w-16 h-16 bg-gradient-to-r from-primary to-accent rounded-2xl flex items-center justify-center shadow-lg">
-                <Brain className="w-8 h-8 text-white" />
-              </div>
               <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
                 Windexs-Учитель
               </h1>

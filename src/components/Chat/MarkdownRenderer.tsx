@@ -12,10 +12,14 @@ interface MarkdownRendererProps {
 }
 
 export const MarkdownRenderer = React.memo(({ content, isStreaming = false }: MarkdownRendererProps) => {
+  // Нормализуем текст для правильной обработки UTF-8
+  const normalizedContent = content.normalize('NFC');
+
   return (
     <div className="prose prose-sm max-w-none dark:prose-invert">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        children={normalizedContent}
         components={{
           // Simplified components without extra icons and animations
           h1: ({ children }) => (

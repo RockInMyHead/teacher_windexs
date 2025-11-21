@@ -14,38 +14,45 @@ import { OpenAITTS, isTTSAvailable } from '@/lib/openaiTTS';
 
 // Streaming text component with character-by-character animation
 const StreamingText: React.FC<{ content: string }> = ({ content }) => {
-  console.log('🎯 StreamingText RENDERED with content:', content, 'length:', content.length);
+  // Нормализуем текст для правильной обработки UTF-8
+  const normalizedContent = content.normalize('NFC');
+  console.log('🎯 StreamingText RENDERED with content:', normalizedContent, 'length:', normalizedContent.length);
+
   const [displayedText, setDisplayedText] = React.useState('');
   const currentIndexRef = React.useRef(0);
   const contentRef = React.useRef('');
   const timerRef = React.useRef<NodeJS.Timeout | null>(null);
 
   React.useEffect(() => {
-    console.log('🎯 StreamingText useEffect triggered with content:', content, 'length:', content.length);
+    console.log('🎯 StreamingText useEffect triggered with content:', normalizedContent, 'length:', normalizedContent.length);
     // If content changed (new chars added), continue typing
-    if (content !== contentRef.current) {
-      contentRef.current = content;
-      console.log('📝 Content updated:', content.length, 'chars, currentIndex:', currentIndexRef.current);
-      
+    if (normalizedContent !== contentRef.current) {
+      contentRef.current = normalizedContent;
+      console.log('📝 Content updated:', normalizedContent.length, 'chars, currentIndex:', currentIndexRef.current);
+
       // Start typing if not already running
       if (!timerRef.current) {
         const typeNext = () => {
           if (currentIndexRef.current < contentRef.current.length) {
-            const char = contentRef.current[currentIndexRef.current];
+            // Используем Array.from для правильной работы с UTF-8 символами
+            const chars = Array.from(contentRef.current);
+            const char = chars[currentIndexRef.current];
             const delay = char === ' ' ? 10 : char === '\n' ? 30 : 15;
-            
+
             console.log(`⌨️ Typing char ${currentIndexRef.current}: "${char}"`);
-            
+
             currentIndexRef.current++;
-            setDisplayedText(contentRef.current.substring(0, currentIndexRef.current));
-            
+            // Используем Array.from и slice для правильного substring с UTF-8
+            const displayedChars = chars.slice(0, currentIndexRef.current);
+            setDisplayedText(displayedChars.join(''));
+
             timerRef.current = setTimeout(typeNext, delay);
           } else {
             console.log('✅ Typing complete');
             timerRef.current = null;
           }
         };
-        
+
         console.log('🚀 Starting typing animation');
         typeNext();
       }
@@ -262,12 +269,7 @@ export const ChatMessages = React.memo(
 
               {/* Streaming message */}
               {streamingMessage && (
-                <div className="flex gap-3 group justify-start">
-                  {/* Avatar for assistant */}
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0 mt-1">
-                    <Brain className="w-4 h-4 text-white" />
-                  </div>
-
+                <div className="flex gap-0 group justify-start">
                   {/* Message bubble */}
                   <div className="max-w-[80%] sm:max-w-[70%]">
                     {/* Time stamp */}

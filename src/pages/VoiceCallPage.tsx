@@ -463,8 +463,10 @@ const VoiceCallPage: React.FC = () => {
       }]);
 
       // Get LLM response
+      console.log('📤 Getting LLM response for transcription:', transcription.substring(0, 100) + '...');
       const response = await getLLMResponse(transcription);
-      console.log('🤖 LLM:', response);
+      console.log('🤖 LLM response received, length:', response ? response.length : 0);
+      console.log('🤖 LLM response preview:', response ? response.substring(0, 200) + '...' : 'EMPTY');
       
       // Extract theses from response
       const theses = extractTheses(response);
@@ -760,20 +762,21 @@ const VoiceCallPage: React.FC = () => {
 
   // Get LLM response using GPT-5.1
   const getLLMResponse = async (userMessage: string): Promise<string> => {
-    // Build lesson context if available (read from ref to avoid closure issues)
-    const lessonContext = lessonContextRef.current;
-    let lessonContextText = '';
+    try {
+      // Build lesson context if available (read from ref to avoid closure issues)
+      const lessonContext = lessonContextRef.current;
+      let lessonContextText = '';
 
-    if (lessonContext) {
-      lessonContextText = `
+      if (lessonContext) {
+        lessonContextText = `
 
 ТЕКУЩИЙ УРОК:
 Название: "${lessonContext.title}"
 Тема: ${lessonContext.topic}
 Содержание урока: ${lessonContext.description}`;
-    } else {
-      console.warn('⚠️ No lesson context available');
-    }
+      } else {
+        console.warn('⚠️ No lesson context available');
+      }
 
     // Always use Russian prompt for Julia, regardless of lesson type
     const systemPrompt = `Ты Юлия - профессиональный педагог с 20-летним стажем. Ведёшь урок по голосовой связи один-на-один.${lessonContextText}
@@ -829,8 +832,14 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
       throw new Error('LLM failed');
     }
 
-    const result = await response.json();
-    return result.output_text;
+      const result = await response.json();
+      return result.output_text;
+    } catch (error) {
+      console.error('❌ Error in getLLMResponse:', error);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error stack:', error.stack);
+      throw new Error('LLM failed');
+    }
   };
 
   // Speak text
@@ -988,8 +997,11 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
                     className="w-48 h-48 rounded-full object-cover border-4 border-gray-200 shadow-lg"
                     muted
                     playsInline
+                    autoPlay
+                    loop
                   >
                     <source src="/Untitled Video.mp4" type="video/mp4" />
+                    Ваш браузер не поддерживает видео элемент.
                   </video>
 
                   {/* Status overlay */}

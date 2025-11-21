@@ -279,7 +279,7 @@ function startSinglePortServer() {
   }
 
   let proxyConfig = null;
-  let axiosWithProxy = axios.create({ timeout: 30000 });
+  let axiosWithProxy = axios.create({ timeout: 120000 }); // 2 minutes for large requests
 
   if (PROXY_URL) {
     try {
@@ -307,7 +307,7 @@ function startSinglePortServer() {
       // Создаем axios instance с прокси конфигурацией
       axiosWithProxy = axios.create({
         proxy: proxyConfig,
-        timeout: 30000
+        timeout: 120000 // 2 minutes for large requests
       });
       console.log(`   Axios proxy: ✅ Настроен`);
     } catch (error) {
@@ -678,7 +678,9 @@ function startSinglePortServer() {
   app.post('/api/responses', async (req, res) => {
     const requestStartTime = Date.now();
     console.log('📨 [BACKEND TIMING] T+0ms: GPT-5.1 responses request received');
-    console.log('📨 Request body:', JSON.stringify(req.body).substring(0, 500) + '...');
+    const requestBodyStr = JSON.stringify(req.body);
+    console.log('📨 Request body length:', requestBodyStr.length, 'characters');
+    console.log('📨 Request body preview:', requestBodyStr.substring(0, 500) + '...');
 
     if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'sk-test-key-for-development') {
       console.error('❌ OpenAI API key not configured or using test key');
@@ -690,15 +692,18 @@ function startSinglePortServer() {
     }
 
     try {
+      console.log('🔍 [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Parsing request body');
       const { model, input } = req.body;
 
       if (!input) {
+        console.error('❌ Missing input field in request');
         return res.status(400).json({
           error: 'Missing input field',
           required: ['input']
         });
       }
 
+      console.log('🔍 [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Input length:', input.length, 'characters');
       console.log('🤖 Using GPT-5.1 model');
 
       // Use OpenAI client for GPT-5.1
@@ -713,34 +718,39 @@ function startSinglePortServer() {
       let output_text;
 
       // Try GPT-5.1 responses API first (as per user's example)
+      console.log('🔍 [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Trying GPT-5.1 responses API');
       try {
+        console.log('📤 Calling client.responses.create...');
         response = await client.responses.create({
           model: 'gpt-5.1',
           input: input
         });
-        
+
         output_text = response.output_text;
-        
-        console.log('📥 GPT-5.1 response received via responses.create');
-        console.log('📥 Response output_text:', output_text ? output_text.substring(0, 200) + '...' : 'EMPTY!');
-        
+        console.log('✅ [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: GPT-5.1 response received via responses.create');
+        console.log('📥 Response output_text length:', output_text ? output_text.length : 0);
+        console.log('📥 Response output_text preview:', output_text ? output_text.substring(0, 200) + '...' : 'EMPTY!');
+
       } catch (responsesError) {
-        console.warn('⚠️ GPT-5.1 responses.create failed:', responsesError.message);
+        console.error('❌ [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: GPT-5.1 responses.create failed:', responsesError.message);
+        console.error('❌ Error details:', responsesError);
         console.log('🔄 Falling back to chat.completions API with gpt-4o...');
         
         // Fallback to chat completions API
+        console.log('🔍 [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Calling chat.completions API');
         const chatResponse = await client.chat.completions.create({
           model: 'gpt-4o',
           messages: [{ role: 'user', content: input }],
-          max_tokens: 300,
+          max_tokens: 10000,
           temperature: 0.7
         });
 
         output_text = chatResponse.choices[0].message.content;
         response = { output_text };
-        
-        console.log('📥 Fallback response received via chat.completions');
-        console.log('📥 Response output_text:', output_text ? output_text.substring(0, 200) + '...' : 'EMPTY!');
+
+        console.log('✅ [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Fallback response received via chat.completions');
+        console.log('📥 Response output_text length:', output_text ? output_text.length : 0);
+        console.log('📥 Response output_text preview:', output_text ? output_text.substring(0, 200) + '...' : 'EMPTY!');
       }
 
       if (!output_text || output_text.trim().length === 0) {

@@ -88,3 +88,5 @@ export function searchCourses(query: string): CourseRegistryEntry[] {
 }
 
 
+
+

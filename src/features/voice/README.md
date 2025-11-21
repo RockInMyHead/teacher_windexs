@@ -288,3 +288,5 @@ function CustomVoiceInterface() {
 - **TypeScript**: Полная типизация
 - **Browser Support**: Modern browsers with Web Speech API
 
+
+
