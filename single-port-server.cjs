@@ -257,6 +257,16 @@ function startSinglePortServer() {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+  // File upload middleware for audio files
+  const fileupload = require('express-fileupload');
+  app.use(fileupload({
+    limits: { fileSize: 25 * 1024 * 1024 }, // 25MB limit
+    abortOnLimit: true,
+    responseOnLimit: 'File size too large',
+    useTempFiles: false,
+    tempFileDir: '/tmp/'
+  }));
+
   // ⚠️ ВАЖНО: API маршруты ДОЛЖНЫ быть ПЕРЕД static файлами!
   // Иначе static middleware будет обрабатывать /api/* как файлы
 
@@ -535,10 +545,13 @@ function startSinglePortServer() {
           stream: true
         });
 
+        // Set UTF-8 encoding on the stream to properly handle multi-byte characters
+        stream.setEncoding('utf8');
+
         // Pipe the stream to response
         stream.on('data', (chunk) => {
-          const data = chunk.toString();
-          res.write(data);
+          // chunk is already a string with proper UTF-8 encoding
+          res.write(chunk);
         });
 
         stream.on('end', () => {
@@ -621,7 +634,97 @@ function startSinglePortServer() {
     }
   });
 
-  // Real chat completions are temporarily disabled for debugging
+  // GPT-5.1 responses endpoint
+  app.post('/api/responses', async (req, res) => {
+    const requestStartTime = Date.now();
+    console.log('📨 [BACKEND TIMING] T+0ms: GPT-5.1 responses request received');
+    console.log('📨 Request body:', JSON.stringify(req.body).substring(0, 500) + '...');
+
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'sk-test-key-for-development') {
+      console.error('❌ OpenAI API key not configured or using test key');
+      return res.status(500).json({
+        error: 'OpenAI API key not properly configured',
+        message: 'Please set a valid OPENAI_API_KEY in the .env file. Current key is: ' + (process.env.OPENAI_API_KEY ? 'TEST_KEY' : 'NOT_SET'),
+        details: 'Get your API key from https://platform.openai.com/api-keys'
+      });
+    }
+
+    try {
+      const { model, input } = req.body;
+
+      if (!input) {
+        return res.status(400).json({
+          error: 'Missing input field',
+          required: ['input']
+        });
+      }
+
+      console.log('🤖 Using GPT-5.1 model');
+
+      // Use OpenAI client for GPT-5.1
+      const { OpenAI } = require('openai');
+      const client = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY
+      });
+
+      console.log('📤 Sending request to GPT-5.1 via responses.create...');
+
+      let response;
+      let output_text;
+
+      // Try GPT-5.1 responses API first (as per user's example)
+      try {
+        response = await client.responses.create({
+          model: 'gpt-5.1',
+          input: input
+        });
+        
+        output_text = response.output_text;
+        
+        console.log('📥 GPT-5.1 response received via responses.create');
+        console.log('📥 Response output_text:', output_text ? output_text.substring(0, 200) + '...' : 'EMPTY!');
+        
+      } catch (responsesError) {
+        console.warn('⚠️ GPT-5.1 responses.create failed:', responsesError.message);
+        console.log('🔄 Falling back to chat.completions API with gpt-4o...');
+        
+        // Fallback to chat completions API
+        const chatResponse = await client.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [{ role: 'user', content: input }],
+          max_tokens: 300,
+          temperature: 0.7
+        });
+
+        output_text = chatResponse.choices[0].message.content;
+        response = { output_text };
+        
+        console.log('📥 Fallback response received via chat.completions');
+        console.log('📥 Response output_text:', output_text ? output_text.substring(0, 200) + '...' : 'EMPTY!');
+      }
+
+      if (!output_text || output_text.trim().length === 0) {
+        console.error('❌ OpenAI returned empty output_text!');
+        throw new Error('OpenAI returned empty response');
+      }
+
+      const requestDuration = Date.now() - requestStartTime;
+      console.log(`✅ [BACKEND TIMING] T+${requestDuration}ms: GPT-5.1 response completed`);
+
+      res.json({
+        output_text: response.output_text
+      });
+
+    } catch (error) {
+      console.error('❌ GPT-5.1 API error:', error.message);
+      console.error('❌ Error stack:', error.stack);
+      res.status(500).json({
+        error: 'GPT-5.1 API error',
+        details: error.message,
+        type: error.constructor.name
+      });
+    }
+  });
 
   // Generate personalized learning plan
   app.post('/api/generate-learning-plan', async (req, res) => {
@@ -845,6 +948,16 @@ grade >= 7 ?
   // Image generations
   app.post('/api/images/generations', async (req, res) => {
     try {
+      console.log('🎨 Image generation request:', JSON.stringify(req.body, null, 2));
+      
+      if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'sk-test-key-for-development') {
+        console.error('❌ OpenAI API key not configured');
+        return res.status(500).json({
+          error: 'OpenAI API key not configured',
+          details: 'Please set OPENAI_API_KEY in environment variables'
+        });
+      }
+
       const responseOutput = await curlWithProxy('https://api.openai.com/v1/images/generations', {
         method: 'POST',
         headers: {
@@ -855,10 +968,12 @@ grade >= 7 ?
         },
         data: req.body
       });
+      
+      console.log('✅ Image generation response received');
       const response = JSON.parse(responseOutput);
       res.json(response);
     } catch (error) {
-      console.error('Images generations error:', error);
+      console.error('❌ Images generations error:', error);
       res.status(500).json({
         error: 'OpenAI Images API error',
         details: error.message
@@ -869,62 +984,160 @@ grade >= 7 ?
   // Text-to-Speech
   app.post('/api/audio/speech', async (req, res) => {
     try {
-      console.log('🎤 TTS API called with body:', JSON.stringify(req.body).substring(0, 100));
-      
-      // For TTS, we need to stream the response, so we'll use spawn instead of exec
+      console.log('🎤 TTS API called with body:', JSON.stringify(req.body));
+
+      // Use node-fetch for better reliability instead of curl spawn
+      const fetch = (await import('node-fetch')).default;
+
+      console.log('📡 Making fetch request to OpenAI TTS API...');
+
+      const response = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(req.body)
+      });
+
+      console.log('📡 OpenAI TTS response status:', response.status);
+      console.log('📡 OpenAI TTS response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ OpenAI TTS API error response:', errorText);
+        return res.status(response.status).json({
+          error: 'OpenAI TTS API error',
+          details: errorText
+        });
+      }
+
+      // Set proper content type
+      const contentType = response.headers.get('content-type') || 'audio/mpeg';
+      res.setHeader('Content-Type', contentType);
+      console.log('🔊 TTS Content-Type set to:', contentType);
+
+      // Get content length for logging
+      const contentLength = response.headers.get('content-length');
+      console.log('🔊 TTS Content-Length:', contentLength);
+
+      // Stream the response directly to client
+      response.body.pipe(res);
+
+      console.log('✅ TTS audio streaming started');
+
+    } catch (error) {
+      console.error('❌ TTS error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: 'OpenAI TTS API error',
+          details: error.message
+        });
+      }
+    }
+  });
+
+  // Audio Transcription (Whisper)
+  app.post('/api/audio/transcriptions', async (req, res) => {
+    try {
+      console.log('🎤 Transcription API called at', new Date().toISOString());
+
+      // Check if file was uploaded
+      if (!req.files || !req.files.file) {
+        return res.status(400).json({ error: 'No audio file provided' });
+      }
+
+      const audioFile = req.files.file;
+      console.log('📁 Received audio file:', audioFile.name, 'Size:', audioFile.size);
+
+      // Create form data for OpenAI API
+      const FormData = require('form-data');
+      const form = new FormData();
+
+      // Convert buffer to readable stream
+      const { Readable } = require('stream');
+      const audioStream = Readable.from(audioFile.data);
+
+      form.append('file', audioStream, {
+        filename: 'audio.webm',
+        contentType: 'audio/webm'
+      });
+      form.append('model', 'whisper-1');
+      form.append('language', 'ru');
+      form.append('response_format', 'json');
+
+      console.log('📡 Sending to OpenAI Whisper API...');
+
+      // Use curl to make request to OpenAI
       const curlArgs = [
         '-s', '-X', 'POST',
         '-H', `Authorization: Bearer ${process.env.OPENAI_API_KEY}`,
-        '-H', 'Content-Type: application/json',
-        '-H', 'User-Agent: curl/7.68.0',
-        '-H', 'Accept: */*',
-        '-d', JSON.stringify(req.body),
-        'https://api.openai.com/v1/audio/speech'
+        '-F', 'model=whisper-1',
+        '-F', 'language=ru',
+        '-F', 'response_format=json',
+        'https://api.openai.com/v1/audio/transcriptions'
       ];
 
-      // Only add proxy if PROXY_URL is set
+      // Add proxy if configured
       if (PROXY_URL) {
-        console.log('🌐 Using proxy for TTS:', PROXY_URL);
+        console.log('🌐 Using proxy for Whisper:', PROXY_URL);
         curlArgs.splice(2, 0, '--proxy', PROXY_URL);
-      } else {
-        console.log('🌐 TTS: Making direct request to OpenAI (no proxy)');
       }
 
-      console.log('📡 Spawning curl process for TTS...');
-      const curlProcess = spawn('curl', curlArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
+      console.log('📡 Sending to OpenAI Whisper API using fetch...');
 
-      let stderrData = '';
-      
-      curlProcess.stderr.on('data', (data) => {
-        stderrData += data.toString();
-      });
+      try {
+        // Create form data for OpenAI API
+        const FormData = require('form-data');
+        const form = new FormData();
 
-      res.setHeader('Content-Type', 'audio/mpeg');
+        form.append('file', audioFile.data, {
+          filename: 'audio.webm',
+          contentType: 'audio/webm'
+        });
+        form.append('model', 'whisper-1');
+        form.append('language', 'ru');
+        form.append('response_format', 'json');
 
-      curlProcess.stdout.pipe(res);
+        console.log('📡 Making fetch request to OpenAI...');
 
-      curlProcess.on('error', (error) => {
-        console.error('❌ TTS curl error:', error);
-        if (!res.headersSent) {
-          res.status(500).json({
-            error: 'OpenAI TTS API error',
-            details: error.message
-          });
+        const fetch = (await import('node-fetch')).default;
+        const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+            ...form.getHeaders()
+          },
+          body: form
+        });
+
+        console.log('📡 Whisper response status:', response.status);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ Whisper API error:', errorText);
+          throw new Error(`Whisper API returned ${response.status}: ${errorText}`);
         }
-      });
 
-      curlProcess.on('close', (code) => {
-        if (code !== 0) {
-          console.error('❌ TTS curl process exited with code:', code);
-          console.error('❌ TTS stderr:', stderrData);
-        } else {
-          console.log('✅ TTS audio streamed successfully');
-        }
-      });
+        const result = await response.json();
+        console.log('✅ Transcription successful:', result.text?.substring(0, 50) + '...');
+
+        res.json({
+          text: result.text || '',
+          language: result.language || 'ru'
+        });
+
+      } catch (error) {
+        console.error('❌ Transcription error:', error);
+        res.status(500).json({
+          error: 'OpenAI Whisper API error',
+          details: error.message
+        });
+      }
     } catch (error) {
-      console.error('❌ TTS error:', error);
+      console.error('❌ Transcription setup error:', error);
       res.status(500).json({
-        error: 'OpenAI TTS API error',
+        error: 'Failed to process audio file',
         details: error.message
       });
     }
@@ -1372,78 +1585,7 @@ grade >= 7 ?
     }
   });
 
-  // Get learning plan by user and course
-  app.get('/api/db/learning-plans/:user_id/:course_id', (req, res) => {
-    try {
-      const { user_id, course_id } = req.params;
-
-      console.log(`📚 Fetching learning plan for user ${user_id}, course ${course_id}`);
-
-      // Extract numeric course_id (in case it comes as "4-10", we need just "4")
-      const baseCourseId = String(course_id).split('-')[0];
-      const numericCourseId = parseInt(baseCourseId);
-      
-      console.log(`🔄 Extracted numeric course_id: ${numericCourseId} from ${course_id}`);
-
-      if (isNaN(numericCourseId)) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'course_id must be a number or contain a number',
-          received: course_id,
-          extracted: baseCourseId
-        });
-      }
-
-      const numericUserId = parseInt(user_id);
-      console.log(`🔄 Converting user_id to numeric: ${numericUserId} from '${user_id}'`);
-
-      const plan = db.prepare(`
-        SELECT * FROM learning_plans
-        WHERE user_id = ? AND course_id = ?
-      `).get(numericUserId, numericCourseId);
-
-      if (!plan) {
-        return res.status(404).json({
-          status: 'not_found',
-          message: 'Learning plan not found'
-        });
-      }
-
-      // Parse plan_data if it's stored as JSON string
-      const planData = typeof plan.plan_data === 'string' 
-        ? JSON.parse(plan.plan_data) 
-        : plan.plan_data;
-
-      res.json({
-        status: 'ok',
-        plan: {
-          ...plan,
-          plan_data: planData
-        }
-      });
-    } catch (error) {
-      console.error('❌ Error fetching learning plan:', error);
-      res.status(500).json({
-        status: 'error',
-        message: error.message
-      });
-    }
-  });
-
-  // Debug endpoint
-  app.get('/api/debug/all-plans', (req, res) => {
-    try {
-      const allPlans = db.prepare('SELECT id, user_id, course_id, subject_name FROM learning_plans').all();
-      res.json({ 
-        count: allPlans.length,
-        plans: allPlans.map(p => ({ ...p, userIdType: typeof p.user_id, userIdStr: String(p.user_id) }))
-      });
-    } catch (e) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  // Get all learning plans for user
+  // Get all learning plans for user (MUST be before the :user_id/:course_id route!)
   app.get('/api/db/learning-plans/user/:user_id', (req, res) => {
     try {
       const { user_id } = req.params;
@@ -1522,6 +1664,7 @@ grade >= 7 ?
 
       // Debug: check what query returns
       const allPlansInDb = db.prepare('SELECT COUNT(*) as count FROM learning_plans').get();
+      const numericUserId = parseInt(user_id);
       const userPlansInDb = db.prepare('SELECT COUNT(*) as count FROM learning_plans WHERE user_id = ?').get(numericUserId);
       console.log(`🗄️ Total plans in DB: ${allPlansInDb.count}, plans for user ${numericUserId}: ${userPlansInDb.count}`);
 
@@ -1580,6 +1723,77 @@ grade >= 7 ?
         message: error.message,
         stack: error.stack
       });
+    }
+  });
+
+  // Get learning plan by user and course
+  app.get('/api/db/learning-plans/:user_id/:course_id', (req, res) => {
+    try {
+      const { user_id, course_id } = req.params;
+
+      console.log(`📚 Fetching learning plan for user ${user_id}, course ${course_id}`);
+
+      // Extract numeric course_id (in case it comes as "4-10", we need just "4")
+      const baseCourseId = String(course_id).split('-')[0];
+      const numericCourseId = parseInt(baseCourseId);
+      
+      console.log(`🔄 Extracted numeric course_id: ${numericCourseId} from ${course_id}`);
+
+      if (isNaN(numericCourseId)) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'course_id must be a number or contain a number',
+          received: course_id,
+          extracted: baseCourseId
+        });
+      }
+
+      const numericUserId = parseInt(user_id);
+      console.log(`🔄 Converting user_id to numeric: ${numericUserId} from '${user_id}'`);
+
+      const plan = db.prepare(`
+        SELECT * FROM learning_plans
+        WHERE user_id = ? AND course_id = ?
+      `).get(numericUserId, numericCourseId);
+
+      if (!plan) {
+        return res.status(404).json({
+          status: 'not_found',
+          message: 'Learning plan not found'
+        });
+      }
+
+      // Parse plan_data if it's stored as JSON string
+      const planData = typeof plan.plan_data === 'string' 
+        ? JSON.parse(plan.plan_data) 
+        : plan.plan_data;
+
+      res.json({
+        status: 'ok',
+        plan: {
+          ...plan,
+          plan_data: planData
+        }
+      });
+    } catch (error) {
+      console.error('❌ Error fetching learning plan:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
+  // Debug endpoint
+  app.get('/api/debug/all-plans', (req, res) => {
+    try {
+      const allPlans = db.prepare('SELECT id, user_id, course_id, subject_name FROM learning_plans').all();
+      res.json({ 
+        count: allPlans.length,
+        plans: allPlans.map(p => ({ ...p, userIdType: typeof p.user_id, userIdStr: String(p.user_id) }))
+      });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
     }
   });
 

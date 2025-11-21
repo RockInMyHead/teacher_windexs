@@ -137,3 +137,4 @@ function Chat() {
 - `convertPlanToSteps(plan)` - Конвертация плана в шаги
 - `splitIntoSentences(text)` - Разбить текст на предложения
 
+

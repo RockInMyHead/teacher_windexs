@@ -268,7 +268,7 @@ export const ChatInput = React.memo(
     const isButtonDisabled = (!message.trim() && selectedImages.length === 0 && !isRecording) || isLoading || isSending || disabled;
 
     return (
-      <div className="space-y-2 rounded-lg border border-border bg-background p-4">
+      <div className="p-4 bg-background">
         {/* Image previews */}
         {imagePreviews.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-3">

@@ -232,3 +232,4 @@ export async function validateLessonAccess(
   return prerequisites.every(prereqNum => completedLessons.includes(prereqNum));
 }
 
+

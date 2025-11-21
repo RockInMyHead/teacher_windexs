@@ -9,7 +9,6 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import CoursesPage from "./pages/CoursesPage";
 import AvailableCourses from "./pages/AvailableCourses";
-import PersonalizedCoursePage from "./pages/PersonalizedCoursePage";
 import Chat from "./pages/Chat";
 import Lesson from "./pages/Lesson";
 import LessonDetail from "./pages/LessonDetail";
@@ -57,7 +56,6 @@ const App = () => (
                 <Route path="/courses" element={<CoursesPage />} />
                 <Route path="/grade-selection" element={<GradeSelection />} />
                 <Route path="/available-courses" element={<AvailableCourses />} />
-                <Route path="/personalized-course" element={<PersonalizedCoursePage />} />
                 <Route path="/lesson" element={<Lesson />} />
                 <Route path="/lesson/:lessonId" element={<LessonDetail />} />
                 <Route path="/course/:courseId" element={<CourseDetail />} />

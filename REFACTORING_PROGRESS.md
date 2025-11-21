@@ -202,3 +202,4 @@ import type { Message, ChatMessage, VoiceLessonState } from '@/types';
 *Дата: 2025-11-20*
 *Статус: Phase 1-4 ✅ | Phase 5 🔄*</contents>
 </xai:function_call
+

@@ -377,7 +377,8 @@ const Chat = () => {
       currentURL: window.location.href
     });
 
-    const isLessonModeParam = mode === 'lesson';
+    // Lesson mode is disabled - always set to false
+    const isLessonModeParam = false; // mode === 'lesson'; // DISABLED
     setIsLessonMode(isLessonModeParam);
 
     // Load current lesson data from localStorage
@@ -1742,14 +1743,14 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
       <Header />
 
       {/* Chat Container */}
-      <div className="container mx-auto px-4 py-6 max-w-6xl">
+      <div className="container mx-auto px-2 py-2 max-w-6xl">
         {/* Teacher Chat Interface */}
-        <div className="space-y-6">
+        <div className="space-y-2">
 
             {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              {/* Start Lesson Button (for lesson mode) */}
-              {isLessonMode && !lessonStarted && (
+            <div className="flex flex-col sm:flex-row gap-2 justify-center items-center">
+              {/* Start Lesson Button (for lesson mode) - DISABLED */}
+              {false && isLessonMode && !lessonStarted && (
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Button
                     size="lg"
@@ -1786,8 +1787,8 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
                 </div>
               )}
 
-              {/* Call Teacher Button (for lesson mode) */}
-              <Button
+              {/* Call Teacher Button (for lesson mode) - DISABLED */}
+              {false && <Button
                 size="lg"
                 variant="outline"
                 className="flex-1 sm:flex-none text-lg px-8 py-4 border-2 border-primary/30 hover:border-primary hover:bg-primary/5 hover:text-black transition-all duration-300 gap-3 font-semibold"
@@ -1795,11 +1796,11 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
               >
                 <Phone className="w-5 h-5 text-primary" />
                 Звонок учителю
-              </Button>
+              </Button>}
 
               {/* Error Message */}
               {generationError && (
-                <div className="mt-4 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
+                <div className="mt-2 p-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
                   <div className="flex items-start gap-3">
                     <div className="w-5 h-5 text-red-500 mt-0.5">⚠️</div>
                     <div>
@@ -1823,7 +1824,7 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
             </div>
 
             {/* Lesson Display with Formatted Content */}
-            {isLessonMode && lessonStarted && lessonPlan && lessonContent && (
+            {false && isLessonMode && lessonStarted && lessonPlan && lessonContent && (
               <LessonDisplay
                 stepTitle={lessonPlan.steps[currentLessonStep]?.title || 'Урок'}
                 structuredContent={currentLessonSections}
@@ -1837,9 +1838,9 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
             )}
 
             {/* Current Lesson Info */}
-            {isLessonMode && currentLesson && (
+            {false && isLessonMode && currentLesson && (
               <Card className="border-2 border-primary/20 bg-card/95 backdrop-blur-xl">
-                <CardContent className="p-4">
+                <CardContent className="p-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <BookOpen className="w-5 h-5 text-primary" />
@@ -1859,9 +1860,9 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
 
 
             {/* Thinking message display during plan generation */}
-            {isLessonMode && isGeneratingPlan && (
-              <div className="mb-6">
-                <div className="bg-muted/50 border border-border rounded-lg p-4">
+            {false && isLessonMode && isGeneratingPlan && (
+              <div className="mb-2">
+                <div className="bg-muted/50 border border-border rounded-lg p-2">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
                     <span className="font-medium text-foreground">ИИ анализирует</span>
@@ -1898,9 +1899,9 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
             {/* Saved Lessons */}
       {/* Saved Lessons Modal */}
       {showSavedLessons && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
-            <div className="p-6 border-b">
+            <div className="p-3 border-b">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold">Сохраненные уроки</h2>
                 <Button
@@ -1914,18 +1915,18 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
               </div>
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
+            <div className="p-3 overflow-y-auto max-h-[60vh]">
               {savedLessons.length === 0 ? (
-                <div className="text-center py-8">
+                <div className="text-center py-4">
                   <p className="text-muted-foreground">У вас пока нет сохраненных уроков.</p>
                   <p className="text-sm text-muted-foreground mt-2">
                           Завершите урок и нажмите "Сохранить урок" чтобы сохранить его для последующего использования.
                   </p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-2">
                         {savedLessons.map((lesson) => (
-                          <div key={lesson.id} className="border border-border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+                          <div key={lesson.id} className="border border-border rounded-lg p-3 hover:bg-muted/50 transition-colors">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <h3 className="font-semibold text-lg">{lesson.lesson_title}</h3>

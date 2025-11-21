@@ -54,12 +54,32 @@ export const VoiceTeacherChat = ({
   });
   const speech = useSpeechRecognition();
 
-  // Initialize lesson on mount
+  // Auto-start lesson when data is available
   useEffect(() => {
-    if (!lesson.lessonStarted) {
-      lesson.initializeLesson();
+    const shouldStartLesson = lessonTitle && lessonTopic && lessonAspects &&
+                             lessonTitle !== 'Общий урок' &&
+                             lessonTopic !== 'Общение' &&
+                             lessonAspects !== 'Интерактивное обучение с голосом' &&
+                             !lesson.lessonStarted &&
+                             !lesson.isGeneratingLesson;
+
+    console.log('🎤 VoiceTeacherChat check:', {
+      lessonTitle,
+      lessonTopic,
+      lessonAspects,
+      lessonStarted: lesson.lessonStarted,
+      isGenerating: lesson.isGeneratingLesson,
+      shouldStartLesson
+    });
+
+    if (shouldStartLesson) {
+      console.log('🎤 Auto-starting lesson with data:', { lessonTitle, lessonTopic, lessonAspects });
+      const timer = setTimeout(() => {
+        lesson.initializeLesson();
+      }, 500); // Small delay to ensure component is ready
+      return () => clearTimeout(timer);
     }
-  }, [lesson]);
+  }, [lessonTitle, lessonTopic, lessonAspects, lesson.lessonStarted, lesson.isGeneratingLesson]);
 
   // Handle language change
   const handleLanguageChange = useCallback((language: string) => {
@@ -239,19 +259,11 @@ export const VoiceTeacherChat = ({
 
         {/* Voice controls */}
         <div className="flex justify-center">
-          {!lesson.lessonStarted ? (
-            <Button
-              size="lg"
-              onClick={() => lesson.initializeLesson()}
-              disabled={lesson.isGeneratingLesson}
-              className="w-32 h-32 rounded-full text-white font-semibold bg-green-500 hover:bg-green-600"
-            >
-              <div className="flex flex-col items-center gap-2">
-                <Mic className="w-8 h-8" />
-                <span className="text-sm">Начать урок</span>
-              </div>
-            </Button>
-          ) : (
+          {lesson.isGeneratingLesson ? (
+            <div className="w-32 h-32 rounded-full bg-gray-400 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+            </div>
+          ) : lesson.lessonStarted ? (
             <Button
               size="lg"
               onClick={handleVoiceToggle}
@@ -274,6 +286,17 @@ export const VoiceTeacherChat = ({
                     <span className="text-sm">Говорить</span>
                   </>
                 )}
+              </div>
+            </Button>
+          ) : (
+            <Button
+              size="lg"
+              onClick={() => lesson.initializeLesson()}
+              className="w-32 h-32 rounded-full text-white font-semibold bg-green-500 hover:bg-green-600"
+            >
+              <div className="flex flex-col items-center gap-2">
+                <Mic className="w-8 h-8" />
+                <span className="text-sm">Начать урок</span>
               </div>
             </Button>
           )}

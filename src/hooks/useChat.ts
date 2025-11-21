@@ -156,12 +156,23 @@ export const useChat = (options: UseChatOptions = {}): UseChatReturn => {
           temperature: 0.7,
         };
 
+        // Initialize streaming message
+        console.log('🚀 Initializing streaming message');
+        setStreamingMessage({
+          role: 'assistant',
+          content: '',
+          timestamp: new Date(),
+        });
+
         await chatService.sendMessageStream(request, (chunk: string) => {
+          console.log('📦 Received chunk:', chunk, `(length: ${chunk.length})`);
           setStreamingMessage(prev => {
-            if (!prev) return null;
+            const newContent = (prev?.content || '') + chunk;
+            console.log('📝 Updated streaming message, total length:', newContent.length);
             return {
-              ...prev,
-              content: prev.content + chunk,
+              role: 'assistant',
+              content: newContent,
+              timestamp: prev?.timestamp || new Date(),
             };
           });
         });
@@ -169,6 +180,7 @@ export const useChat = (options: UseChatOptions = {}): UseChatReturn => {
         // Finalize streaming message
         setStreamingMessage(prev => {
           if (!prev) return null;
+          console.log('✅ Finalizing streaming message with', prev.content.length, 'characters');
           setMessages(currentMessages => {
             const updated = [...currentMessages, prev];
           if (updated.length > maxMessages) {

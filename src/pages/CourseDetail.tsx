@@ -580,26 +580,39 @@ export default function CourseDetail() {
   };
 
   const startInteractiveLesson = () => {
-    // Создать урок из данных курса
-    const lessonData = {
-      number: course?.currentLesson?.number || 1,
-      title: course?.currentLesson?.title || course?.title || 'Урок',
-      grade: course?.grade || '5 класс',
-      topic: course?.currentLesson?.topic || course?.description || '',
-      aspects: course?.description || '',
-      description: course?.currentLesson?.content || course?.currentLesson?.aspects || course?.description || ''
-    };
+    // Navigate to empty lesson page with header only
+    console.log('🚀 [COURSE DETAIL] startInteractiveLesson called - navigating to empty lesson page');
 
-    // Сохранить в localStorage для использования в чате
-    localStorage.setItem('currentLesson', JSON.stringify(lessonData));
-    localStorage.setItem('courseInfo', JSON.stringify({
-      courseId: course?.id,
+    // Clear lesson-specific data but keep course info for display
+    localStorage.removeItem('currentLesson');
+    localStorage.removeItem('lessonIndex');
+    localStorage.removeItem('totalLessons');
+    localStorage.removeItem('lessonVoiceCall');
+
+    // Keep courseInfo for display on empty page
+    const courseData = {
+      id: course?.id,
       title: course?.title,
       grade: course?.grade
-    }));
+    };
 
-    // Перейти напрямую в чат с режимом урока и автоматическим запуском
-    navigate('/chat?mode=lesson&auto=true');
+    const lessonData = {
+      title: course?.currentLesson?.title || course?.title || 'Урок',
+      topic: course?.currentLesson?.topic || course?.description || ''
+    };
+
+    console.log('💾 [COURSE DETAIL] Preserving course data for empty page display:', courseData, lessonData);
+
+    // Navigate to lesson page with course data as URL params
+    const params = new URLSearchParams({
+      courseId: courseData.id?.toString() || '',
+      courseTitle: courseData.title || '',
+      courseGrade: courseData.grade?.toString() || '',
+      lessonTitle: lessonData.title,
+      lessonTopic: lessonData.topic
+    });
+
+    navigate(`/lesson?${params.toString()}`);
   };
 
   // Keep historyRef updated
@@ -892,24 +905,35 @@ ${context}
   };
 
   const startVoiceCall = () => {
-    // Navigate to dedicated voice call page
-    console.log('🎯 [COURSE DETAIL] Navigating to voice-call page');
-    console.log('🎯 [COURSE DETAIL] Current lesson:', course?.currentLesson);
-    
-    // Store lesson data in localStorage for the voice call page
-    if (course?.currentLesson) {
-      localStorage.setItem('currentLesson', JSON.stringify({
-        title: course.currentLesson.title,
-        topic: course.currentLesson.topic,
-        aspects: course.currentLesson.content,
-        description: course.description
-      }));
-      localStorage.setItem('courseInfo', JSON.stringify({
-        title: course.title,
-        grade: course.grade
-      }));
-    }
-    
+    // Navigate to dedicated voice call page with lesson context
+    console.log('🎯 [COURSE DETAIL] Navigating to voice-call page with lesson context');
+    console.log('🔍 Current course data:', {
+      id: course?.id,
+      title: course?.title,
+      currentLesson: course?.currentLesson
+    });
+
+    // Ensure lesson data is saved before navigation
+    const lessonData = {
+      number: course?.currentLesson?.number || 1,
+      title: course?.currentLesson?.title || course?.title || 'Урок',
+      grade: course?.grade || '5 класс',
+      topic: course?.currentLesson?.topic || course?.description || '',
+      aspects: course?.description || '',
+      description: course?.currentLesson?.content || course?.currentLesson?.aspects || course?.currentLesson?.description || course?.description || ''
+    };
+
+    console.log('💾 Saving to localStorage:', lessonData);
+
+    localStorage.setItem('currentLesson', JSON.stringify(lessonData));
+    localStorage.setItem('courseInfo', JSON.stringify({
+      courseId: course?.id,
+      title: course?.title,
+      grade: course?.grade
+    }));
+
+    console.log('✅ Lesson data saved, navigating to /voice-call');
+
     // Navigate to voice call page
     navigate('/voice-call');
   };

@@ -287,3 +287,4 @@ function CustomVoiceInterface() {
 - **UI**: Shadcn/ui + Tailwind CSS
 - **TypeScript**: Полная типизация
 - **Browser Support**: Modern browsers with Web Speech API
+

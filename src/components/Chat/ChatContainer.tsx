@@ -129,27 +129,29 @@ export const ChatContainer = React.forwardRef<any, ChatContainerProps>(
 
 
     return (
-      <div className="space-y-4 rounded-lg bg-background p-6">
+      <div className="h-screen flex flex-col bg-background">
 
-        {/* Error display */}
+        {/* Error display - fixed at top */}
         {chatError && (
-          <Card className="border-destructive bg-destructive/10 p-4">
-            <div className="flex gap-3">
+          <div className="bg-destructive/10 border-b border-destructive p-4">
+            <div className="flex gap-3 max-w-4xl mx-auto">
               <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0" />
               <div>
                 <p className="font-medium text-destructive">Ошибка</p>
                 <p className="text-sm text-destructive/80">{chatError.message}</p>
               </div>
             </div>
-          </Card>
+          </div>
         )}
 
-        {/* Messages */}
-        <ChatMessages
-          messages={messages}
-          isLoading={isLoading}
-          streamingMessage={streamingMessage}
-        />
+        {/* Messages - take up remaining space with bottom padding for fixed input */}
+        <div className="flex-1 overflow-hidden pb-20">
+          <ChatMessages
+            messages={messages}
+            isLoading={isLoading}
+            streamingMessage={streamingMessage}
+          />
+        </div>
 
         {/* Assessment Panel */}
         <AssessmentPanel
@@ -168,13 +170,6 @@ export const ChatContainer = React.forwardRef<any, ChatContainerProps>(
           isLoading={isLoading}
         />
 
-        {/* Chat Input */}
-        <ChatInput
-          onSendMessage={handleSendMessage}
-          isLoading={isLoading}
-          disabled={isInAssessment}
-        />
-
         {/* Assessment, Audio Task, Test Question Panels */}
         <AudioTaskPanel
           isActive={isAudioTaskActive}
@@ -187,6 +182,17 @@ export const ChatContainer = React.forwardRef<any, ChatContainerProps>(
           questionData={testQuestionData}
           onClose={() => setIsTestQuestionActive(false)}
         />
+
+        {/* Chat Input - fixed at bottom */}
+        <div className="fixed bottom-0 left-0 right-0 border-t bg-background z-10">
+          <div className="max-w-4xl mx-auto">
+            <ChatInput
+              onSendMessage={handleSendMessage}
+              isLoading={isLoading}
+              disabled={isInAssessment}
+            />
+          </div>
+        </div>
       </div>
     );
   }

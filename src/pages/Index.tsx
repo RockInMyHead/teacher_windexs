@@ -77,7 +77,7 @@ const Index = () => {
           <div className="text-center max-w-4xl mx-auto">
             {/* Logo */}
             <div className="inline-flex items-center gap-3 mb-8">
-              <div className="w-16 h-16 bg-gradient-to-r from-primary to-accent rounded-2xl flex items-center justify-center shadow-lg">
+              <div className="hidden md:block w-16 h-16 bg-gradient-to-r from-primary to-accent rounded-2xl flex items-center justify-center shadow-lg">
                 <Brain className="w-8 h-8 text-white" />
               </div>
               <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
@@ -103,7 +103,7 @@ const Index = () => {
               <Button
                 size="lg"
                 className="text-lg px-8 py-4 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl transition-all duration-300 gap-3"
-                onClick={() => navigate('/grade-selection')}
+                onClick={() => navigate('/courses')}
               >
                 <Play className="w-5 h-5" />
                 Начать обучение

@@ -202,7 +202,7 @@ const CoursesPage = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8 flex-1">
-        {((user?.activeCourses && user.activeCourses.length > 0) || virtualCourses.length > 0) ? (
+        {user?.activeCourses && user.activeCourses.length > 0 ? (
           <>
             {/* Courses Grid */}
             <div className="mb-8">
@@ -231,10 +231,6 @@ const CoursesPage = () => {
                             </div>
                             <Progress value={course.progress} className="h-2" />
                           </div>
-                          <div className="flex justify-between text-sm text-muted-foreground">
-                            <span>{course.completedModules} из {course.modules} модулей</span>
-                            <span>{course.students} студентов</span>
-                          </div>
                           <Button
                             className="w-full"
                             size="sm"
@@ -259,8 +255,8 @@ const CoursesPage = () => {
                   );
                 })}
 
-                {/* Virtual courses from plans */}
-                {virtualCourses.map((course) => {
+                {/* Virtual courses from plans - DISABLED to prevent duplication */}
+                {false && virtualCourses.map((course) => {
                   const Icon = getIconByName(course.icon);
                   return (
                     <Card key={`virtual-${course.id}`} className="hover:shadow-lg transition-shadow border-2 border-purple-200">
