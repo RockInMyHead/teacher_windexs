@@ -455,6 +455,26 @@ function startSinglePortServer() {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
   });
 
+  // API diagnostics
+  app.get('/api/diagnostics', (req, res) => {
+    res.json({
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        PORT: process.env.PORT,
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY ? 'SET (length: ' + process.env.OPENAI_API_KEY.length + ')' : 'NOT_SET',
+        PROXY_URL: process.env.PROXY_URL ? 'SET' : 'NOT_SET',
+        GEMINI_API_KEY: process.env.GEMINI_API_KEY ? 'SET' : 'NOT_SET'
+      },
+      server: {
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        version: process.version
+      }
+    });
+  });
+
   // Chat completions
   app.post('/api/chat/completions', async (req, res) => {
     const requestStartTime = Date.now();
