@@ -676,6 +676,12 @@ function startSinglePortServer() {
 
   // GPT-5.1 responses endpoint
   app.post('/api/responses', async (req, res) => {
+    console.log('🚀 [API] /api/responses endpoint called');
+    console.log('🚀 [API] Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('🚀 [API] Method:', req.method);
+    console.log('🚀 [API] URL:', req.url);
+    console.log('🚀 [API] Body:', req.body);
+
     const requestStartTime = Date.now();
     console.log('📨 [BACKEND TIMING] T+0ms: GPT-5.1 responses request received');
     const requestBodyStr = JSON.stringify(req.body);
@@ -684,6 +690,7 @@ function startSinglePortServer() {
 
     if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'sk-test-key-for-development') {
       console.error('❌ OpenAI API key not configured or using test key');
+      console.error('❌ Current OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? 'SET (length: ' + process.env.OPENAI_API_KEY.length + ')' : 'NOT_SET');
       return res.status(500).json({
         error: 'OpenAI API key not properly configured',
         message: 'Please set a valid OPENAI_API_KEY in the .env file. Current key is: ' + (process.env.OPENAI_API_KEY ? 'TEST_KEY' : 'NOT_SET'),
@@ -768,10 +775,14 @@ function startSinglePortServer() {
     } catch (error) {
       console.error('❌ GPT-5.1 API error:', error.message);
       console.error('❌ Error stack:', error.stack);
+      console.error('❌ Error details:', error);
+      console.error('❌ Error name:', error.name);
+      console.error('❌ Error code:', error.code);
       res.status(500).json({
         error: 'GPT-5.1 API error',
         details: error.message,
-        type: error.constructor.name
+        type: error.constructor.name,
+        stack: error.stack
       });
     }
   });
