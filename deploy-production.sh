@@ -108,15 +108,14 @@ sudo systemctl restart nginx
 # Запуск сервисов
 log "🚀 Запуск сервисов..."
 
-# Создание сервисов если не существуют
-if [ ! -f /etc/systemd/system/teacher-proxy.service ]; then
-    log "📝 Создание сервиса teacher-proxy..."
+# Создание/обновление сервиса teacher-proxy
+log "📝 Настройка сервиса teacher-proxy..."
 
-    # Найти путь к node
-    NODE_PATH=$(which node 2>/dev/null || find /usr -name node 2>/dev/null | head -1 || echo "/usr/bin/node")
-    log "🔍 Путь к Node.js: $NODE_PATH"
+# Найти путь к node
+NODE_PATH=$(which node 2>/dev/null || find /usr -name node 2>/dev/null | head -1 || find /home -name node 2>/dev/null | head -1 || find /opt -name node 2>/dev/null | head -1 || echo "/usr/bin/node")
+log "🔍 Путь к Node.js: $NODE_PATH"
 
-    sudo tee /etc/systemd/system/teacher-proxy.service > /dev/null <<EOF
+sudo tee /etc/systemd/system/teacher-proxy.service > /dev/null <<EOF
 [Unit]
 Description=Windexs Teacher Proxy Server
 After=network.target
@@ -135,13 +134,14 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 EOF
-fi
 
-if [ ! -f /etc/systemd/system/teacher-frontend.service ]; then
-    log "📝 Создание сервиса teacher-frontend..."
+log "📝 Настройка сервиса teacher-frontend..."
 
-    # Использовать npm напрямую, так как он должен быть в PATH
-    sudo tee /etc/systemd/system/teacher-frontend.service > /dev/null <<EOF
+# Найти путь к npm
+NPM_PATH=$(which npm 2>/dev/null || find /usr -name npm 2>/dev/null | head -1 || find /home -name npm 2>/dev/null | head -1 || echo "npm")
+log "🔍 Путь к npm: $NPM_PATH"
+
+sudo tee /etc/systemd/system/teacher-frontend.service > /dev/null <<EOF
 [Unit]
 Description=Windexs Teacher Frontend
 After=network.target teacher-proxy.service
@@ -154,14 +154,13 @@ Environment=PATH=/usr/bin:/bin:/usr/local/bin
 Environment=NODE_ENV=production
 Environment=VITE_DEV_PORT=1031
 Environment=PROXY_PORT=1038
-ExecStart=$(which npm) run start:production
+ExecStart=$NPM_PATH run start:production
 Restart=always
 RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 EOF
-fi
 
 # Перезагрузка systemd
 sudo systemctl daemon-reload
