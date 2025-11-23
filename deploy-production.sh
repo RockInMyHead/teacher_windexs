@@ -112,6 +112,10 @@ log "🚀 Запуск сервисов..."
 if [ ! -f /etc/systemd/system/teacher-proxy.service ]; then
     log "📝 Создание сервиса teacher-proxy..."
 
+    # Найти путь к node
+    NODE_PATH=$(which node 2>/dev/null || find /usr -name node 2>/dev/null | head -1 || echo "/usr/bin/node")
+    log "🔍 Путь к Node.js: $NODE_PATH"
+
     sudo tee /etc/systemd/system/teacher-proxy.service > /dev/null <<EOF
 [Unit]
 Description=Windexs Teacher Proxy Server
@@ -121,10 +125,10 @@ After=network.target
 Type=simple
 User=$USER
 WorkingDirectory=$(pwd)
-Environment=PATH=/usr/bin:/bin
+Environment=PATH=/usr/bin:/bin:/usr/local/bin
 Environment=NODE_ENV=production
 Environment=PROXY_PORT=1038
-ExecStart=/usr/bin/node proxy-server.cjs
+ExecStart=$NODE_PATH proxy-server.cjs
 Restart=always
 RestartSec=5
 
@@ -136,6 +140,7 @@ fi
 if [ ! -f /etc/systemd/system/teacher-frontend.service ]; then
     log "📝 Создание сервиса teacher-frontend..."
 
+    # Использовать npm напрямую, так как он должен быть в PATH
     sudo tee /etc/systemd/system/teacher-frontend.service > /dev/null <<EOF
 [Unit]
 Description=Windexs Teacher Frontend
@@ -145,11 +150,11 @@ After=network.target teacher-proxy.service
 Type=simple
 User=$USER
 WorkingDirectory=$(pwd)
-Environment=PATH=/usr/bin:/bin
+Environment=PATH=/usr/bin:/bin:/usr/local/bin
 Environment=NODE_ENV=production
 Environment=VITE_DEV_PORT=1031
 Environment=PROXY_PORT=1038
-ExecStart=/usr/bin/npm run start:production
+ExecStart=$(which npm) run start:production
 Restart=always
 RestartSec=5
 
@@ -164,6 +169,9 @@ sudo systemctl daemon-reload
 # Включение автозапуска
 sudo systemctl enable teacher-proxy
 sudo systemctl enable teacher-frontend
+
+# Остановить существующие сервисы перед запуском
+sudo systemctl stop teacher-proxy teacher-frontend 2>/dev/null || true
 
 # Запуск сервисов
 sudo systemctl start teacher-proxy
