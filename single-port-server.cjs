@@ -742,55 +742,52 @@ function startSinglePortServer() {
 
       console.log('🔍 [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Input length:', input.length, 'characters');
       
-      // Use OpenAI client
-      const { OpenAI } = require('openai');
-      const { HttpsProxyAgent } = require('https-proxy-agent');
+      const model = req.body.model || 'gpt-4o';
+      console.log('🤖 Using model:', model);
 
-      // Configure proxy agent if PROXY_URL is set
-      let clientConfig = {
-        apiKey: process.env.OPENAI_API_KEY
+      // Use curlWithProxy (guaranteed to work with proxy)
+      console.log('🔍 [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Calling OpenAI API via curlWithProxy');
+      
+      const requestBody = {
+        model: model,
+        messages: [{ role: 'user', content: input }],
+        max_tokens: 10000,
+        temperature: 0.7
       };
-
-      if (PROXY_URL) {
-        try {
-          // HttpsProxyAgent works with HTTP proxy URLs (http://user:pass@host:port)
-          const proxyAgent = new HttpsProxyAgent(PROXY_URL);
-          clientConfig.httpAgent = proxyAgent;
-          clientConfig.httpsAgent = proxyAgent;
-          console.log('🔧 OpenAI client configured with HTTP proxy:', PROXY_URL.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:***@'));
-        } catch (proxyError) {
-          console.warn('⚠️ Failed to configure proxy for OpenAI client:', proxyError.message);
-          console.warn('🔧 Continuing without proxy...');
-        }
-      }
-
-      const client = new OpenAI(clientConfig);
 
       let output_text;
 
-      // Use chat.completions API (standard OpenAI API)
-      console.log('🔍 [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Calling chat.completions API');
       try {
-        const model = req.body.model || 'gpt-4o';
-        console.log('🤖 Using model:', model);
-        
-        const chatResponse = await client.chat.completions.create({
-          model: model,
-          messages: [{ role: 'user', content: input }],
-          max_tokens: 10000,
-          temperature: 0.7
+        const responseOutput = await curlWithProxy('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+            'User-Agent': 'curl/7.68.0',
+            'Accept': '*/*'
+          },
+          data: requestBody
         });
 
-        output_text = chatResponse.choices[0].message.content;
+        console.log('✅ [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Response received via curl');
 
-        console.log('✅ [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Response received via chat.completions');
+        // Parse response
+        const response = JSON.parse(responseOutput);
+        
+        if (!response.choices || !response.choices[0] || !response.choices[0].message) {
+          console.error('❌ Invalid response structure:', JSON.stringify(response, null, 2));
+          throw new Error('Invalid response structure from OpenAI');
+        }
+
+        output_text = response.choices[0].message.content;
+
         console.log('📥 Response output_text length:', output_text ? output_text.length : 0);
         console.log('📥 Response output_text preview:', output_text ? output_text.substring(0, 200) + '...' : 'EMPTY!');
 
-      } catch (chatError) {
-        console.error('❌ [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: chat.completions failed:', chatError.message);
-        console.error('❌ Error details:', chatError);
-        throw chatError; // Re-throw to be caught by outer catch
+      } catch (curlError) {
+        console.error('❌ [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: curlWithProxy failed:', curlError.message);
+        console.error('❌ Error details:', curlError);
+        throw curlError; // Re-throw to be caught by outer catch
       }
 
       if (!output_text || output_text.trim().length === 0) {
