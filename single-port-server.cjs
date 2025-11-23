@@ -1082,45 +1082,46 @@ grade >= 7 ?
     try {
       console.log('🎤 TTS API called with body:', JSON.stringify(req.body));
 
-      // Use node-fetch for better reliability instead of curl spawn
-      const fetch = (await import('node-fetch')).default;
+      // Use curlWithProxy (guaranteed to work with proxy)
+      console.log('📡 Making curlWithProxy request to OpenAI TTS API...');
 
-      console.log('📡 Making fetch request to OpenAI TTS API...');
-
-      const response = await fetch('https://api.openai.com/v1/audio/speech', {
+      const responseOutput = await curlWithProxy('https://api.openai.com/v1/audio/speech', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
+          'User-Agent': 'curl/7.68.0',
+          'Accept': '*/*'
         },
-        body: JSON.stringify(req.body)
+        data: req.body
       });
 
-      console.log('📡 OpenAI TTS response status:', response.status);
-      console.log('📡 OpenAI TTS response headers:', Object.fromEntries(response.headers.entries()));
+      console.log('✅ TTS response received via curl');
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ OpenAI TTS API error response:', errorText);
-        return res.status(response.status).json({
-          error: 'OpenAI TTS API error',
-          details: errorText
-        });
+      // Since this is binary audio data, we need to handle it differently
+      // curlWithProxy returns JSON string, but TTS returns binary audio
+      try {
+        const response = JSON.parse(responseOutput);
+        if (response.error) {
+          console.error('❌ OpenAI TTS API error:', JSON.stringify(response.error, null, 2));
+          return res.status(400).json({
+            error: 'OpenAI TTS API error',
+            details: response.error.message || JSON.stringify(response.error)
+          });
+        }
+      } catch (parseError) {
+        // If parsing fails, it might be binary data - treat as success
+        console.log('🔊 TTS binary data received, piping to client');
       }
 
-      // Set proper content type
-      const contentType = response.headers.get('content-type') || 'audio/mpeg';
-      res.setHeader('Content-Type', contentType);
-      console.log('🔊 TTS Content-Type set to:', contentType);
+      // Set proper content type for audio
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Cache-Control', 'no-cache');
 
-      // Get content length for logging
-      const contentLength = response.headers.get('content-length');
-      console.log('🔊 TTS Content-Length:', contentLength);
+      // Send the binary data directly
+      res.send(Buffer.from(responseOutput, 'binary'));
 
-      // Stream the response directly to client
-      response.body.pipe(res);
-
-      console.log('✅ TTS audio streaming started');
+      console.log('✅ TTS audio sent to client');
 
     } catch (error) {
       console.error('❌ TTS error:', error);
@@ -1149,39 +1150,80 @@ grade >= 7 ?
       console.log('📡 Sending to OpenAI Whisper API...');
 
       // Use curlWithProxy for consistent proxy handling
-      const FormData = require('form-data');
-      const form = new FormData();
+      console.log('📡 Making curlWithProxy request to OpenAI Whisper API...');
 
-      form.append('file', audioFile.data, {
-        filename: 'audio.webm',
-        contentType: 'audio/webm'
-      });
-      form.append('model', 'whisper-1');
-      form.append('language', 'ru');
-      form.append('response_format', 'json');
+      // For multipart form data, we'll need to construct curl command manually
+      // since curlWithProxy currently expects JSON data
+      const fs = require('fs');
+      const path = require('path');
+      const os = require('os');
 
-      console.log('📡 Making direct fetch request to OpenAI Whisper API...');
+      // Create temporary file for the audio data
+      const tempDir = os.tmpdir();
+      const tempFilePath = path.join(tempDir, `audio_${Date.now()}.webm`);
 
       try {
-        const fetch = (await import('node-fetch')).default;
+        fs.writeFileSync(tempFilePath, audioFile.data);
 
-        const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-            'Content-Type': `multipart/form-data; boundary=${form.getBoundary()}`
-          },
-          body: form
+        // Build curl command with multipart form data
+        const curlCommand = [
+          'curl',
+          '-s', // silent
+          '-X', 'POST',
+          '--proxy', PROXY_URL,
+          '-H', `Authorization: Bearer ${process.env.OPENAI_API_KEY}`,
+          '-F', `file=@${tempFilePath};filename=audio.webm;type=audio/webm`,
+          '-F', 'model=whisper-1',
+          '-F', 'language=ru',
+          '-F', 'response_format=json',
+          'https://api.openai.com/v1/audio/transcriptions'
+        ];
+
+        console.log('🔧 Executing curl command for transcription');
+
+        const { spawn } = require('child_process');
+        const curlProcess = spawn(curlCommand[0], curlCommand.slice(1), { stdio: ['pipe', 'pipe', 'pipe'] });
+
+        let responseOutput = '';
+        let errorOutput = '';
+
+        curlProcess.stdout.on('data', (data) => {
+          responseOutput += data.toString();
         });
 
-        console.log('📡 Whisper response status:', response.status);
+        curlProcess.stderr.on('data', (data) => {
+          errorOutput += data.toString();
+        });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('❌ Whisper API error:', errorText);
+        const response = await new Promise((resolve, reject) => {
+          curlProcess.on('close', (code) => {
+            if (code === 0) {
+              resolve(responseOutput);
+            } else {
+              reject(new Error(`Curl failed with code ${code}: ${errorOutput}`));
+            }
+          });
+
+          curlProcess.on('error', (error) => {
+            reject(error);
+          });
+        });
+
+        // Parse the response
+        let result;
+        try {
+          result = JSON.parse(response);
+        } catch (parseError) {
+          console.error('❌ Failed to parse Whisper response:', response);
+          throw new Error('Invalid JSON response from Whisper API');
+        }
+
+        // Check for API errors
+        if (result.error) {
+          console.error('❌ Whisper API error:', JSON.stringify(result.error, null, 2));
 
           // Check for region blocking error
-          if (errorText.includes('unsupported_country_region_territory')) {
+          if (result.error.code === 'unsupported_country_region_territory') {
             console.warn('⚠️ Whisper API blocked for this region, using fallback...');
             res.json({
               text: 'Привет, я готов учиться!',
@@ -1191,10 +1233,9 @@ grade >= 7 ?
             return;
           }
 
-          throw new Error(`Whisper API returned ${response.status}: ${errorText}`);
+          throw new Error(`Whisper API error: ${result.error.message || JSON.stringify(result.error)}`);
         }
 
-        const result = await response.json();
         console.log('✅ Transcription successful:', result.text?.substring(0, 50) + '...');
 
         res.json({
@@ -1208,6 +1249,15 @@ grade >= 7 ?
           error: 'OpenAI Whisper API error',
           details: error.message
         });
+      } finally {
+        // Clean up temporary file
+        try {
+          if (fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath);
+          }
+        } catch (cleanupError) {
+          console.warn('⚠️ Failed to cleanup temp file:', cleanupError.message);
+        }
       }
     } catch (error) {
       console.error('❌ Transcription setup error:', error);
