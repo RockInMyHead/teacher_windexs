@@ -178,16 +178,37 @@ sudo systemctl stop teacher-proxy teacher-frontend 2>/dev/null || true
 
 # Убедимся, что порты свободны
 log "🔍 Проверка занятых портов..."
-if lsof -ti:1038 >/dev/null 2>&1; then
-    warning "⚠️ Порт 1038 занят, освобождаем..."
-    sudo kill -9 $(lsof -ti:1038) 2>/dev/null || true
-    sleep 2
-fi
-if lsof -ti:1031 >/dev/null 2>&1; then
-    warning "⚠️ Порт 1031 занят, освобождаем..."
-    sudo kill -9 $(lsof -ti:1031) 2>/dev/null || true
-    sleep 2
-fi
+
+cleanup_port() {
+    local port=$1
+    local retries=5
+    
+    while [ $retries -gt 0 ]; do
+        if lsof -ti:$port >/dev/null 2>&1; then
+            warning "⚠️ Порт $port занят, процесс $(lsof -ti:$port), убиваем..."
+            sudo kill -9 $(lsof -ti:$port) 2>/dev/null || true
+        elif fuser $port/tcp >/dev/null 2>&1; then
+             warning "⚠️ Порт $port занят (fuser), убиваем..."
+             sudo fuser -k -n tcp $port 2>/dev/null || true
+        else
+            log "✅ Порт $port свободен"
+            return 0
+        fi
+        
+        sleep 2
+        ((retries--))
+    done
+    
+    if lsof -ti:$port >/dev/null 2>&1; then
+        error "❌ Не удалось освободить порт $port!"
+        return 1
+    fi
+    
+    return 0
+}
+
+cleanup_port 1038 || exit 1
+cleanup_port 1031 || exit 1
 
 # Запуск сервисов
 log "🚀 Запуск teacher-proxy..."
