@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "proxy": "node proxy-server.cjs",
     "start:single-port": "node single-port-server.cjs",
+    "start:production": "node single-port-server.cjs",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run --exclude \"**/e2e/**\"",

@@ -155,7 +155,7 @@ User=$USER
 WorkingDirectory=$(pwd)
 Environment=PATH=/usr/bin:/bin:/usr/local/bin
 Environment=NODE_ENV=production
-Environment=VITE_DEV_PORT=1031
+Environment=PORT=1031
 Environment=PROXY_PORT=1038
 ExecStart=$NPM_PATH run start:production
 Restart=always
