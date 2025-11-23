@@ -250,3 +250,11 @@ module.exports = app;
 console.log(`🔧 Proxy middleware ready (port: ${PORT})`);
 console.log(`🌐 ОБЯЗАТЕЛЬНЫЙ прокси для OpenAI: ${PROXY_URL}`);
 console.log(`⚡ Все API запросы идут через прокси`);
+
+// Запуск сервера если файл запущен напрямую (для systemd)
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Proxy server running on port ${PORT}`);
+    console.log(`🌐 Health check: http://localhost:${PORT}/health`);
+  });
+}
