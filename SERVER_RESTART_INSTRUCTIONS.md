@@ -12,7 +12,7 @@
 **Должно быть:**
 ```
 🚀 Запуск Single Port Server (порт 1031)
-🌐 Доступно на: http://localhost:1031
+🌐 Доступно на: https://teacher.windexs.ru/
 ```
 
 ---
@@ -133,7 +133,7 @@ curl https://teacher.windexs.ru/api/models
 ✅ API Proxy сервер запущен
 
 🎉 Single Port Server готов!
-🌐 Доступно на: http://localhost:1031
+🌐 Доступно на: https://teacher.windexs.ru/
 ```
 
 ---

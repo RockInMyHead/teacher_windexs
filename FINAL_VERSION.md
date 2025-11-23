@@ -110,7 +110,7 @@ Single-Port Server (:1031)
 ```bash
 npm install
 npm run start:single-port
-# Доступно на http://localhost:1031
+# Доступно на https://teacher.windexs.ru/
 ```
 
 ### Production:

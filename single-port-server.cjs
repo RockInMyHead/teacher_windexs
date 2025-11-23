@@ -1204,10 +1204,10 @@ grade >= 7 ?
     console.log('');
     console.log('🎉 TRUE SINGLE-PORT SERVER ГОТОВ!');
     console.log('==================================');
-    console.log(`🌐 Доступно на: http://localhost:${process.env.PORT}`);
-    console.log(`📡 API: http://localhost:${process.env.PORT}/api/*`);
-    console.log(`💻 Frontend: http://localhost:${process.env.PORT}/`);
-    console.log(`💚 Health: http://localhost:${process.env.PORT}/health`);
+    console.log(`🌐 Доступно на: https://teacher.windexs.ru/`);
+    console.log(`📡 API: https://teacher.windexs.ru/api/*`);
+    console.log(`💻 Frontend: https://teacher.windexs.ru/`);
+    console.log(`💚 Health: https://teacher.windexs.ru/health`);
     console.log('');
     console.log(`ТОЛЬКО ОДИН ПОРТ: ${process.env.PORT} ✅`);
     console.log('');

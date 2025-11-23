@@ -49,7 +49,7 @@ $ ./start-servers.sh
 📱 Frontend (Vite): порт 1037
 🤖 Proxy (OpenAI): порт 1038
 ✅ Все серверы запущены!
-🌐 Приложение доступно: http://localhost:1037
+🌐 Приложение доступно: https://teacher.windexs.ru/
 ```
 
 ### quick-deploy.sh (Production)

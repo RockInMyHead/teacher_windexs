@@ -227,7 +227,7 @@ cat .env | grep OPENAI_API_KEY
 ✅ API Proxy сервер запущен
 
 🎉 Single Port Server готов!
-🌐 Доступно на: http://localhost:1031
+🌐 Доступно на: https://teacher.windexs.ru/
 💚 Health check: http://localhost:1031/health
 📡 API endpoints: http://localhost:1031/api/*
 ```

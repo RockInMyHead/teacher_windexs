@@ -144,7 +144,7 @@ npm run start:server
 Серверы запустятся на портах:
 - **Frontend (Vite)**: http://localhost:1037
 - **Proxy (OpenAI)**: http://localhost:1038
-- **Production**: http://localhost:1039
+- **Production**: https://teacher.windexs.ru/
 
 #### Управление серверами
 
