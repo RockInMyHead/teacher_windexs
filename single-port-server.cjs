@@ -1221,7 +1221,7 @@ grade >= 7 ?
         let errorOutput = '';
 
         curlProcess.stdout.on('data', (data) => {
-          responseOutput += data.toString();
+          responseOutput += data.toString('utf8');
         });
 
         curlProcess.stderr.on('data', (data) => {
