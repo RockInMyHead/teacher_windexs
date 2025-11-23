@@ -253,47 +253,53 @@ console.log(`⚡ Все API запросы идут через прокси`);
 
 // Запуск сервера если файл запущен напрямую (для systemd)
 if (require.main === module) {
-  const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Proxy server running on port ${PORT}`);
-    console.log(`🌐 Health check: http://localhost:${PORT}/health`);
-  });
-
-  // Обработка ошибок
-  server.on('error', (error) => {
-    if (error.code === 'EADDRINUSE') {
-      console.error(`❌ Port ${PORT} уже занят!`);
-      process.exit(1);
-    } else {
-      console.error('❌ Server error:', error);
-      process.exit(1);
-    }
-  });
-
-  // Graceful shutdown
-  process.on('SIGTERM', () => {
-    console.log('🛑 Получен SIGTERM, завершаем работу...');
-    server.close(() => {
-      console.log('✅ Сервер остановлен');
-      process.exit(0);
+  const startServer = (retries = 5) => {
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Proxy server running on port ${PORT} (PID: ${process.pid})`);
+      console.log(`🌐 Health check: http://localhost:${PORT}/health`);
     });
-  });
 
-  process.on('SIGINT', () => {
-    console.log('🛑 Получен SIGINT, завершаем работу...');
-    server.close(() => {
-      console.log('✅ Сервер остановлен');
-      process.exit(0);
+    // Обработка ошибок
+    server.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${PORT} уже занят! (PID: ${process.pid})`);
+        if (retries > 0) {
+          console.log(`🔄 Повторная попытка запуска через 1 сек... (осталось ${retries})`);
+          setTimeout(() => {
+            server.close();
+            startServer(retries - 1);
+          }, 1000);
+        } else {
+          console.error('❌ Не удалось запустить сервер после нескольких попыток.');
+          process.exit(1);
+        }
+      } else {
+        console.error('❌ Server error:', error);
+        process.exit(1);
+      }
     });
-  });
+
+    // Graceful shutdown
+    const shutdown = (signal) => {
+      console.log(`🛑 Получен ${signal}, завершаем работу (PID: ${process.pid})...`);
+      server.close(() => {
+        console.log('✅ Сервер остановлен');
+        process.exit(0);
+      });
+    };
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
+  };
+
+  startServer();
 
   // Предотвращаем завершение процесса при необработанных исключениях
   process.on('uncaughtException', (error) => {
     console.error('❌ Uncaught Exception:', error);
-    // Не завершаем процесс, только логируем
   });
 
   process.on('unhandledRejection', (reason, promise) => {
     console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-    // Не завершаем процесс, только логируем
   });
 }
