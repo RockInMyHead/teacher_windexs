@@ -490,14 +490,17 @@ const VoiceCallPage: React.FC = () => {
       // Extract theses from response
       const theses = extractTheses(response);
       setSpeechTheses(theses);
+
+      // Clean response from headers for TTS and display
+      const cleanResponse = cleanMarkdownHeaders(response);
+
+      // Use cleaned response for TTS and display
+      let textForTTS = cleanResponse;
       
-      // Use full response for TTS (no sections to remove)
-      let textForTTS = response.trim();
-      
-      // Add assistant message
+      // Add assistant message (using cleaned response)
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: response,
+        content: cleanResponse,
         timestamp: new Date()
       }]);
 
@@ -729,6 +732,17 @@ const VoiceCallPage: React.FC = () => {
       const result = await response.json();
       console.log('✅ Transcription result:', result.text?.substring(0, 50) + '...');
       return result.text || '';
+  };
+
+  // Clean markdown headers from response for better TTS and display
+  const cleanMarkdownHeaders = (text: string): string => {
+    // Remove headers like ## Приветствие, ## Разминка, ## Обратная связь, etc.
+    // Also remove the empty lines that follow headers
+    return text
+      .replace(/^## .*$/gm, '') // Remove header lines
+      .replace(/^\s*$/gm, '') // Remove empty lines
+      .replace(/\n\s*\n/g, '\n') // Replace multiple newlines with single
+      .trim();
   };
 
   // Extract key theses from LLM response
