@@ -475,6 +475,16 @@ function startSinglePortServer() {
     });
   });
 
+  // Test responses endpoint
+  app.post('/api/test-responses', (req, res) => {
+    console.log('🧪 TEST endpoint called:', req.body);
+    res.json({
+      status: 'OK',
+      received: req.body,
+      timestamp: new Date().toISOString()
+    });
+  });
+
   // Chat completions
   app.post('/api/chat/completions', async (req, res) => {
     const requestStartTime = Date.now();
