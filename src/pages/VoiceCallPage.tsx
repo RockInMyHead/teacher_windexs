@@ -1105,7 +1105,7 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
                     autoPlay
                     loop
                   >
-                    <source src="/Untitled Video.mp4" type="video/mp4" />
+                    <source src="/avatar.mp4" type="video/mp4" />
                     Ваш браузер не поддерживает видео элемент.
                   </video>
 
