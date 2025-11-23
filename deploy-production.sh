@@ -176,27 +176,38 @@ sudo systemctl stop teacher-proxy teacher-frontend 2>/dev/null || true
 sudo systemctl start teacher-proxy
 sudo systemctl start teacher-frontend
 
-# Ожидание запуска
-sleep 5
+# Ожидание запуска (увеличено время)
+log "⏳ Ожидание полного запуска сервисов..."
+sleep 10
 
-# Проверка статуса
+# Проверка статуса с повторными попытками
 log "📊 Проверка статуса сервисов..."
 
-if sudo systemctl is-active --quiet teacher-proxy; then
-    log "✅ Прокси-сервер запущен"
-else
-    error "❌ Прокси-сервер не запустился!"
-    sudo journalctl -u teacher-proxy -n 20
-    exit 1
-fi
+# Функция для проверки сервиса с повторными попытками
+check_service() {
+    local service_name=$1
+    local max_attempts=5
+    local attempt=1
 
-if sudo systemctl is-active --quiet teacher-frontend; then
-    log "✅ Frontend запущен"
-else
-    error "❌ Frontend не запустился!"
-    sudo journalctl -u teacher-frontend -n 20
-    exit 1
-fi
+    while [ $attempt -le $max_attempts ]; do
+        if sudo systemctl is-active --quiet $service_name; then
+            log "✅ $service_name запущен"
+            return 0
+        fi
+
+        log "⏳ Ожидание $service_name (попытка $attempt/$max_attempts)..."
+        sleep 3
+        ((attempt++))
+    done
+
+    error "❌ $service_name не запустился после $max_attempts попыток!"
+    sudo journalctl -u $service_name -n 20
+    return 1
+}
+
+# Проверка сервисов
+check_service teacher-proxy || exit 1
+check_service teacher-frontend || exit 1
 
 if sudo systemctl is-active --quiet nginx; then
     log "✅ Nginx запущен"
@@ -208,25 +219,49 @@ fi
 # Проверка доступности
 log "🔍 Проверка доступности сервисов..."
 
+# Функция для проверки HTTP доступности
+check_http() {
+    local url=$1
+    local service_name=$2
+    local max_attempts=5
+    local attempt=1
+
+    while [ $attempt -le $max_attempts ]; do
+        if curl -s -f --max-time 10 $url > /dev/null; then
+            log "✅ $service_name отвечает ($url)"
+            return 0
+        fi
+
+        log "⏳ Ожидание $service_name (попытка $attempt/$max_attempts)..."
+        sleep 2
+        ((attempt++))
+    done
+
+    warning "⚠️  $service_name не отвечает после $max_attempts попыток ($url)"
+    return 1
+}
+
 # Проверка health endpoint прокси-сервера
-if curl -s -f http://localhost:1038/health > /dev/null; then
-    log "✅ Прокси-сервер отвечает на health check"
-else
-    warning "⚠️  Прокси-сервер не отвечает на health check"
-fi
+check_http "http://localhost:1038/health" "Прокси-сервер"
 
 # Проверка frontend
-if curl -s -f http://localhost:1031 > /dev/null; then
-    log "✅ Frontend отвечает"
-else
-    warning "⚠️  Frontend не отвечает"
-fi
+check_http "http://localhost:1031/health" "Frontend"
 
 # Проверка Nginx
-if curl -s -f -I https://teacher.windexs.ru | grep -q "200 OK"; then
-    log "✅ Сайт доступен по HTTPS"
+if [ -f "/etc/letsencrypt/live/teacher.windexs.ru/fullchain.pem" ]; then
+    # SSL есть - проверяем HTTPS
+    if curl -s -f -I --max-time 10 https://teacher.windexs.ru/health | grep -q "200 OK"; then
+        log "✅ Сайт доступен по HTTPS"
+    else
+        warning "⚠️  Сайт не доступен по HTTPS"
+    fi
 else
-    warning "⚠️  Сайт не доступен по HTTPS"
+    # SSL нет - проверяем HTTP
+    if curl -s -f -I --max-time 10 http://teacher.windexs.ru/health | grep -q "200 OK"; then
+        log "✅ Сайт доступен по HTTP"
+    else
+        warning "⚠️  Сайт не доступен по HTTP"
+    fi
 fi
 
 echo ""
