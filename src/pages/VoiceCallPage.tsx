@@ -1045,23 +1045,14 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
                   {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                   {isMuted ? 'Включить микрофон' : 'Выключить микрофон'}
                 </Button>
-
-                <Button
-                  variant="outline"
-                  onClick={endLesson}
-                  className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-                >
-                  <PhoneOff className="w-4 h-4" />
-                  Завершить урок
-                </Button>
               </div>
 
-              {/* Key Theses */}
+              {/* Key Theses - Displayed between microphone button and end lesson button */}
               {speechTheses.length > 0 && (
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 shadow-sm mt-4">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 shadow-sm">
                   <h3 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
                     <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                    Ключевые тезисы
+                    Ключевые тезисы урока
                   </h3>
                   <ol className="space-y-2">
                     {speechTheses.map((thesis, index) => (
@@ -1081,6 +1072,18 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
                   </button>
                 </div>
               )}
+
+              {/* End lesson button */}
+              <div className="flex justify-center">
+                <Button
+                  variant="outline"
+                  onClick={endLesson}
+                  className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <PhoneOff className="w-4 h-4" />
+                  Завершить урок
+                </Button>
+              </div>
 
               {/* Error */}
               {error && (
