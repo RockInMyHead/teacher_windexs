@@ -127,9 +127,12 @@ WorkingDirectory=$(pwd)
 Environment=PATH=/usr/bin:/bin:/usr/local/bin
 Environment=NODE_ENV=production
 Environment=PROXY_PORT=1038
-ExecStart=$NODE_PATH proxy-server.cjs
+ExecStart=$NODE_PATH $(pwd)/proxy-server.cjs
 Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=teacher-proxy
 
 [Install]
 WantedBy=multi-user.target
@@ -170,10 +173,28 @@ sudo systemctl enable teacher-proxy
 sudo systemctl enable teacher-frontend
 
 # Остановить существующие сервисы перед запуском
+log "🛑 Остановка существующих сервисов..."
 sudo systemctl stop teacher-proxy teacher-frontend 2>/dev/null || true
 
+# Убедимся, что порты свободны
+log "🔍 Проверка занятых портов..."
+if lsof -ti:1038 >/dev/null 2>&1; then
+    warning "⚠️ Порт 1038 занят, освобождаем..."
+    sudo kill -9 $(lsof -ti:1038) 2>/dev/null || true
+    sleep 2
+fi
+if lsof -ti:1031 >/dev/null 2>&1; then
+    warning "⚠️ Порт 1031 занят, освобождаем..."
+    sudo kill -9 $(lsof -ti:1031) 2>/dev/null || true
+    sleep 2
+fi
+
 # Запуск сервисов
+log "🚀 Запуск teacher-proxy..."
 sudo systemctl start teacher-proxy
+sleep 3
+
+log "🚀 Запуск teacher-frontend..."
 sudo systemctl start teacher-frontend
 
 # Ожидание запуска (увеличено время)

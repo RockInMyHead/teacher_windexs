@@ -253,8 +253,47 @@ console.log(`⚡ Все API запросы идут через прокси`);
 
 // Запуск сервера если файл запущен напрямую (для systemd)
 if (require.main === module) {
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Proxy server running on port ${PORT}`);
     console.log(`🌐 Health check: http://localhost:${PORT}/health`);
+  });
+
+  // Обработка ошибок
+  server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} уже занят!`);
+      process.exit(1);
+    } else {
+      console.error('❌ Server error:', error);
+      process.exit(1);
+    }
+  });
+
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    console.log('🛑 Получен SIGTERM, завершаем работу...');
+    server.close(() => {
+      console.log('✅ Сервер остановлен');
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGINT', () => {
+    console.log('🛑 Получен SIGINT, завершаем работу...');
+    server.close(() => {
+      console.log('✅ Сервер остановлен');
+      process.exit(0);
+    });
+  });
+
+  // Предотвращаем завершение процесса при необработанных исключениях
+  process.on('uncaughtException', (error) => {
+    console.error('❌ Uncaught Exception:', error);
+    // Не завершаем процесс, только логируем
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+    // Не завершаем процесс, только логируем
   });
 }
