@@ -744,9 +744,26 @@ function startSinglePortServer() {
       
       // Use OpenAI client
       const { OpenAI } = require('openai');
-      const client = new OpenAI({
+      const { SocksProxyAgent } = require('socks-proxy-agent');
+
+      // Configure proxy agent if PROXY_URL is set
+      let clientConfig = {
         apiKey: process.env.OPENAI_API_KEY
-      });
+      };
+
+      if (PROXY_URL) {
+        try {
+          const proxyAgent = new SocksProxyAgent(PROXY_URL);
+          clientConfig.httpAgent = proxyAgent;
+          clientConfig.httpsAgent = proxyAgent;
+          console.log('🔧 OpenAI client configured with proxy:', PROXY_URL);
+        } catch (proxyError) {
+          console.warn('⚠️ Failed to configure proxy for OpenAI client:', proxyError.message);
+          console.warn('🔧 Continuing without proxy...');
+        }
+      }
+
+      const client = new OpenAI(clientConfig);
 
       let output_text;
 
