@@ -77,7 +77,16 @@ NODE_ENV=production npm run build
 
 # Копирование Nginx конфигурации
 log "🌐 Настройка Nginx..."
-sudo cp nginx-teacher.conf /etc/nginx/sites-available/teacher.windexs.ru
+
+# Проверка наличия SSL сертификатов
+if [ -f "/etc/letsencrypt/live/teacher.windexs.ru/fullchain.pem" ]; then
+    log "✅ SSL сертификаты найдены, используем HTTPS конфигурацию"
+    sudo cp nginx-teacher.conf /etc/nginx/sites-available/teacher.windexs.ru
+else
+    warning "⚠️ SSL сертификаты не найдены, используем HTTP конфигурацию для тестирования"
+    sudo cp nginx-teacher-no-ssl.conf /etc/nginx/sites-available/teacher.windexs.ru
+fi
+
 sudo ln -sf /etc/nginx/sites-available/teacher.windexs.ru /etc/nginx/sites-enabled/
 
 # Удаление дефолтного сайта если существует
@@ -227,5 +236,15 @@ echo "  sudo systemctl restart teacher-proxy teacher-frontend"
 echo "  journalctl -u teacher-proxy -f"
 echo "  journalctl -u teacher-frontend -f"
 echo ""
-warning "📝 Не забудьте настроить SSL сертификаты:"
-echo "  sudo certbot --nginx -d teacher.windexs.ru"
+# Проверка и настройка SSL
+if [ ! -f "/etc/letsencrypt/live/teacher.windexs.ru/fullchain.pem" ]; then
+    echo ""
+    warning "🔐 SSL сертификаты не настроены!"
+    info "Для настройки HTTPS выполните:"
+    echo "  sudo certbot --nginx -d teacher.windexs.ru"
+    echo ""
+    info "Пока сертификатов нет, сайт работает по HTTP: http://teacher.windexs.ru"
+    echo "После настройки SSL сайт будет доступен по HTTPS: https://teacher.windexs.ru"
+else
+    log "✅ SSL сертификаты настроены"
+fi
