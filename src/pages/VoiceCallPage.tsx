@@ -314,26 +314,36 @@ const VoiceCallPage: React.FC = () => {
       }
     }
     
-    // Dynamic speech threshold: noise floor * 1.5 (more stable system)
-    const MIN_THRESHOLD = 12; // Минимальный абсолютный порог (higher for stability)
-    const dynamicThreshold = Math.max(noiseFloorRef.current * 1.5, MIN_THRESHOLD);
+    // Dynamic speech threshold: noise floor * 1.8 (adaptive to environment)
+    const MIN_THRESHOLD = 6; // Минимальный абсолютный порог (reasonable for various environments)
+    const dynamicThreshold = Math.max(noiseFloorRef.current * 1.8, MIN_THRESHOLD);
 
     // Periodic logging to debug detection issues (every 50 frames = ~2.5 seconds)
     if (speechFramesRef.current === 0 && silenceFramesRef.current % 50 === 0 && silenceFramesRef.current > 0) {
       console.log(`👂 Listening... avg=${average.toFixed(1)}, max=${max}, threshold=${dynamicThreshold.toFixed(1)} (normal speaking volume)`);
     }
 
-    // После начала речи используем стабильный порог для детекции тишины (не ниже начального порога)
+    // После начала речи используем стабильный порог для детекции тишины
     const silenceThreshold = speechDetectedRef.current
-      ? Math.max(dynamicThreshold * 0.8, MIN_THRESHOLD * 0.8) // Более стабильный порог после речи (80% от основного)
+      ? Math.max(dynamicThreshold * 0.7, MIN_THRESHOLD * 0.6) // Более низкий порог после речи для стабильности
       : dynamicThreshold; // Порог для начала речи
 
-    // Стабильная логика обнаружения речи:
-    // 1. Средняя энергия превышает порог И
-    // 2. Есть значительный пик энергии (менее чувствительный)
+    // Стабильная логика обнаружения речи с гистерезисом:
+    // Добавляем небольшой буфер для предотвращения колебаний
+    const speechHysteresis = 1.2; // Небольшой буфер для стабильности
+    const silenceHysteresis = 0.9; // Буфер для тишины
+
+    const effectiveSpeechThreshold = speechDetectedRef.current
+      ? silenceThreshold * speechHysteresis // Немного выше для поддержания речи
+      : dynamicThreshold;
+
+    const effectiveSilenceThreshold = speechDetectedRef.current
+      ? silenceThreshold * silenceHysteresis // Немного ниже для окончания речи
+      : dynamicThreshold;
+
     const isSpeech = speechDetectedRef.current
-      ? average > silenceThreshold && max > noiseFloorRef.current * 2.2 // После начала речи более строгие критерии
-      : average > dynamicThreshold || max > noiseFloorRef.current * 2.5; // Для начала речи гибкие критерии
+      ? average > effectiveSilenceThreshold || max > noiseFloorRef.current * 2.0 // После начала речи - поддержание
+      : average > effectiveSpeechThreshold || max > noiseFloorRef.current * 2.5; // Для начала речи
     
     if (isSpeech) {
       // Speech detected
