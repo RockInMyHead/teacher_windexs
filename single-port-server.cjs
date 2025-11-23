@@ -713,7 +713,7 @@ function startSinglePortServer() {
     console.log('🚀 [API] Body:', req.body);
 
     const requestStartTime = Date.now();
-    console.log('📨 [BACKEND TIMING] T+0ms: GPT-5.1 responses request received');
+    console.log('📨 [BACKEND TIMING] T+0ms: LLM responses request received');
     const requestBodyStr = JSON.stringify(req.body);
     console.log('📨 Request body length:', requestBodyStr.length, 'characters');
     console.log('📨 Request body preview:', requestBodyStr.substring(0, 500) + '...');
@@ -741,53 +741,38 @@ function startSinglePortServer() {
       }
 
       console.log('🔍 [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Input length:', input.length, 'characters');
-      console.log('🤖 Using GPT-5.1 model');
-
-      // Use OpenAI client for GPT-5.1
+      
+      // Use OpenAI client
       const { OpenAI } = require('openai');
       const client = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY
       });
 
-      console.log('📤 Sending request to GPT-5.1 via responses.create...');
-
-      let response;
       let output_text;
 
-      // Try GPT-5.1 responses API first (as per user's example)
-      console.log('🔍 [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Trying GPT-5.1 responses API');
+      // Use chat.completions API (standard OpenAI API)
+      console.log('🔍 [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Calling chat.completions API');
       try {
-        console.log('📤 Calling client.responses.create...');
-        response = await client.responses.create({
-          model: 'gpt-5.1',
-          input: input
-        });
-
-        output_text = response.output_text;
-        console.log('✅ [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: GPT-5.1 response received via responses.create');
-        console.log('📥 Response output_text length:', output_text ? output_text.length : 0);
-        console.log('📥 Response output_text preview:', output_text ? output_text.substring(0, 200) + '...' : 'EMPTY!');
-
-      } catch (responsesError) {
-        console.error('❌ [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: GPT-5.1 responses.create failed:', responsesError.message);
-        console.error('❌ Error details:', responsesError);
-        console.log('🔄 Falling back to chat.completions API with gpt-4o...');
+        const model = req.body.model || 'gpt-4o';
+        console.log('🤖 Using model:', model);
         
-        // Fallback to chat completions API
-        console.log('🔍 [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Calling chat.completions API');
         const chatResponse = await client.chat.completions.create({
-          model: 'gpt-4o',
+          model: model,
           messages: [{ role: 'user', content: input }],
           max_tokens: 10000,
           temperature: 0.7
         });
 
         output_text = chatResponse.choices[0].message.content;
-        response = { output_text };
 
-        console.log('✅ [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Fallback response received via chat.completions');
+        console.log('✅ [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Response received via chat.completions');
         console.log('📥 Response output_text length:', output_text ? output_text.length : 0);
         console.log('📥 Response output_text preview:', output_text ? output_text.substring(0, 200) + '...' : 'EMPTY!');
+
+      } catch (chatError) {
+        console.error('❌ [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: chat.completions failed:', chatError.message);
+        console.error('❌ Error details:', chatError);
+        throw chatError; // Re-throw to be caught by outer catch
       }
 
       if (!output_text || output_text.trim().length === 0) {
@@ -796,20 +781,20 @@ function startSinglePortServer() {
       }
 
       const requestDuration = Date.now() - requestStartTime;
-      console.log(`✅ [BACKEND TIMING] T+${requestDuration}ms: GPT-5.1 response completed`);
+      console.log(`✅ [BACKEND TIMING] T+${requestDuration}ms: LLM response completed`);
 
       res.json({
-        output_text: response.output_text
+        output_text: output_text
       });
 
     } catch (error) {
-      console.error('❌ GPT-5.1 API error:', error.message);
+      console.error('❌ LLM API error:', error.message);
       console.error('❌ Error stack:', error.stack);
       console.error('❌ Error details:', error);
       console.error('❌ Error name:', error.name);
       console.error('❌ Error code:', error.code);
       res.status(500).json({
-        error: 'GPT-5.1 API error',
+        error: 'LLM API error',
         details: error.message,
         type: error.constructor.name,
         stack: error.stack
