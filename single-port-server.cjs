@@ -750,7 +750,7 @@ function startSinglePortServer() {
       const requestBody = {
         model: model,
         messages: [{ role: 'user', content: input }],
-        max_tokens: 10000,
+        max_completion_tokens: 10000, // Changed from max_tokens to max_completion_tokens for newer models
         temperature: 0.7
       };
 
@@ -772,6 +772,12 @@ function startSinglePortServer() {
 
         // Parse response
         const response = JSON.parse(responseOutput);
+        
+        // Check for OpenAI API errors
+        if (response.error) {
+          console.error('❌ OpenAI API error:', JSON.stringify(response.error, null, 2));
+          throw new Error(`OpenAI API error: ${response.error.message || JSON.stringify(response.error)}`);
+        }
         
         if (!response.choices || !response.choices[0] || !response.choices[0].message) {
           console.error('❌ Invalid response structure:', JSON.stringify(response, null, 2));
