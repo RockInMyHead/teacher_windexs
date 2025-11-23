@@ -730,7 +730,8 @@ function startSinglePortServer() {
 
     try {
       console.log('🔍 [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Parsing request body');
-      const { model, input } = req.body;
+      const { input } = req.body;
+      const model = req.body.model || 'gpt-4o';
 
       if (!input) {
         console.error('❌ Missing input field in request');
@@ -741,8 +742,6 @@ function startSinglePortServer() {
       }
 
       console.log('🔍 [BACKEND TIMING] T+' + (Date.now() - requestStartTime) + 'ms: Input length:', input.length, 'characters');
-      
-      const model = req.body.model || 'gpt-4o';
       console.log('🤖 Using model:', model);
 
       // Use curlWithProxy (guaranteed to work with proxy)
