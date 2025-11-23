@@ -1082,46 +1082,79 @@ grade >= 7 ?
     try {
       console.log('🎤 TTS API called with body:', JSON.stringify(req.body));
 
-      // Use curlWithProxy (guaranteed to work with proxy)
-      console.log('📡 Making curlWithProxy request to OpenAI TTS API...');
+      // Use specialized curl spawn for binary audio data
+      console.log('📡 Making binary curl request to OpenAI TTS API...');
 
-      const responseOutput = await curlWithProxy('https://api.openai.com/v1/audio/speech', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'curl/7.68.0',
-          'Accept': '*/*'
-        },
-        data: req.body
+      const curlCommand = [
+        'curl',
+        '-s', // silent
+        '-X', 'POST',
+        '--proxy', PROXY_URL,
+        '-H', `Authorization: Bearer ${process.env.OPENAI_API_KEY}`,
+        '-H', 'Content-Type: application/json',
+        '-d', JSON.stringify(req.body),
+        'https://api.openai.com/v1/audio/speech'
+      ];
+
+      const { spawn } = require('child_process');
+      const curlProcess = spawn(curlCommand[0], curlCommand.slice(1), { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      let responseData = [];
+      let errorOutput = '';
+
+      curlProcess.stdout.on('data', (chunk) => {
+        responseData.push(chunk);
+      });
+
+      curlProcess.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+
+      await new Promise((resolve, reject) => {
+        curlProcess.on('close', (code) => {
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(new Error(`Curl failed with code ${code}: ${errorOutput}`));
+          }
+        });
+
+        curlProcess.on('error', (error) => {
+          reject(error);
+        });
       });
 
       console.log('✅ TTS response received via curl');
+      
+      const audioBuffer = Buffer.concat(responseData);
 
-      // Since this is binary audio data, we need to handle it differently
-      // curlWithProxy returns JSON string, but TTS returns binary audio
+      // Check if response is JSON error
       try {
-        const response = JSON.parse(responseOutput);
-        if (response.error) {
-          console.error('❌ OpenAI TTS API error:', JSON.stringify(response.error, null, 2));
-          return res.status(400).json({
-            error: 'OpenAI TTS API error',
-            details: response.error.message || JSON.stringify(response.error)
-          });
+        // Try to parse start of buffer to see if it's an error JSON
+        const textStart = audioBuffer.slice(0, 1000).toString('utf8');
+        if (textStart.trim().startsWith('{')) {
+           const response = JSON.parse(textStart);
+           if (response.error) {
+            console.error('❌ OpenAI TTS API error:', JSON.stringify(response.error, null, 2));
+            return res.status(400).json({
+              error: 'OpenAI TTS API error',
+              details: response.error.message || JSON.stringify(response.error)
+            });
+           }
         }
-      } catch (parseError) {
-        // If parsing fails, it might be binary data - treat as success
-        console.log('🔊 TTS binary data received, piping to client');
+      } catch (e) {
+        // Not JSON, so it's likely audio
       }
 
       // Set proper content type for audio
       res.setHeader('Content-Type', 'audio/mpeg');
       res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Content-Length', audioBuffer.length);
 
       // Send the binary data directly
-      res.send(Buffer.from(responseOutput, 'binary'));
+      res.send(audioBuffer);
 
-      console.log('✅ TTS audio sent to client');
+      console.log('✅ TTS audio sent to client, size:', audioBuffer.length);
 
     } catch (error) {
       console.error('❌ TTS error:', error);
