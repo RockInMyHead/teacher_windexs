@@ -140,9 +140,8 @@ EOF
 
 log "📝 Настройка сервиса teacher-frontend..."
 
-# Найти путь к npm
-NPM_PATH=$(which npm 2>/dev/null || find /usr -name npm 2>/dev/null | head -1 || find /home -name npm 2>/dev/null | head -1 || echo "npm")
-log "🔍 Путь к npm: $NPM_PATH"
+# Используем тот же NODE_PATH что и для proxy
+# NODE_PATH уже найден выше
 
 sudo tee /etc/systemd/system/teacher-frontend.service > /dev/null <<EOF
 [Unit]
@@ -157,9 +156,12 @@ Environment=PATH=/usr/bin:/bin:/usr/local/bin
 Environment=NODE_ENV=production
 Environment=PORT=1031
 Environment=PROXY_PORT=1038
-ExecStart=$NPM_PATH run start:production
+ExecStart=$NODE_PATH $(pwd)/single-port-server.cjs
 Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=teacher-frontend
 
 [Install]
 WantedBy=multi-user.target
