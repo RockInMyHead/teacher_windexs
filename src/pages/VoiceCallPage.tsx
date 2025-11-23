@@ -22,6 +22,7 @@ const VoiceCallPage: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [speechTheses, setSpeechTheses] = useState<string[]>([]);
+  const [audioBlocked, setAudioBlocked] = useState(false);
   
   // Use ref for lesson context to avoid closure issues
   const lessonContextRef = useRef<{
@@ -879,30 +880,66 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
       const audioUrl = URL.createObjectURL(audioBlob);
 
       return new Promise((resolve, reject) => {
-      const audio = new Audio(audioUrl);
+        const audio = new Audio(audioUrl);
 
-      audio.onended = () => {
-        URL.revokeObjectURL(audioUrl);
+        audio.onended = () => {
+          URL.revokeObjectURL(audioUrl);
           console.log('✅ TTS complete');
           resolve();
-      };
+        };
 
-      audio.onerror = (error) => {
+        audio.onerror = (error) => {
           console.error('❌ TTS playback error:', error);
-        URL.revokeObjectURL(audioUrl);
+          URL.revokeObjectURL(audioUrl);
           reject(error);
-      };
+        };
 
-        audio.play().catch((playError) => {
-          // Handle autoplay restrictions
-          if (playError.name === 'NotAllowedError') {
-            console.warn('⚠️ Autoplay blocked by browser. User interaction required.');
-            URL.revokeObjectURL(audioUrl);
-            resolve(); // Continue without sound
-          } else {
-            reject(playError);
-          }
-        });
+        // Try to play audio
+        const playPromise = audio.play();
+
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('🎵 TTS audio playing successfully');
+              setAudioBlocked(false); // Audio works fine
+            })
+            .catch((playError) => {
+              URL.revokeObjectURL(audioUrl);
+
+              // Handle autoplay restrictions
+              if (playError.name === 'NotAllowedError') {
+                console.warn('⚠️ Autoplay blocked by browser. Switching to browser TTS...');
+                setAudioBlocked(true); // Show indicator that audio is blocked
+
+                // Fallback to browser TTS immediately
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'ru-RU';
+                utterance.rate = 0.9; // Slightly slower for clarity
+                utterance.pitch = 1.0;
+
+                utterance.onend = () => {
+                  console.log('✅ Browser TTS complete (fallback)');
+                  resolve();
+                };
+
+                utterance.onerror = (error) => {
+                  console.error('❌ Browser TTS error:', error);
+                  resolve(); // Continue even if TTS fails
+                };
+
+                // Check if speech synthesis is available
+                if ('speechSynthesis' in window) {
+                  window.speechSynthesis.speak(utterance);
+                } else {
+                  console.warn('⚠️ Speech synthesis not available');
+                  resolve();
+                }
+              } else {
+                console.error('❌ Unexpected play error:', playError);
+                reject(playError);
+              }
+            });
+        }
       });
 
     } catch (error) {
@@ -910,14 +947,27 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
 
       // Fallback to browser TTS
       return new Promise((resolve) => {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'ru-RU';
-        utterance.onend = () => {
-          console.log('✅ Browser TTS complete');
+        if ('speechSynthesis' in window) {
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = 'ru-RU';
+          utterance.rate = 0.9;
+          utterance.pitch = 1.0;
+
+          utterance.onend = () => {
+            console.log('✅ Browser TTS complete');
+            resolve();
+          };
+
+          utterance.onerror = (error) => {
+            console.error('❌ Browser TTS error:', error);
+            resolve();
+          };
+
+          window.speechSynthesis.speak(utterance);
+        } else {
+          console.warn('⚠️ Speech synthesis not available');
           resolve();
-        };
-        utterance.onerror = () => resolve();
-        window.speechSynthesis.speak(utterance);
+        }
       });
     }
   };
@@ -1039,6 +1089,15 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
                       </div>
                     )}
                   </div>
+
+                  {/* Audio blocked indicator */}
+                  {audioBlocked && (
+                    <div className="absolute top-2 left-1/2 transform -translate-x-1/2 bg-yellow-100 border border-yellow-300 px-2 py-1 rounded-md shadow-sm">
+                      <span className="text-xs text-yellow-800 flex items-center gap-1">
+                        🔇 Автовоспроизведение заблокировано
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
