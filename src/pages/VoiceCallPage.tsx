@@ -45,11 +45,11 @@ const VoiceCallPage: React.FC = () => {
   const isActiveRef = useRef<boolean>(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Voice detection parameters (optimized for better sensitivity)
-  const CALIBRATION_FRAMES = 20; // ~1 second to measure background noise (faster calibration)
-  const QUICK_CALIBRATION_FRAMES = 5; // ~0.25 seconds for quick recalibration after resume
-  const REQUIRED_SPEECH_FRAMES = 5; // ~0.25 seconds of speech to mark as started (faster response)
-  const SILENCE_AFTER_SPEECH_FRAMES = 30; // ~1.5 seconds of silence after speech to stop (shorter pause)
+  // Voice detection parameters (balanced sensitivity)
+  const CALIBRATION_FRAMES = 30; // ~1.5 seconds to measure background noise (more stable calibration)
+  const QUICK_CALIBRATION_FRAMES = 10; // ~0.5 seconds for quick recalibration after resume
+  const REQUIRED_SPEECH_FRAMES = 8; // ~0.4 seconds of speech to mark as started (stable detection)
+  const SILENCE_AFTER_SPEECH_FRAMES = 50; // ~2.5 seconds of silence after speech to stop (longer pause)
   const REQUIRED_SILENCE_FRAMES = 150; // ~7.5 seconds of total silence for follow-up (reduced to avoid long waits)
   
   // Dynamic noise detection
@@ -313,26 +313,26 @@ const VoiceCallPage: React.FC = () => {
       }
     }
     
-    // Dynamic speech threshold: noise floor * 1.2 (более чувствительная система)
-    const MIN_THRESHOLD = 8; // Минимальный абсолютный порог (further lowered for quiet speech)
-    const dynamicThreshold = Math.max(noiseFloorRef.current * 1.2, MIN_THRESHOLD);
+    // Dynamic speech threshold: noise floor * 1.5 (more stable system)
+    const MIN_THRESHOLD = 12; // Минимальный абсолютный порог (higher for stability)
+    const dynamicThreshold = Math.max(noiseFloorRef.current * 1.5, MIN_THRESHOLD);
 
     // Periodic logging to debug detection issues (every 50 frames = ~2.5 seconds)
     if (speechFramesRef.current === 0 && silenceFramesRef.current % 50 === 0 && silenceFramesRef.current > 0) {
       console.log(`👂 Listening... avg=${average.toFixed(1)}, max=${max}, threshold=${dynamicThreshold.toFixed(1)} (normal speaking volume)`);
     }
 
-    // После начала речи используем еще более низкий порог для детекции тишины
+    // После начала речи используем стабильный порог для детекции тишины (не ниже начального порога)
     const silenceThreshold = speechDetectedRef.current
-      ? Math.max(noiseFloorRef.current * 1.1, 5) // Еще более низкий порог после речи
-      : dynamicThreshold; // Более низкий порог для начала речи
+      ? Math.max(dynamicThreshold * 0.8, MIN_THRESHOLD * 0.8) // Более стабильный порог после речи (80% от основного)
+      : dynamicThreshold; // Порог для начала речи
 
-    // Упрощенная логика обнаружения речи:
-    // 1. Средняя энергия превышает порог ИЛИ
-    // 2. Есть значительный пик энергии
+    // Стабильная логика обнаружения речи:
+    // 1. Средняя энергия превышает порог И
+    // 2. Есть значительный пик энергии (менее чувствительный)
     const isSpeech = speechDetectedRef.current
-      ? average > silenceThreshold || max > noiseFloorRef.current * 1.8 // После начала речи более гибкие критерии
-      : average > dynamicThreshold || max > noiseFloorRef.current * 2.0; // Для начала речи гибкие критерии
+      ? average > silenceThreshold && max > noiseFloorRef.current * 2.2 // После начала речи более строгие критерии
+      : average > dynamicThreshold || max > noiseFloorRef.current * 2.5; // Для начала речи гибкие критерии
     
     if (isSpeech) {
       // Speech detected
@@ -344,9 +344,9 @@ const VoiceCallPage: React.FC = () => {
         console.log(`🎤 SPEECH STARTED! avg=${average.toFixed(1)}, max=${max}, threshold=${dynamicThreshold.toFixed(1)}, silence_threshold=${silenceThreshold.toFixed(1)}`);
         speechDetectedRef.current = true;
       }
-      
-      // Log every 50 frames to monitor
-      if (speechDetectedRef.current && speechFramesRef.current % 50 === 0) {
+
+      // Log every 100 frames to monitor (less verbose)
+      if (speechDetectedRef.current && speechFramesRef.current % 100 === 0) {
         console.log(`🗣️ Speaking... frames=${speechFramesRef.current}, avg=${average.toFixed(1)}, max=${max}, silence_threshold=${silenceThreshold.toFixed(1)}`);
       }
     } else {
@@ -358,15 +358,22 @@ const VoiceCallPage: React.FC = () => {
         if (silenceAfterSpeechRef.current === 1) {
           console.log(`🤫 Silence detected: avg=${average.toFixed(1)}, silence_threshold=${silenceThreshold.toFixed(1)}`);
         }
-        
-        if (silenceAfterSpeechRef.current % 20 === 0) {
+
+        if (silenceAfterSpeechRef.current % 30 === 0 && silenceAfterSpeechRef.current > 1) {
           console.log(`🤫 Silence progress: ${silenceAfterSpeechRef.current}/${SILENCE_AFTER_SPEECH_FRAMES}, avg=${average.toFixed(1)}`);
         }
         
         if (silenceAfterSpeechRef.current >= SILENCE_AFTER_SPEECH_FRAMES) {
-          console.log(`✅ SPEECH ENDED after ${silenceAfterSpeechRef.current} frames of silence`);
-          processingTypeRef.current = 'speech';
-          stopRecording();
+          // Check minimum speech duration (at least 15 frames = ~0.75 seconds)
+          const MIN_SPEECH_DURATION = 15;
+          if (speechFramesRef.current >= MIN_SPEECH_DURATION) {
+            console.log(`✅ SPEECH ENDED after ${silenceAfterSpeechRef.current} frames of silence (${speechFramesRef.current} speech frames)`);
+            processingTypeRef.current = 'speech';
+            stopRecording();
+          } else {
+            console.log(`⚠️ Speech too short (${speechFramesRef.current} frames), restarting listening...`);
+            restartListening();
+          }
           return;
         }
       } else {
