@@ -2524,16 +2524,46 @@ grade >= 7 ?
 
   // Настраиваем static файлы frontend
   // ВАЖНО: НЕ обрабатываем /api/* пути как static файлы
+  const staticMiddleware = express.static(path.join(__dirname, 'dist'), {
+    index: false,
+    redirect: false,
+    setHeaders: (res, filePath) => {
+      // Устанавливаем правильные заголовки для статических файлов
+      if (filePath.endsWith('.js')) {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      } else if (filePath.endsWith('.css')) {
+        res.setHeader('Content-Type', 'text/css; charset=utf-8');
+      }
+    }
+  });
+
   app.use((req, res, next) => {
     // Пропускаем все /api/* маршруты
     if (req.path.startsWith('/api/') || req.path === '/health') {
       return next();
     }
-    // Для остальных путей используем static middleware
-    express.static(path.join(__dirname, 'dist'), {
-      index: false,
-      redirect: false
-    })(req, res, next);
+    
+    // Логируем запросы к статическим файлам для диагностики
+    if (req.path.startsWith('/assets/') || req.path.startsWith('/favicon')) {
+      console.log(`📦 Static file request: ${req.path}`);
+    }
+    
+    // Используем static middleware с обработкой ошибок
+    staticMiddleware(req, res, (err) => {
+      if (err) {
+        console.error(`❌ Static file error for ${req.path}:`, err.message);
+        // Если файл не найден, продолжаем к SPA fallback
+        if (err.status === 404) {
+          return next();
+        }
+        return next(err);
+      }
+      // Если файл найден и отправлен, не вызываем next()
+      // Если файл не найден, вызываем next() для SPA fallback
+      if (!res.headersSent) {
+        next();
+      }
+    });
   });
 
   // Get course details with current lesson
@@ -2615,7 +2645,45 @@ grade >= 7 ?
   // Это позволяет React Router обработать маршруты на клиенте
   app.use((req, res) => {
     console.log(`📄 SPA fallback для пути: ${req.path}`);
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    
+    // Устанавливаем правильные заголовки для HTML
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    
+    const indexPath = path.join(__dirname, 'dist', 'index.html');
+    
+    // Проверяем существование файла
+    const fs = require('fs');
+    if (!fs.existsSync(indexPath)) {
+      console.error(`❌ index.html не найден по пути: ${indexPath}`);
+      return res.status(500).send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Error</title></head>
+        <body>
+          <h1>500 - Internal Server Error</h1>
+          <p>index.html не найден. Проверьте, что проект собран (npm run build).</p>
+          <p>Ожидаемый путь: ${indexPath}</p>
+        </body>
+        </html>
+      `);
+    }
+    
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        console.error(`❌ Ошибка отправки index.html:`, err);
+        res.status(500).send(`
+          <!DOCTYPE html>
+          <html>
+          <head><title>Error</title></head>
+          <body>
+            <h1>500 - Internal Server Error</h1>
+            <p>Ошибка загрузки index.html: ${err.message}</p>
+          </body>
+          </html>
+        `);
+      }
+    });
   });
 
   console.log('✅ Static файлы и SPA fallback настроены');
