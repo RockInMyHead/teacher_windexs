@@ -491,8 +491,8 @@ const VoiceCallPage: React.FC = () => {
       const theses = extractTheses(response);
       setSpeechTheses(theses);
       
-      // Remove "Ключевые тезисы" section from TTS (remove everything after "Ключевые тезисы")
-      let textForTTS = response.replace(/Ключевые тезисы[\s\S]*$/i, '').trim();
+      // Use full response for TTS (no sections to remove)
+      let textForTTS = response.trim();
       
       // Add assistant message
       setMessages(prev => [...prev, {
@@ -732,50 +732,71 @@ const VoiceCallPage: React.FC = () => {
   // Extract key theses from LLM response
   const extractTheses = (response: string): string[] => {
     const theses: string[] = [];
-    
-    // Look for "Ключевые тезисы" section - capture until end of text
-    const thesesMatch = response.match(/Ключевые тезисы[\s\S]*$/i);
-    if (!thesesMatch) {
-      console.log('❌ No "Ключевые тезисы" section found');
+
+    // Extract theses from the main teacher response (before "Ключевые тезисы" section)
+    // Split response at "Ключевые тезисы" to get only teacher explanations
+    const teacherResponse = response.split(/Ключевые тезисы/i)[0].trim();
+
+    if (!teacherResponse) {
+      console.log('❌ No teacher response found before theses section');
       return theses;
     }
-    
-    const thesesText = thesesMatch[0];
-    console.log('📋 Theses section found, length:', thesesText.length);
-    
-    // Extract numbered items - support both digits (1., 2., 3.) and words (один., два., три.)
-    const numberWords = ['один', 'два', 'три', 'четыре', 'пять', 'первый', 'второй', 'третий'];
-    
-    // Pattern for digit numbering: "1. Text" or "1) Text"
-    const digitPattern = /(?:^|\n)\s*(\d+)[.\)]\s*([^\n]+)/g;
-    
-    // Pattern for word numbering: "один. Text" or "Первый. Text"
-    const wordPattern = new RegExp(`(?:^|\\n)\\s*(${numberWords.join('|')})[.\\):]\\s*([^\\n]+)`, 'gi');
-    
-    let match;
-    
-    // Try digit pattern first
-    while ((match = digitPattern.exec(thesesText)) !== null) {
-      const cleanItem = match[2].trim();
-      if (cleanItem && cleanItem.length > 0 && cleanItem.length < 150) {
-        console.log('✅ Found digit thesis:', cleanItem);
-        theses.push(cleanItem);
-      }
-    }
-    
-    // If no digit pattern found, try word pattern
-    if (theses.length === 0) {
-      console.log('⚠️ No digit theses found, trying word pattern...');
-      while ((match = wordPattern.exec(thesesText)) !== null) {
-        const cleanItem = match[2].trim();
-        if (cleanItem && cleanItem.length > 0 && cleanItem.length < 150) {
-          console.log('✅ Found word thesis:', cleanItem);
-          theses.push(cleanItem);
+
+    console.log('📚 Extracting theses from teacher response, length:', teacherResponse.length);
+
+    // Look for sentences that contain key concepts (sentences with important markers)
+    const sentences = teacherResponse.split(/[.!?]+/).filter(s => s.trim().length > 10);
+
+    // Extract meaningful sentences that likely contain key teachings
+    const keyIndicators = [
+      'общество', 'люди', 'связь', 'отношения', 'правила', 'ценности',
+      'группа', 'коллектив', 'вместе', 'взаимодействие', 'цели',
+      'толпа', 'собрание', 'объединение'
+    ];
+
+    for (const sentence of sentences) {
+      const trimmed = sentence.trim();
+      if (trimmed.length < 20 || trimmed.length > 120) continue;
+
+      // Check if sentence contains key teaching concepts
+      const hasKeyConcept = keyIndicators.some(indicator =>
+        trimmed.toLowerCase().includes(indicator.toLowerCase())
+      );
+
+      if (hasKeyConcept && theses.length < 3) {
+        // Clean up the sentence
+        let cleanSentence = trimmed
+          .replace(/^[*•-]\s*/, '') // Remove bullets
+          .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove markdown bold
+          .trim();
+
+        if (cleanSentence && !theses.includes(cleanSentence)) {
+          console.log('✅ Found teaching thesis:', cleanSentence);
+          theses.push(cleanSentence);
         }
       }
     }
-    
-    console.log('📌 Total theses extracted:', theses.length);
+
+    // Fallback: if no key concepts found, extract first 2-3 meaningful sentences
+    if (theses.length === 0) {
+      console.log('⚠️ No key concepts found, extracting meaningful sentences...');
+      for (const sentence of sentences.slice(0, 3)) {
+        const trimmed = sentence.trim();
+        if (trimmed.length >= 15 && trimmed.length <= 100) {
+          let cleanSentence = trimmed
+            .replace(/^[*•-]\s*/, '')
+            .replace(/\*\*([^*]+)\*\*/g, '$1')
+            .trim();
+
+          if (cleanSentence) {
+            console.log('✅ Found fallback thesis:', cleanSentence);
+            theses.push(cleanSentence);
+          }
+        }
+      }
+    }
+
+    console.log('📌 Total teaching theses extracted:', theses.length);
     return theses.slice(0, 3); // Max 3 theses
   };
 
@@ -830,13 +851,7 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
 - Используй ## для заголовков
 - Используй **текст** для выделения важных понятий
 - Используй нумерованные списки 1. 2. 3. для перечислений
-- Используй - для маркированных списков
-
-В КОНЦЕ ОТВЕТА добавь раздел "Ключевые тезисы" с 2-3 короткими тезисами (каждый не более 15 слов), которые помогут ученику быстро уловить суть. Формат:
-**Ключевые тезисы**
-1. Первый тезис
-2. Второй тезис
-3. Третий тезис`;
+- Используй - для маркированных списков`;
 
     console.log('📤 Sending to LLM with lesson context:', lessonContext ? 'YES' : 'NO');
     console.log('🌍 Julia always speaks Russian');
