@@ -508,8 +508,10 @@ const VoiceCallPage: React.FC = () => {
       await speakText(textForTTS);
       setIsSpeaking(false);
 
-      // Resume listening immediately (no delay needed)
-      resumeListening();
+      // Add small delay after TTS to prevent audio context conflicts
+      setTimeout(() => {
+        resumeListening();
+      }, 500);
       
     } catch (error) {
       console.error('❌ Handle speech error:', error);
@@ -552,7 +554,7 @@ const VoiceCallPage: React.FC = () => {
     }
   };
 
-  // Resume listening immediately (without recalibration)
+  // Resume listening after TTS with delay to prevent audio conflicts
   const resumeListening = async () => {
     if (isActiveRef.current) {
       console.log('⚠️ Already active, skipping resume');
@@ -560,15 +562,15 @@ const VoiceCallPage: React.FC = () => {
     }
 
     try {
-      console.log('⚡ Resuming listening immediately...');
-      
+      console.log('⚡ Resuming listening after TTS...');
+
       // Reset detection state
       speechFramesRef.current = 0;
       silenceFramesRef.current = 0;
       silenceAfterSpeechRef.current = 0;
       speechDetectedRef.current = false;
       processingTypeRef.current = null;
-      
+
       // Quick recalibration (0.5s) to adapt to current noise level
       isCalibrationDoneRef.current = false;
       calibrationSamplesRef.current = [];
@@ -639,23 +641,23 @@ const VoiceCallPage: React.FC = () => {
       mediaRecorder.start();
       console.log('🎙️ Recording resumed');
 
-      // Setup audio analysis (reuse context if possible)
-      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
-        setupAudioAnalysis(stream);
-      } else {
-        // Reconnect analyser to stream
-        const source = audioContextRef.current.createMediaStreamSource(stream);
-        if (analyserRef.current) {
-          source.connect(analyserRef.current);
-        }
-        console.log('♻️ Reusing AudioContext');
-        
-        // Start detection immediately
-        detectAudio();
-      }
+      // Setup audio analysis - always create fresh context after TTS to avoid conflicts
+      setupAudioAnalysis(stream);
 
     } catch (error) {
       console.error('❌ Resume listening error:', error);
+
+      // Handle specific errors
+      if (error.name === 'AbortError') {
+        console.warn('⚠️ Audio operation was aborted, retrying in 1 second...');
+        setTimeout(() => {
+          if (isActiveRef.current) {
+            resumeListening();
+          }
+        }, 1000);
+        return;
+      }
+
       setError('Ошибка доступа к микрофону');
       isActiveRef.current = false;
       setIsListening(false);
