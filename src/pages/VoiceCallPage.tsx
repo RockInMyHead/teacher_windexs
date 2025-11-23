@@ -364,8 +364,8 @@ const VoiceCallPage: React.FC = () => {
         }
         
         if (silenceAfterSpeechRef.current >= SILENCE_AFTER_SPEECH_FRAMES) {
-          // Check minimum speech duration (at least 15 frames = ~0.75 seconds)
-          const MIN_SPEECH_DURATION = 15;
+          // Check minimum speech duration (at least 8 frames = ~0.4 seconds)
+          const MIN_SPEECH_DURATION = 8;
           if (speechFramesRef.current >= MIN_SPEECH_DURATION) {
             console.log(`✅ SPEECH ENDED after ${silenceAfterSpeechRef.current} frames of silence (${speechFramesRef.current} speech frames)`);
             processingTypeRef.current = 'speech';
@@ -452,7 +452,8 @@ const VoiceCallPage: React.FC = () => {
 
       // Check for emoji or weird characters (Whisper hallucinations)
       const hasOnlyEmoji = /^[\p{Emoji}\s]+$/u.test(transcription.trim());
-      const hasWeirdChars = /[^\w\sа-яё\-.,!?;:()"\s]/gi.test(transcription.trim());
+      // Allow common Unicode punctuation used in Russian: —, –, …, «, », №, etc.
+      const hasWeirdChars = /[^\w\sа-яё\-.,!?;:()"«»—–…№\s]/gi.test(transcription.trim());
 
       if (hasOnlyEmoji || hasWeirdChars) {
         console.warn('⚠️ Transcription contains only emoji or weird characters:', transcription);
