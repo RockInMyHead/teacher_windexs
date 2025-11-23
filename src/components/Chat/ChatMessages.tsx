@@ -216,7 +216,7 @@ export const ChatMessages = React.memo(
                     {message.content && (
                       <div className="text-sm leading-relaxed">
                         {message.role === 'user' ? (
-                          <p className="break-words">{message.content}</p>
+                          <div className="break-words whitespace-pre-wrap">{message.content}</div>
                         ) : (
                           <MarkdownRenderer content={message.content} />
                         )}
