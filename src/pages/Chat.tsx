@@ -359,6 +359,100 @@ const Chat = () => {
   }, [messages, isTtsEnabled]);
 
 
+  // Load course data from URL parameters
+  const loadCourseDataFromParams = async (courseId: string, lessonId: string) => {
+    try {
+      console.log('🔍 Loading course data for:', { courseId, lessonId });
+
+      // Try to get course data from API
+      const response = await fetch(`${window.location.origin}/api/courses/${courseId}`);
+      if (response.ok) {
+        const courseData = await response.json();
+        console.log('✅ Course data loaded from API:', courseData);
+
+        // Create lesson data structure
+        const lessonData = {
+          id: lessonId,
+          title: courseData.currentLesson?.title || 'Текущий урок',
+          topic: courseData.currentLesson?.topic || 'Тема урока',
+          content: courseData.currentLesson?.content || 'Контент урока'
+        };
+
+        // Set course context
+        setPersonalizedCourseData({
+          courseInfo: {
+            id: courseData.id,
+            title: courseData.title,
+            grade: courseData.grade,
+            description: courseData.description
+          },
+          lessons: [lessonData]
+        });
+
+        setCurrentLesson(lessonData);
+
+        // Try to get lesson session data
+        const userId = 'default_user'; // TODO: get from auth
+        const lessonSessionKey = `lesson_session_${courseId}`;
+        const sessionDataStr = localStorage.getItem(lessonSessionKey);
+
+        if (sessionDataStr) {
+          const sessionData = JSON.parse(sessionDataStr);
+          setLessonSessionData(sessionData);
+          console.log('✅ Lesson session data loaded:', sessionData);
+        } else {
+          // Create default session data
+          const defaultSession = {
+            lessonNumber: 1,
+            completedLessons: [],
+            homeworks: [],
+            lastLessonDate: new Date().toISOString()
+          };
+          setLessonSessionData(defaultSession);
+          console.log('📝 Created default lesson session');
+        }
+
+      } else {
+        console.error('❌ Failed to load course data from API');
+        // Fallback to localStorage
+        loadFromLocalStorageFallback();
+      }
+    } catch (error) {
+      console.error('❌ Error loading course data from params:', error);
+      // Fallback to localStorage
+      loadFromLocalStorageFallback();
+    }
+  };
+
+  // Fallback function to load from localStorage
+  const loadFromLocalStorageFallback = () => {
+    const storedLesson = localStorage.getItem('currentLesson');
+    const storedCourseInfo = localStorage.getItem('courseInfo');
+
+    if (storedLesson) {
+      try {
+        const lessonData = JSON.parse(storedLesson);
+        setCurrentLesson(lessonData);
+        console.log('Loaded lesson data for lesson mode:', lessonData);
+      } catch (error) {
+        console.error('Failed to parse lesson data:', error);
+      }
+    }
+
+    if (storedCourseInfo) {
+      try {
+        const courseInfo = JSON.parse(storedCourseInfo);
+        // Create minimal personalizedCourseData structure for lesson mode
+        setPersonalizedCourseData({
+          courseInfo: courseInfo,
+          lessons: [JSON.parse(storedLesson || '{}')]
+        });
+      } catch (error) {
+        console.error('Failed to parse course info:', error);
+      }
+    }
+  };
+
   // Cleanup TTS on unmount
   useEffect(() => {
     return () => {
@@ -378,12 +472,26 @@ const Chat = () => {
       currentURL: window.location.href
     });
 
-    // Lesson mode is disabled - always set to false
-    const isLessonModeParam = false; // mode === 'lesson'; // DISABLED
+    // Check if this is a lesson chat
+    const isLessonModeParam = mode === 'lesson';
     setIsLessonMode(isLessonModeParam);
 
-    // Load current lesson data from localStorage
+    // Load current lesson data from localStorage or URL parameters
     if (isLessonModeParam) {
+      const courseParam = searchParams.get('course');
+      const lessonParam = searchParams.get('lesson');
+
+      console.log('📚 Lesson mode detected:', {
+        courseParam,
+        lessonParam,
+        hasStoredData: !!localStorage.getItem('currentCourse')
+      });
+
+      // If we have URL parameters, try to load course data
+      if (courseParam && lessonParam) {
+        console.log('🔗 Loading course data from URL parameters...');
+        loadCourseDataFromParams(courseParam, lessonParam);
+      }
       const storedLesson = localStorage.getItem('currentLesson');
       const storedCourseInfo = localStorage.getItem('courseInfo');
 

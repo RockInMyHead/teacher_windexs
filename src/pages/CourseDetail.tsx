@@ -936,10 +936,16 @@ export default function CourseDetail() {
       // Продолжаем даже если не удалось записать в БД
     }
 
-    // Navigate to chat page
-    console.log('🧭 [COURSE DETAIL] Navigating to /chat...');
-    navigate('/chat');
-    console.log('✅ [COURSE DETAIL] navigate() called successfully');
+    // Navigate to chat page with lesson parameters
+    console.log('🧭 [COURSE DETAIL] Navigating to /chat with lesson parameters...');
+    const courseId = course?.id;
+    const lessonId = course?.currentLesson?.id || `lesson_${courseId}_1`;
+    navigate(`/chat?course=${courseId}&lesson=${lessonId}&mode=lesson`);
+    console.log('✅ [COURSE DETAIL] navigate() called successfully with params:', {
+      course: courseId,
+      lesson: lessonId,
+      mode: 'lesson'
+    });
   };
 
   // Keep historyRef updated
