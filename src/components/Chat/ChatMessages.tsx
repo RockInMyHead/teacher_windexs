@@ -286,10 +286,7 @@ export const ChatMessages = React.memo(
                         <StreamingText content={streamingMessage.content} />
                       </div>
 
-                      {/* Status indicator */}
-                      <div className="flex items-center gap-2 text-xs opacity-70 mt-2">
-                        <span className="text-blue-500">Печатает...</span>
-                      </div>
+                      {/* Status indicator - removed for streaming messages */}
                     </div>
                   </div>
                 </div>
