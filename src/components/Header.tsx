@@ -292,7 +292,10 @@ const Header = () => {
             <Button
               variant="ghost"
               className="flex items-center gap-2"
-              onClick={() => navigate('/exams')}
+              onClick={() => {
+                console.log('🧪 Exams button clicked');
+                navigate('/exams');
+              }}
             >
               <GraduationCap className="w-4 h-4" />
               Экзамены
@@ -338,7 +341,10 @@ const Header = () => {
                   Достижения
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => navigate('/exams')}
+                  onClick={() => {
+                    console.log('📱 Mobile Exams button clicked');
+                    navigate('/exams');
+                  }}
                   className="flex items-center gap-2"
                 >
                   <GraduationCap className="w-4 h-4" />
