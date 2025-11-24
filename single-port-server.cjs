@@ -1658,6 +1658,16 @@ grade >= 7 ?
     }
   });
 
+  // Middleware для предотвращения кэширования HTML файлов
+  app.use((req, res, next) => {
+    if (req.url.endsWith('.html') || req.url === '/' || req.url.startsWith('/course') || req.url.startsWith('/chat')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+    next();
+  });
+
   // Запускаем сервер
   const server = app.listen(process.env.PORT, () => {
     console.log(`✅ Единый сервер запущен на порту ${process.env.PORT}`);
@@ -1670,6 +1680,7 @@ grade >= 7 ?
     console.log(`💚 Health: https://teacher.windexs.ru/health`);
     console.log('');
     console.log(`ТОЛЬКО ОДИН ПОРТ: ${process.env.PORT} ✅`);
+    console.log('🚫 КЭШ ОТКЛЮЧЕН для HTML файлов');
     console.log('');
     console.log('Для остановки: Ctrl+C');
   });
