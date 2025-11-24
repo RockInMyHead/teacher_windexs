@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -25,7 +25,7 @@ import {
   CheckCircle,
   Play
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { HeaderWithHero } from '@/components/Header';
 import { useAuth } from '@/contexts/AuthContext';
 import { COURSE_PLANS } from '@/utils/coursePlans';
@@ -246,10 +246,51 @@ const availableCourses = generateAvailableCoursesFromPlans();
 const AvailableCourses = () => {
   const { user, startCourse } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [customTopic, setCustomTopic] = useState('');
   const [isCreatingCustom, setIsCreatingCustom] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<any>(null);
   const [showGradeSelection, setShowGradeSelection] = useState(false);
+
+  // Auto-select first course for grade if grade parameter is in URL
+  useEffect(() => {
+    const gradeParam = searchParams.get('grade');
+    if (gradeParam) {
+      const grade = parseInt(gradeParam);
+      // Find first course that supports this grade
+      const courseForGrade = availableCourses.find(course => 
+        course.availableGrades && course.availableGrades.includes(grade)
+      );
+      
+      if (courseForGrade) {
+        // Auto-select and navigate to course select-mode
+        const courseId = `${courseForGrade.id}-${grade}`;
+        // Start course if not already active
+        const isAlreadyActive = user?.activeCourses?.some(ac => ac.id === courseId);
+        if (!isAlreadyActive) {
+          const coursePlans = COURSE_PLANS.filter(cp => cp.title.includes(courseForGrade.title.split(' ')[0]));
+          const specificPlan = coursePlans.find(cp => cp.grade === grade);
+          if (specificPlan) {
+            startCourse({
+              id: courseId,
+              title: specificPlan.title,
+              description: specificPlan.description,
+              progress: 0,
+              level: courseForGrade.level,
+              students: courseForGrade.students,
+              color: courseForGrade.color,
+              modules: specificPlan.lessons.length,
+              completedModules: 0,
+              icon: courseForGrade.icon.name,
+              grade: grade
+            });
+          }
+        }
+        // Navigate to course select-mode
+        navigate(`/course/${courseId}/select-mode`);
+      }
+    }
+  }, [searchParams, navigate, startCourse, user]);
 
   const handleCreateCustomCourse = () => {
     if (!customTopic.trim()) return;
@@ -314,9 +355,10 @@ const AvailableCourses = () => {
       });
     }
 
-    // Переходим к оценке уровня знаний
-    console.log('Navigating to assessment-level for course:', `${course.id}-${grade}`);
-    navigate(`/assessment-level?courseId=${course.id}&grade=${grade}`);
+    // Переходим сразу к выбору способа урока
+    const courseId = `${course.id}-${grade}`;
+    console.log('Navigating to course select-mode for course:', courseId);
+    navigate(`/course/${courseId}/select-mode`);
   };
 
   return (
