@@ -40,22 +40,36 @@ console.log('  - OpenAI API Key:', process.env.OPENAI_API_KEY ? '✅ Устан�
 console.log('');
 
 // Собираем frontend проект
-console.log('🔨 Сборка Frontend проекта...');
-const buildProcess = spawn('npm', ['run', 'build'], {
-  cwd: __dirname,
-  stdio: ['pipe', 'pipe', 'pipe'],
-  env: process.env
-});
+console.log('🔨 Проверка Frontend сборки...');
 
-buildProcess.on('close', (code) => {
-  if (code === 0) {
-    console.log('✅ Frontend собран');
-    startSinglePortServer();
-  } else {
-    console.error('❌ Ошибка сборки frontend');
-    process.exit(1);
-  }
-});
+// Проверяем, существует ли dist/index.html
+const fs = require('fs');
+// path уже объявлен выше
+
+const distIndexPath = path.join(__dirname, 'dist', 'index.html');
+
+if (fs.existsSync(distIndexPath)) {
+  console.log('✅ Frontend уже собран, пропускаем сборку');
+  startSinglePortServer();
+} else {
+  console.log('🔨 Сборка Frontend проекта...');
+  const buildProcess = spawn('npm', ['run', 'build'], {
+    cwd: __dirname,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: process.env
+  });
+
+  buildProcess.on('close', (code) => {
+    if (code === 0) {
+      console.log('✅ Frontend собран');
+      startSinglePortServer();
+    } else {
+      console.error('❌ Ошибка сборки frontend');
+      console.log('🔄 Попытка запустить сервер без новой сборки...');
+      startSinglePortServer();
+    }
+  });
+}
 
 function startSinglePortServer() {
   console.log('🚀 Запуск единого сервера на порту 1031...');

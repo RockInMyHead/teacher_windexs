@@ -3,7 +3,8 @@
  * Base configuration for API requests
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL ||
+  (typeof window !== 'undefined' ? `${window.location.origin}/api` : 'http://localhost:1031/api');
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean>;
