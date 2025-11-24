@@ -171,9 +171,9 @@ const CoursesPage = () => {
       localStorage.setItem('selectedCourseData', JSON.stringify(courseData));
       console.log('💾 Saved course data to localStorage:', courseData);
 
-      // Перейти на страницу деталей курса
-      console.log('📖 Opening course detail page for course:', course.title, 'ID:', course.id);
-      navigate(`/course/${course.id}`);
+      // Перейти на страницу выбора типа обучения
+      console.log('📖 Opening learning type selection for course:', course.title, 'ID:', course.id);
+      navigate(`/course/${course.id}/select-mode`);
     } catch (error) {
       console.error('❌ Error continuing course:', error);
       // В случае ошибки перейти к оценке уровня

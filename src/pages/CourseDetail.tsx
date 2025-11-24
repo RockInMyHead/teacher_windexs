@@ -29,7 +29,7 @@ interface CourseData {
 }
 
 export default function CourseDetail() {
-  const { courseId } = useParams<{ courseId: string }>();
+  const { courseId, mode } = useParams<{ courseId: string; mode?: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [course, setCourse] = useState<CourseData | null>(null);
@@ -985,6 +985,60 @@ ${context}
   }
 
   const progressPercentage = course.progress;
+
+  // Если это режим выбора типа обучения
+  if (mode === 'select-mode') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+          <div className="p-6">
+            <div className="text-center mb-6">
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">Выберите тип обучения</h1>
+              <p className="text-gray-600">Как вы хотите изучать курс "{course?.title}"?</p>
+            </div>
+
+            <div className="space-y-4">
+              <Button
+                size="lg"
+                onClick={startInteractiveLesson}
+                className="w-full h-auto py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+              >
+                <BookOpen className="w-6 h-6 mr-3 flex-shrink-0" />
+                <div className="text-left">
+                  <div className="font-semibold text-lg">Чат</div>
+                  <div className="text-sm opacity-90">Интерактивное обучение с ИИ-учителем</div>
+                </div>
+              </Button>
+
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={startVoiceCall}
+                className="w-full h-auto py-4 border-2 border-primary/30 hover:border-primary hover:bg-primary/5"
+              >
+                <Phone className="w-6 h-6 mr-3 flex-shrink-0" />
+                <div className="text-left">
+                  <div className="font-semibold text-lg">Онлайн общение</div>
+                  <div className="text-sm opacity-90">Голосовое обучение с Юлией</div>
+                </div>
+              </Button>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <Button
+                variant="ghost"
+                onClick={() => navigate('/courses')}
+                className="w-full text-gray-600 hover:text-gray-800"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Вернуться к курсам
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
