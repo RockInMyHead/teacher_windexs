@@ -1108,7 +1108,7 @@ ${context}
                 >
                   <Phone className="w-4 md:w-5 h-4 md:h-5 mr-2 flex-shrink-0" />
                   <div className="text-center">
-                    <div className="font-medium">Звонок учителю</div>
+                    <div className="font-medium">Онлайн урок</div>
                     <span className="text-xs opacity-75 block leading-tight">Голосовое обучение</span>
                   </div>
                 </Button>
