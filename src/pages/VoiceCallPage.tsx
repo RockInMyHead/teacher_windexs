@@ -47,8 +47,8 @@ const VoiceCallPage: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Voice detection parameters (balanced sensitivity)
-  const CALIBRATION_FRAMES = 30; // ~1.5 seconds to measure background noise (more stable calibration)
-  const QUICK_CALIBRATION_FRAMES = 10; // ~0.5 seconds for quick recalibration after resume
+  const CALIBRATION_FRAMES = 50; // ~2.5 seconds to measure background noise (more stable calibration)
+  const QUICK_CALIBRATION_FRAMES = 15; // ~0.75 seconds for quick recalibration after resume
   const REQUIRED_SPEECH_FRAMES = 8; // ~0.4 seconds of speech to mark as started (stable detection)
   const SILENCE_AFTER_SPEECH_FRAMES = 50; // ~2.5 seconds of silence after speech to stop (longer pause)
   const REQUIRED_SILENCE_FRAMES = 150; // ~7.5 seconds of total silence for follow-up (reduced to avoid long waits)
@@ -296,8 +296,8 @@ const VoiceCallPage: React.FC = () => {
     
     // Calibration phase: measure background noise
     if (!isCalibrationDoneRef.current) {
-      // Only add non-zero samples to calibration
-      if (average > 1) {
+      // Only add reasonable samples to calibration (filter out spikes)
+      if (average > 1 && average < 50) {
         calibrationSamplesRef.current.push(average);
       }
       
@@ -323,7 +323,7 @@ const VoiceCallPage: React.FC = () => {
     }
     
     // Dynamic speech threshold: noise floor * 1.8 (adaptive to environment)
-    const MIN_THRESHOLD = 6; // Минимальный абсолютный порог (reasonable for various environments)
+    const MIN_THRESHOLD = 20; // Минимальный абсолютный порог (higher for noisy environments)
     const dynamicThreshold = Math.max(noiseFloorRef.current * 1.8, MIN_THRESHOLD);
 
     // Periodic logging to debug detection issues (every 50 frames = ~2.5 seconds)
