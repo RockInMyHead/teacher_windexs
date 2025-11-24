@@ -1,8 +1,13 @@
 /**
  * Database Configuration
- * Professional PostgreSQL connection setup with pooling and error handling
+ * SQLite connection setup (switched from PostgreSQL)
  */
 
+// Use SQLite instead of PostgreSQL
+module.exports = require('./database.sqlite.js');
+return;
+
+// OLD PostgreSQL code below (disabled)
 const { Pool } = require('pg');
 
 // Database configuration from environment variables
