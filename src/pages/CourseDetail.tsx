@@ -996,33 +996,63 @@ ${context}
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100">
         {/* Header */}
-        <header className="bg-white shadow-sm border-b border-green-200">
+        <header className="bg-gradient-to-r from-green-600 to-emerald-700 shadow-lg">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-4">
+            <div className="flex justify-between items-center py-6">
               <div className="flex items-center space-x-4">
-                <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
-                  <BookOpen className="w-6 h-6 text-white" />
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center ring-2 ring-white/30">
+                  <BookOpen className="w-7 h-7 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-gray-900">Интерактивное обучение</h1>
-                  <p className="text-sm text-gray-600">с ИИ-учителем Юлией</p>
+                  <h1 className="text-2xl font-bold text-white">Интерактивное обучение</h1>
+                  <p className="text-sm text-green-100">с ИИ-учителем Юлией</p>
                 </div>
               </div>
 
-              <Button
-                variant="ghost"
-                onClick={() => navigate('/courses')}
-                className="text-green-700 hover:text-green-800 hover:bg-green-50"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                К курсам
-              </Button>
+              <div className="flex items-center space-x-4">
+                {/* Current Course Badge */}
+                {course && (
+                  <div className="hidden sm:block bg-white/10 backdrop-blur-sm rounded-lg px-3 py-2">
+                    <div className="text-xs text-green-100">Текущий курс</div>
+                    <div className="text-sm font-medium text-white truncate max-w-xs">
+                      {course.title}
+                    </div>
+                  </div>
+                )}
+
+                <Button
+                  variant="ghost"
+                  onClick={() => navigate('/courses')}
+                  className="bg-white/10 hover:bg-white/20 text-white border border-white/20 hover:border-white/30 backdrop-blur-sm"
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  К курсам
+                </Button>
+              </div>
             </div>
           </div>
+
+          {/* Progress Bar */}
+          {course && (
+            <div className="bg-white/10 backdrop-blur-sm border-t border-white/20">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-green-100">Прогресс обучения</span>
+                  <span className="text-white font-medium">{course.completedModules} из {course.modules} уроков</span>
+                </div>
+                <div className="mt-2 w-full bg-white/20 rounded-full h-2">
+                  <div
+                    className="bg-white rounded-full h-2 transition-all duration-500"
+                    style={{ width: `${course.progress}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          )}
         </header>
 
         {/* Main Content */}
-        <main className="flex items-center justify-center min-h-[calc(100vh-80px)] px-4 py-12">
+        <main className="flex items-center justify-center min-h-[calc(100vh-200px)] px-4 py-12">
           <div className="max-w-2xl w-full">
             {/* Welcome Section */}
             <div className="text-center mb-12">
