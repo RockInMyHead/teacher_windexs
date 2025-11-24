@@ -430,12 +430,41 @@ const Chat = () => {
       }
     }
 
-    // For regular chat mode (not lesson mode), don't load course context
+    // For regular chat mode (not lesson mode), load course context if available
     if (!isLessonModeParam) {
-      console.log('Regular chat mode - not loading course context for universal teacher');
-      // Clear any existing lesson context
-      setCurrentLesson(null);
-      setPersonalizedCourseData(null);
+      console.log('Regular chat mode - loading course context for interactive learning');
+
+      // Load course data for interactive chat sessions
+      const storedCourseData = localStorage.getItem('currentCourse');
+      if (storedCourseData) {
+        try {
+          const courseData = JSON.parse(storedCourseData);
+          console.log('Loaded course data for chat session:', courseData);
+
+          // Set course context for the chat
+          setPersonalizedCourseData({
+            courseInfo: {
+              title: courseData.title,
+              grade: courseData.grade,
+              description: courseData.description
+            },
+            lessons: courseData.currentLesson ? [courseData.currentLesson] : []
+          });
+
+          // Set current lesson if available
+          if (courseData.currentLesson) {
+            setCurrentLesson(courseData.currentLesson);
+          }
+
+        } catch (error) {
+          console.error('Failed to parse course data for chat:', error);
+        }
+      } else {
+        console.log('No course data found for chat session');
+        // Clear any existing lesson context
+        setCurrentLesson(null);
+        setPersonalizedCourseData(null);
+      }
     }
   }, [searchParams]);
 

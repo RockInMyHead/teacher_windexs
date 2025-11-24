@@ -583,39 +583,29 @@ export default function CourseDetail() {
   };
 
   const startInteractiveLesson = () => {
-    // Navigate to empty lesson page with header only
-    console.log('🚀 [COURSE DETAIL] startInteractiveLesson called - navigating to empty lesson page');
+    // Start new chat session with the teacher
+    console.log('🚀 [COURSE DETAIL] startInteractiveLesson called - starting new chat session');
 
-    // Clear lesson-specific data but keep course info for display
-    localStorage.removeItem('currentLesson');
-    localStorage.removeItem('lessonIndex');
-    localStorage.removeItem('totalLessons');
-    localStorage.removeItem('lessonVoiceCall');
+    // Clear any existing chat data to start fresh
+    localStorage.removeItem('chatMessages');
+    localStorage.removeItem('chatHistory');
+    localStorage.removeItem('lessonContext');
 
-    // Keep courseInfo for display on empty page
+    // Save course info for the chat session
     const courseData = {
       id: course?.id,
       title: course?.title,
-      grade: course?.grade
+      grade: course?.grade,
+      description: course?.description,
+      currentLesson: course?.currentLesson
     };
 
-    const lessonData = {
-      title: course?.currentLesson?.title || course?.title || 'Урок',
-      topic: course?.currentLesson?.topic || course?.description || ''
-    };
+    localStorage.setItem('currentCourse', JSON.stringify(courseData));
 
-    console.log('💾 [COURSE DETAIL] Preserving course data for empty page display:', courseData, lessonData);
+    console.log('💾 [COURSE DETAIL] Saved course data for chat session:', courseData);
 
-    // Navigate to lesson page with course data as URL params
-    const params = new URLSearchParams({
-      courseId: courseData.id?.toString() || '',
-      courseTitle: courseData.title || '',
-      courseGrade: courseData.grade?.toString() || '',
-      lessonTitle: lessonData.title,
-      lessonTopic: lessonData.topic
-    });
-
-    navigate(`/lesson?${params.toString()}`);
+    // Navigate to chat page
+    navigate('/chat');
   };
 
   // Keep historyRef updated
