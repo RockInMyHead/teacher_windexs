@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import Header from '@/components/Header';
 import { GraduationCap, BookOpen, Plus, Check } from 'lucide-react';
+import { examService } from '@/services';
 
 interface Subject {
   id: string;
@@ -58,31 +59,41 @@ const ExamAddCourse: React.FC = () => {
     }
   };
 
-  const handleAddCourses = () => {
-    // Load existing courses
-    const storedCourses = localStorage.getItem('examCourses');
-    const existingCourses = storedCourses ? JSON.parse(storedCourses) : [];
+  const handleAddCourses = async () => {
+    try {
+      // Get current user (default for now)
+      const userId = 'default_user';
 
-    // Create new courses
-    const newCourses = selectedSubjects.map(subjectId => {
-      const subject = subjects.find(s => s.id === subjectId);
-      return {
-        id: `${examTypeName}-${subjectId}-${Date.now()}`,
-        examType: examTypeName,
-        subject: subject?.name || subjectId,
-        progress: 0,
-        totalTopics: 50, // Default value
-        completedTopics: 0,
-        lastStudied: new Date().toLocaleDateString('ru-RU'),
-      };
-    });
+      // Create new courses
+      const newCourses = selectedSubjects.map(subjectId => {
+        const subject = subjects.find(s => s.id === subjectId);
+        return {
+          id: `${examTypeName}-${subjectId}-${Date.now()}`,
+          examType: examTypeName,
+          subject: subject?.name || subjectId,
+          progress: 0,
+          totalTopics: 50, // Default value
+          completedTopics: 0,
+          lastStudied: new Date().toLocaleDateString('ru-RU'),
+        };
+      });
 
-    // Save to localStorage
-    const allCourses = [...existingCourses, ...newCourses];
-    localStorage.setItem('examCourses', JSON.stringify(allCourses));
+      // Add courses via API
+      await examService.addBulkExamCourses(userId, newCourses);
 
-    // Navigate back to exams page
-    navigate('/exams');
+      // Navigate to select mode for the first added course
+      if (newCourses.length > 0) {
+        const firstCourse = newCourses[0];
+        navigate(`/course/${firstCourse.id}/select-mode`);
+      } else {
+        // Fallback to exams page if no courses were added
+        navigate('/exams');
+      }
+    } catch (error) {
+      console.error('Failed to add exam courses:', error);
+      // Fallback to exams page on error
+      navigate('/exams');
+    }
   };
 
   return (

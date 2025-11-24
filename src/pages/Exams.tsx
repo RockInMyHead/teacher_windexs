@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Header from '@/components/Header';
 import { GraduationCap, BookOpen, Plus, Trash2, ChevronRight, Award } from 'lucide-react';
+import { examService } from '@/services';
 
 interface ExamCourse {
   id: string;
@@ -22,15 +23,26 @@ const Exams: React.FC = () => {
   const [selectedExamType, setSelectedExamType] = useState<'ЕГЭ' | 'ОГЭ' | null>(null);
 
   useEffect(() => {
-    // Load exam courses from localStorage
-    const storedCourses = localStorage.getItem('examCourses');
-    if (storedCourses) {
+    const loadExamCourses = async () => {
       try {
-        setExamCourses(JSON.parse(storedCourses));
+        const userId = 'default_user';
+        const response = await examService.getUserExamCourses(userId);
+        setExamCourses(response.examCourses || []);
       } catch (error) {
-        console.error('Failed to parse exam courses:', error);
+        console.error('Failed to load exam courses:', error);
+        // Fallback to localStorage for backward compatibility
+        const storedCourses = localStorage.getItem('examCourses');
+        if (storedCourses) {
+          try {
+            setExamCourses(JSON.parse(storedCourses));
+          } catch (parseError) {
+            console.error('Failed to parse exam courses:', parseError);
+          }
+        }
       }
-    }
+    };
+
+    loadExamCourses();
   }, []);
 
   const handleSelectExamType = (type: 'ЕГЭ' | 'ОГЭ') => {
@@ -42,10 +54,20 @@ const Exams: React.FC = () => {
     navigate(`/exams/${selectedExamType.toLowerCase()}/add`);
   };
 
-  const handleDeleteCourse = (courseId: string) => {
-    const updatedCourses = examCourses.filter(course => course.id !== courseId);
-    setExamCourses(updatedCourses);
-    localStorage.setItem('examCourses', JSON.stringify(updatedCourses));
+  const handleDeleteCourse = async (courseId: string) => {
+    try {
+      const userId = 'default_user';
+      await examService.deleteExamCourse(userId, courseId);
+      // Reload courses after deletion
+      const response = await examService.getUserExamCourses(userId);
+      setExamCourses(response.examCourses || []);
+    } catch (error) {
+      console.error('Failed to delete exam course:', error);
+      // Fallback to localStorage update
+      const updatedCourses = examCourses.filter(course => course.id !== courseId);
+      setExamCourses(updatedCourses);
+      localStorage.setItem('examCourses', JSON.stringify(updatedCourses));
+    }
   };
 
   const filteredCourses = selectedExamType

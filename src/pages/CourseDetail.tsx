@@ -9,6 +9,7 @@ import Header from '@/components/Header';
 import { useAuth } from '@/contexts/AuthContext';
 import { OpenAITTS } from '@/lib/openaiTTS';
 import { VoiceComm } from '@/lib/voiceComm';
+import { examService } from '@/services';
 
 interface CourseData {
   id: number;
@@ -681,14 +682,25 @@ export default function CourseDetail() {
       if (isExamCourse) {
         console.log('📚 Loading exam course:', courseId);
 
-        // Загружаем данные курса экзамена из localStorage
-        const storedCourses = localStorage.getItem('examCourses');
-        if (storedCourses) {
-          const examCourses = JSON.parse(storedCourses);
-          const examCourse = examCourses.find((course: any) => course.id === courseId);
+        // Загружаем данные курса экзамена через API
+        let examCourse = null;
+        try {
+          const userId = 'default_user';
+          const response = await examService.getUserExamCourses(userId);
+          const examCourses = response.examCourses || [];
+          examCourse = examCourses.find((course: any) => course.id === courseId);
+        } catch (apiError) {
+          console.error('❌ Failed to load exam course from API, falling back to localStorage:', apiError);
+          // Fallback to localStorage
+          const storedCourses = localStorage.getItem('examCourses');
+          if (storedCourses) {
+            const examCourses = JSON.parse(storedCourses);
+            examCourse = examCourses.find((course: any) => course.id === courseId);
+          }
+        }
 
-          if (examCourse) {
-            console.log('✅ Found exam course:', examCourse);
+        if (examCourse) {
+          console.log('✅ Found exam course:', examCourse);
 
             // Создаем данные курса на основе examCourse
             const courseData = {
