@@ -28,7 +28,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import Header from '@/components/Header';
+import { HeaderWithHero } from '@/components/Header';
 
 const PersonalAccount = () => {
   const { user, updateSubscription, addFamilyMember, removeFamilyMember, logout } = useAuth();
@@ -51,7 +51,7 @@ const PersonalAccount = () => {
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
-        <Header />
+        <HeaderWithHero />
         <main className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center min-h-[400px]">
             <p className="text-muted-foreground text-lg">Проверка авторизации...</p>
@@ -92,7 +92,7 @@ const PersonalAccount = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
       {/* Header */}
-      <Header />
+      <HeaderWithHero />
 
       <div className="container mx-auto px-4 py-8">
         <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">

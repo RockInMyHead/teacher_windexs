@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Mic, Loader2, MicOff, PhoneOff } from 'lucide-react';
-import Header from '@/components/Header';
+import { HeaderWithHero } from '@/components/Header';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -1281,7 +1281,7 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
+      <HeaderWithHero />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
           <Button

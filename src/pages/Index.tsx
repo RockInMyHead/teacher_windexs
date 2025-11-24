@@ -21,7 +21,7 @@ import {
   Clock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import Header from '@/components/Header';
+import { HeaderWithHero } from '@/components/Header';
 
 const Index = () => {
   const { user } = useAuth();
@@ -69,7 +69,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
       {/* Header */}
-      <Header />
+      <HeaderWithHero />
 
       {/* Hero Section */}
       <section className="relative overflow-hidden">
