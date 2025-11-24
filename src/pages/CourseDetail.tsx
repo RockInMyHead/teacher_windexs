@@ -585,6 +585,7 @@ export default function CourseDetail() {
   const startInteractiveLesson = () => {
     // Start new chat session with the teacher
     console.log('🚀 [COURSE DETAIL] startInteractiveLesson called - starting new chat session');
+    console.log('📍 Current location:', window.location.href);
 
     // Clear any existing chat data to start fresh
     localStorage.removeItem('chatMessages');
@@ -605,7 +606,9 @@ export default function CourseDetail() {
     console.log('💾 [COURSE DETAIL] Saved course data for chat session:', courseData);
 
     // Navigate to chat page
+    console.log('🧭 [COURSE DETAIL] Navigating to /chat...');
     navigate('/chat');
+    console.log('✅ [COURSE DETAIL] navigate() called successfully');
   };
 
   // Keep historyRef updated
