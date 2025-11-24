@@ -48,7 +48,7 @@ class LessonContextManager {
     // stub
   }
 }
-import { Header } from '@/components/Header';
+import { HeaderWithHero } from '@/components/Header';
 
 
 
@@ -2109,7 +2109,7 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
 
       {/* Header */}
-      <Header />
+      <HeaderWithHero />
 
       {/* Chat Container */}
       <div className="container mx-auto px-2 py-2 max-w-6xl">
