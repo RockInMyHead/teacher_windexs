@@ -32,32 +32,14 @@ const VoiceCallPage: React.FC = () => {
   } | null>(null);
 
   // Refs
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const audioStreamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
-  const speechFramesRef = useRef<number>(0);
-  const silenceFramesRef = useRef<number>(0);
-  const silenceAfterSpeechRef = useRef<number>(0);
-  const speechDetectedRef = useRef<boolean>(false);
-  const processingTypeRef = useRef<'speech' | 'silence' | null>(null);
   const isActiveRef = useRef<boolean>(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Web Speech Recognition instance
+  const recognitionRef = useRef<any>(null);
 
-  // Voice detection parameters (balanced sensitivity)
-  const CALIBRATION_FRAMES = 50; // ~2.5 seconds to measure background noise (more stable calibration)
-  const QUICK_CALIBRATION_FRAMES = 15; // ~0.75 seconds for quick recalibration after resume
-  const REQUIRED_SPEECH_FRAMES = 8; // ~0.4 seconds of speech to mark as started (stable detection)
-  const SILENCE_AFTER_SPEECH_FRAMES = 50; // ~2.5 seconds of silence after speech to stop (longer pause)
-  const REQUIRED_SILENCE_FRAMES = 150; // ~7.5 seconds of total silence for follow-up (reduced to avoid long waits)
-  
-  // Dynamic noise detection
-  const noiseFloorRef = useRef<number>(0);
-  const isCalibrationDoneRef = useRef<boolean>(false);
-  const calibrationSamplesRef = useRef<number[]>([]);
-  const isQuickCalibrationRef = useRef<boolean>(false); // Quick recalibration after resume
+  // Web Speech API parameters
+  const SILENCE_TIMEOUT = 2000; // 2 seconds of silence to consider speech ended
 
   // Toggle microphone mute/unmute
   const toggleMute = () => {
@@ -72,7 +54,7 @@ const VoiceCallPage: React.FC = () => {
       // Mute - stop listening
       setIsMuted(true);
       console.log('🔇 Microphone muted');
-      stopRecording();
+      stopListening();
     }
     // Hide audio blocked indicator after user interaction
     if (audioBlocked) {
@@ -83,7 +65,7 @@ const VoiceCallPage: React.FC = () => {
   // End lesson and navigate back
   const endLesson = () => {
     console.log('📞 Ending lesson');
-    stopRecording();
+    stopListening();
     cleanup();
     setSpeechTheses([]);
     // Hide audio blocked indicator after user interaction
@@ -97,43 +79,28 @@ const VoiceCallPage: React.FC = () => {
   const cleanup = () => {
     console.log('🧹 Cleanup started');
     
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      audioContextRef.current.close().catch(console.error);
-      audioContextRef.current = null;
-    }
-    
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+    // Stop Web Speech Recognition
+    if (recognitionRef.current) {
       try {
-        mediaRecorderRef.current.stop();
+        recognitionRef.current.stop();
       } catch (e) {
-        console.warn('MediaRecorder stop error:', e);
+        console.warn('Speech recognition stop error:', e);
       }
+      recognitionRef.current = null;
     }
-    mediaRecorderRef.current = null;
     
+    // Stop audio stream
     if (audioStreamRef.current) {
       audioStreamRef.current.getTracks().forEach(track => track.stop());
       audioStreamRef.current = null;
     }
     
-    analyserRef.current = null;
-    audioChunksRef.current = [];
-    speechFramesRef.current = 0;
-    silenceFramesRef.current = 0;
-    silenceAfterSpeechRef.current = 0;
-    speechDetectedRef.current = false;
-    processingTypeRef.current = null;
     isActiveRef.current = false;
     
     console.log('✅ Cleanup complete');
   };
 
-  // Start listening
+  // Start Web Speech API listening
   const startListening = async () => {
     if (isActiveRef.current) {
       console.log('⚠️ Already active, skipping start');
@@ -141,27 +108,21 @@ const VoiceCallPage: React.FC = () => {
     }
 
     try {
-      console.log('🎤 Starting listening...');
-      cleanup();
-      
-      isActiveRef.current = true;
-      setIsListening(true);
-      setError(null);
-      
-      // Reset detection state
-      speechFramesRef.current = 0;
-      silenceFramesRef.current = 0;
-      silenceAfterSpeechRef.current = 0;
-      speechDetectedRef.current = false;
-      processingTypeRef.current = null;
-      
-      // Reset noise calibration (full calibration)
-      isCalibrationDoneRef.current = false;
-      calibrationSamplesRef.current = [];
-      noiseFloorRef.current = 0;
-      isQuickCalibrationRef.current = false; // Full calibration on start
+      console.log('🎤 Starting Web Speech API listening...');
 
-      // Get microphone access
+      // Check if Web Speech API is available
+      const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+      if (!SpeechRecognition) {
+        throw new Error('Web Speech API not supported in this browser');
+      }
+
+      // Cleanup any existing recognition
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+
+      // Get microphone access (required for Speech Recognition)
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
@@ -172,69 +133,87 @@ const VoiceCallPage: React.FC = () => {
       audioStreamRef.current = stream;
       console.log('✅ Microphone access granted');
 
-      // Setup MediaRecorder
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
-        ? 'audio/webm;codecs=opus' 
-        : 'audio/webm';
-      
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
+      // Create new recognition instance
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-          console.log('📼 Audio chunk received, size:', event.data.size, 'total chunks:', audioChunksRef.current.length);
+      // Configure recognition
+      recognition.continuous = true; // Keep listening until stopped
+      recognition.interimResults = true; // Get intermediate results
+      recognition.lang = 'ru-RU'; // Russian language
+      recognition.maxAlternatives = 1;
+
+      isActiveRef.current = true;
+      setIsListening(true);
+      setError(null);
+
+      let finalTranscript = '';
+      let interimTranscript = '';
+
+      recognition.onstart = () => {
+        console.log('🎙️ Web Speech Recognition started');
+      };
+
+      recognition.onresult = async (event) => {
+        interimTranscript = '';
+
+        // Process all results
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+            console.log('🎤 Final result:', transcript);
+
+            // Process the final transcript
+            if (transcript.trim().length > 0) {
+              await handleSpeechTranscript(transcript.trim());
+            }
+          } else {
+            interimTranscript += transcript;
+            console.log('🎤 Interim result:', transcript);
+          }
         }
       };
 
-      mediaRecorder.onstop = async () => {
-        console.log('🎬 ONSTOP TRIGGERED!');
-        const processingType = processingTypeRef.current;
-        console.log('🎤 Recording stopped, type:', processingType, 'audioChunks:', audioChunksRef.current.length);
-        
-        if (!processingType) {
-          console.warn('⚠️ No processing type set, restarting...');
-          restartListening();
-          return;
-        }
+      recognition.onerror = (event) => {
+        console.error('❌ Speech recognition error:', event.error);
 
-        if (audioChunksRef.current.length === 0) {
-          console.warn('⚠️ No audio data, restarting...');
-          restartListening();
-          return;
-        }
-
-        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-        console.log('📦 Audio blob created - size:', audioBlob.size, 'bytes, type:', audioBlob.type);
-
-        if (audioBlob.size < 5000) {
-          console.warn('⚠️ Audio too small (', audioBlob.size, 'bytes), skipping and restarting...');
-          restartListening();
-          return;
-        }
-
-        // Process based on type
-        console.log('✅ Processing audio, type:', processingType);
-        if (processingType === 'speech') {
-          await handleSpeech(audioBlob);
-        } else if (processingType === 'silence') {
-          // Silence detected - just restart listening without generating follow-up
-          console.log('🔄 Silence detected, restarting listening...');
-          restartListening();
+        if (event.error === 'not-allowed') {
+          setError('Доступ к микрофону запрещен');
+        } else if (event.error === 'no-speech') {
+          console.log('🤫 No speech detected, continuing...');
+          // Continue listening
+        } else if (event.error === 'network') {
+          setError('Проблема с сетью');
+        } else {
+          setError(`Ошибка распознавания: ${event.error}`);
         }
       };
 
-      // Start recording
-      mediaRecorder.start();
-      console.log('🎙️ Recording started');
+      recognition.onend = () => {
+        console.log('🎤 Speech recognition ended');
 
-      // Setup audio analysis
-      setupAudioAnalysis(stream);
+        // Restart if still active (unless it was stopped intentionally)
+        if (isActiveRef.current) {
+          console.log('🔄 Auto-restarting speech recognition...');
+          setTimeout(() => startListening(), 100);
+        }
+      };
+
+      // Start recognition
+      recognition.start();
+      console.log('🎤 Web Speech Recognition initiated');
 
     } catch (error) {
       console.error('❌ Start listening error:', error);
+
+      if (error instanceof Error && error.message.includes('Web Speech API not supported')) {
+        setError('Ваш браузер не поддерживает распознавание речи');
+      } else {
       setError('Ошибка доступа к микрофону');
+      }
+
       isActiveRef.current = false;
       setIsListening(false);
     }
@@ -361,7 +340,7 @@ const VoiceCallPage: React.FC = () => {
         console.log(`🎤 SPEECH STARTED! avg=${average.toFixed(1)}, max=${max}, threshold=${dynamicThreshold.toFixed(1)}, silence_threshold=${silenceThreshold.toFixed(1)}`);
         speechDetectedRef.current = true;
       }
-
+      
       // Log every 100 frames to monitor (less verbose)
       if (speechDetectedRef.current && speechFramesRef.current % 100 === 0) {
         console.log(`🗣️ Speaking... frames=${speechFramesRef.current}, avg=${average.toFixed(1)}, max=${max}, silence_threshold=${silenceThreshold.toFixed(1)}`);
@@ -375,7 +354,7 @@ const VoiceCallPage: React.FC = () => {
         if (silenceAfterSpeechRef.current === 1) {
           console.log(`🤫 Silence detected: avg=${average.toFixed(1)}, silence_threshold=${silenceThreshold.toFixed(1)}`);
         }
-
+        
         if (silenceAfterSpeechRef.current % 30 === 0 && silenceAfterSpeechRef.current > 1) {
           console.log(`🤫 Silence progress: ${silenceAfterSpeechRef.current}/${SILENCE_AFTER_SPEECH_FRAMES}, avg=${average.toFixed(1)}`);
         }
@@ -385,8 +364,8 @@ const VoiceCallPage: React.FC = () => {
           const MIN_SPEECH_DURATION = 8;
           if (speechFramesRef.current >= MIN_SPEECH_DURATION) {
             console.log(`✅ SPEECH ENDED after ${silenceAfterSpeechRef.current} frames of silence (${speechFramesRef.current} speech frames)`);
-            processingTypeRef.current = 'speech';
-            stopRecording();
+          processingTypeRef.current = 'speech';
+          stopRecording();
           } else {
             console.log(`⚠️ Speech too short (${speechFramesRef.current} frames), restarting listening...`);
             restartListening();
@@ -407,44 +386,27 @@ const VoiceCallPage: React.FC = () => {
     animationFrameRef.current = requestAnimationFrame(detectAudio);
   };
 
-  // Stop recording
-  const stopRecording = () => {
-    console.log('⏹️ Stop recording called, processingType:', processingTypeRef.current);
+  // Stop listening
+  const stopListening = () => {
+    console.log('⏹️ Stop listening called');
 
-    // Stop animation frame
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-      console.log('✅ Animation frame cancelled');
-    }
-
-    // Stop media recorder
-    if (mediaRecorderRef.current) {
-      console.log('🎙️ MediaRecorder state:', mediaRecorderRef.current.state);
-      if (mediaRecorderRef.current.state === 'recording') {
-        console.log('⏹️ Stopping MediaRecorder...');
-      mediaRecorderRef.current.stop();
-      } else {
-        console.warn('⚠️ MediaRecorder not in recording state:', mediaRecorderRef.current.state);
+    // Stop Web Speech Recognition
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+        console.warn('Speech recognition stop error:', e);
       }
-    } else {
-      console.warn('⚠️ No MediaRecorder reference');
-    }
-
-    // Close audio context
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-      console.log('✅ AudioContext closed');
+      recognitionRef.current = null;
     }
 
     isActiveRef.current = false;
     setIsListening(false);
-    console.log('✅ Stop recording complete');
+    console.log('✅ Stop listening complete');
   };
 
-  // Handle user speech
-  const handleSpeech = async (audioBlob: Blob) => {
+  // Handle speech transcript from Web Speech API
+  const handleSpeechTranscript = async (transcript: string) => {
     // Prevent concurrent processing
     if (isProcessing) {
       console.warn('⚠️ Already processing speech, skipping...');
@@ -452,31 +414,26 @@ const VoiceCallPage: React.FC = () => {
     }
 
     try {
-      console.log('🔊 Processing speech...');
+      console.log('🔊 Processing speech transcript:', transcript);
       setIsProcessing(true);
 
-      // Transcribe
-      const transcription = await transcribeAudio(audioBlob);
-      console.log('📝 Transcription:', transcription);
+      // Use transcript directly from Web Speech API
+      const transcription = transcript;
+      console.log('📝 Transcription from Web Speech API:', transcription);
 
       if (!transcription || transcription.trim().length < 2) {
         console.warn('⚠️ Transcription too short');
         setIsProcessing(false);
-        setIsSpeaking(false);
-        resumeListening();
         return;
       }
 
-      // Check for emoji or weird characters (Whisper hallucinations)
+      // Basic validation - Web Speech API is usually reliable
       const hasOnlyEmoji = /^[\p{Emoji}\s]+$/u.test(transcription.trim());
-      // Allow common Unicode punctuation used in Russian: —, –, …, «, », №, etc.
       const hasWeirdChars = /[^\w\sа-яё\-.,!?;:()"«»—–…№\s]/gi.test(transcription.trim());
 
       if (hasOnlyEmoji || hasWeirdChars) {
         console.warn('⚠️ Transcription contains only emoji or weird characters:', transcription);
         setIsProcessing(false);
-        setIsSpeaking(false);
-        resumeListening();
         return;
       }
       
@@ -496,10 +453,10 @@ const VoiceCallPage: React.FC = () => {
       // Extract theses from response
       const theses = extractTheses(response);
       setSpeechTheses(theses);
-
+      
       // Clean response from headers for TTS and display
       const cleanResponse = cleanMarkdownHeaders(response);
-
+      
       // Use cleaned response for TTS and display
       let textForTTS = cleanResponse;
       
@@ -517,16 +474,23 @@ const VoiceCallPage: React.FC = () => {
       await speakText(textForTTS);
       setIsSpeaking(false);
 
-      // Add small delay after TTS to prevent audio context conflicts
+      // Resume listening after TTS with delay to prevent audio conflicts
       setTimeout(() => {
-        resumeListening();
+        if (isActiveRef.current) {
+          startListening();
+        }
       }, 500);
       
     } catch (error) {
-      console.error('❌ Handle speech error:', error);
+      console.error('❌ Handle speech transcript error:', error);
       setIsProcessing(false);
       setIsSpeaking(false);
-      resumeListening();
+      // Try to restart listening
+      setTimeout(() => {
+        if (isActiveRef.current) {
+          startListening();
+        }
+      }, 1000);
     }
   };
 
@@ -572,14 +536,14 @@ const VoiceCallPage: React.FC = () => {
 
     try {
       console.log('⚡ Resuming listening after TTS...');
-
+      
       // Reset detection state
       speechFramesRef.current = 0;
       silenceFramesRef.current = 0;
       silenceAfterSpeechRef.current = 0;
       speechDetectedRef.current = false;
       processingTypeRef.current = null;
-
+      
       // Quick recalibration (0.5s) to adapt to current noise level
       isCalibrationDoneRef.current = false;
       calibrationSamplesRef.current = [];
@@ -651,7 +615,7 @@ const VoiceCallPage: React.FC = () => {
       console.log('🎙️ Recording resumed');
 
       // Setup audio analysis - always create fresh context after TTS to avoid conflicts
-      setupAudioAnalysis(stream);
+        setupAudioAnalysis(stream);
 
     } catch (error) {
       console.error('❌ Resume listening error:', error);
@@ -780,53 +744,53 @@ const VoiceCallPage: React.FC = () => {
 
   // Transcribe with OpenAI Whisper
   const transcribeWithOpenAI = async (audioBlob: Blob): Promise<string> => {
-    const formData = new FormData();
-    formData.append('file', audioBlob, 'audio.webm');
-    formData.append('model', 'whisper-1');
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'audio.webm');
+      formData.append('model', 'whisper-1');
 
-    // Determine language based on lesson context
-    const lessonContext = lessonContextRef.current;
-    let language = 'ru'; // Default to Russian
+      // Determine language based on lesson context
+      const lessonContext = lessonContextRef.current;
+      let language = 'ru'; // Default to Russian
 
-    if (lessonContext) {
-      const title = lessonContext.title.toLowerCase();
-      const description = lessonContext.description?.toLowerCase() || '';
+      if (lessonContext) {
+        const title = lessonContext.title.toLowerCase();
+        const description = lessonContext.description?.toLowerCase() || '';
 
-      // Check if it's an English lesson
-      if (title.includes('english') || title.includes('английский') ||
-          title.includes('англ.') || description.includes('english')) {
-        language = 'en';
-        console.log('🌍 Detected English lesson, using language: en');
-      } else if (title.includes('китайский') || title.includes('chinese')) {
-        language = 'zh';
-        console.log('🌍 Detected Chinese lesson, using language: zh');
+        // Check if it's an English lesson
+        if (title.includes('english') || title.includes('английский') ||
+            title.includes('англ.') || description.includes('english')) {
+          language = 'en';
+          console.log('🌍 Detected English lesson, using language: en');
+        } else if (title.includes('китайский') || title.includes('chinese')) {
+          language = 'zh';
+          console.log('🌍 Detected Chinese lesson, using language: zh');
       } else if (title.includes('арабский') || title.includes('arabic') ||
                  title.includes('arab.')) {
         language = 'ar';
         console.log('🌍 Detected Arabic lesson, using language: ar');
-      } else {
-        console.log('🌍 Using default language: ru');
+        } else {
+          console.log('🌍 Using default language: ru');
+        }
       }
-    }
 
-    formData.append('language', language);
+      formData.append('language', language);
 
-    console.log('🎤 Sending transcription request to server...');
+      console.log('🎤 Sending transcription request to server...');
 
-    const response = await fetch('/api/audio/transcriptions', {
-      method: 'POST',
-      body: formData
-    });
+      const response = await fetch('/api/audio/transcriptions', {
+        method: 'POST',
+        body: formData
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      console.error('❌ Transcription request failed:', response.status, errorText);
-      throw new Error(`Transcription failed: ${response.status} ${errorText}`);
-    }
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        console.error('❌ Transcription request failed:', response.status, errorText);
+        throw new Error(`Transcription failed: ${response.status} ${errorText}`);
+      }
 
-    const result = await response.json();
-    console.log('✅ Transcription result:', result.text?.substring(0, 50) + '...');
-    return result.text || '';
+      const result = await response.json();
+      console.log('✅ Transcription result:', result.text?.substring(0, 50) + '...');
+      return result.text || '';
   };
 
   // Clean markdown headers from response for better TTS and display
@@ -843,7 +807,7 @@ const VoiceCallPage: React.FC = () => {
   // Extract key theses from LLM response
   const extractTheses = (response: string): string[] => {
     const theses: string[] = [];
-
+    
     // Extract theses from the main teacher response (before "Ключевые тезисы" section)
     // Split response at "Ключевые тезисы" to get only teacher explanations
     const teacherResponse = response.split(/Ключевые тезисы/i)[0].trim();
@@ -852,7 +816,7 @@ const VoiceCallPage: React.FC = () => {
       console.log('❌ No teacher response found before theses section');
       return theses;
     }
-
+    
     console.log('📚 Extracting theses from teacher response, length:', teacherResponse.length);
 
     // Look for sentences that contain key concepts (sentences with important markers)
@@ -1016,19 +980,19 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
       const audioUrl = URL.createObjectURL(audioBlob);
 
       return new Promise((resolve, reject) => {
-        const audio = new Audio(audioUrl);
+      const audio = new Audio(audioUrl);
 
-        audio.onended = () => {
-          URL.revokeObjectURL(audioUrl);
+      audio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
           console.log('✅ TTS complete');
           resolve();
-        };
+      };
 
-        audio.onerror = (error) => {
+      audio.onerror = (error) => {
           console.error('❌ TTS playback error:', error);
-          URL.revokeObjectURL(audioUrl);
+        URL.revokeObjectURL(audioUrl);
           reject(error);
-        };
+      };
 
         // Try to play audio
         const playPromise = audio.play();
@@ -1042,8 +1006,8 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
             .catch((playError) => {
               URL.revokeObjectURL(audioUrl);
 
-              // Handle autoplay restrictions
-              if (playError.name === 'NotAllowedError') {
+          // Handle autoplay restrictions
+          if (playError.name === 'NotAllowedError') {
                 console.warn('⚠️ Autoplay blocked by browser. Switching to browser TTS...');
                 setAudioBlocked(true); // Show indicator that audio is blocked
 
@@ -1066,15 +1030,15 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
                 // Check if speech synthesis is available
                 if ('speechSynthesis' in window) {
                   window.speechSynthesis.speak(utterance);
-                } else {
+          } else {
                   console.warn('⚠️ Speech synthesis not available');
                   resolve();
                 }
               } else {
                 console.error('❌ Unexpected play error:', playError);
-                reject(playError);
-              }
-            });
+            reject(playError);
+          }
+        });
         }
       });
 
@@ -1084,22 +1048,22 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
       // Fallback to browser TTS
       return new Promise((resolve) => {
         if ('speechSynthesis' in window) {
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.lang = 'ru-RU';
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'ru-RU';
           utterance.rate = 0.9;
           utterance.pitch = 1.0;
 
-          utterance.onend = () => {
-            console.log('✅ Browser TTS complete');
-            resolve();
-          };
+        utterance.onend = () => {
+          console.log('✅ Browser TTS complete');
+          resolve();
+        };
 
           utterance.onerror = (error) => {
             console.error('❌ Browser TTS error:', error);
             resolve();
           };
 
-          window.speechSynthesis.speak(utterance);
+        window.speechSynthesis.speak(utterance);
         } else {
           console.warn('⚠️ Speech synthesis not available');
           resolve();
