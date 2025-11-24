@@ -431,13 +431,18 @@ const Chat = () => {
       }
     }
 
-    // For regular chat mode (not lesson mode), load course context if available
+    // For regular chat mode (not lesson mode), load course context ONLY if there's lesson session data
+    // This prevents loading course data for plain general chat at /chat
     if (!isLessonModeParam) {
-      console.log('Regular chat mode - loading course context for interactive learning');
+      console.log('Regular chat mode - checking for lesson context');
 
-      // Load course data for interactive chat sessions
+      // Check if there's lesson session data first
       const storedCourseData = localStorage.getItem('currentCourse');
-      if (storedCourseData) {
+      const lessonSessionKey = storedCourseData ? `lesson_session_${JSON.parse(storedCourseData).id}` : null;
+      const lessonSessionData = lessonSessionKey ? localStorage.getItem(lessonSessionKey) : null;
+
+      // Only load course data if we have lesson session data (meaning this is a lesson chat)
+      if (storedCourseData && lessonSessionData) {
         try {
           const courseData = JSON.parse(storedCourseData);
           console.log('Loaded course data for chat session:', courseData);
@@ -479,10 +484,12 @@ const Chat = () => {
     }
   }, [searchParams]);
 
-  // Generate welcome message when course data is loaded
+  // Generate welcome message when course data is loaded (only for lesson chats)
   useEffect(() => {
-    if (personalizedCourseData && messages.length === 0 && !isLessonMode) {
-      console.log('👋 Generating welcome message for course:', personalizedCourseData.courseInfo.title);
+    // Only generate welcome message if we have lesson session data (meaning this is a lesson chat)
+    // For regular chat at /chat, no welcome message should be generated
+    if (personalizedCourseData && lessonSessionData && messages.length === 0 && !isLessonMode) {
+      console.log('👋 Generating welcome message for lesson chat with course:', personalizedCourseData.courseInfo.title);
 
       // Generate welcome message using AI
       const generateWelcomeMessage = async () => {
@@ -571,6 +578,33 @@ ${lessonSessionData && lessonSessionData.lessonNumber > 1 ? '- ОБЯЗАТЕЛ�
       };
 
       generateWelcomeMessage();
+    }
+  }, [personalizedCourseData, lessonSessionData, messages.length, isLessonMode]);
+
+  // Generate general welcome message for plain chat (no course context)
+  useEffect(() => {
+    // If this is regular chat with no course data and no messages, show general welcome
+    if (!personalizedCourseData && !lessonSessionData && messages.length === 0 && !isLessonMode) {
+      console.log('👋 Generating general welcome message for plain chat');
+
+      const generalWelcomeMessage: Message = {
+        id: `general-welcome-${Date.now()}`,
+        role: 'assistant',
+        content: `Привет! 👋 Я Юлия, твой персональный учитель по всем школьным предметам.
+
+Я могу помочь тебе с:
+• 📚 Объяснением сложных тем
+• ✏️ Решением домашних заданий
+• 🎯 Подготовкой к контрольным и экзаменам
+• ❓ Ответами на любые вопросы по учебе
+
+Расскажи, с каким предметом или темой тебе нужна помощь?`,
+        timestamp: new Date(),
+        ttsPlayed: false
+      };
+
+      setMessages([generalWelcomeMessage]);
+      console.log('✅ General welcome message added to plain chat');
     }
   }, [personalizedCourseData, lessonSessionData, messages.length, isLessonMode]);
 
