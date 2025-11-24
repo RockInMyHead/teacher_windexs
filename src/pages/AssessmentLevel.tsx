@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { HeaderWithHero } from '@/components/Header';
 import { COURSE_TEST_QUESTIONS } from '@/utils/coursePlans';
 import { AdaptiveGradeLevelTest } from '@/components/AdaptiveGradeLevelTest';
-import { LastTopicInput } from '@/components/LastTopicInput';
 
 // Маппинг courseId к названиям курсов
 const COURSE_NAMES: { [key: number]: string } = {
@@ -35,33 +34,16 @@ const AssessmentLevel = () => {
   const [showAdaptiveTest, setShowAdaptiveTest] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
   const [selectedGrade, setSelectedGrade] = useState<number | null>(null);
-  const [showTopicInput, setShowTopicInput] = useState(false);
 
-  // Если grade уже передан в URL, автоматически определяем уровень
+  // Если grade уже передан в URL, автоматически определяем уровень и переходим к курсам
   useEffect(() => {
     if (gradeFromUrl && !selectedGrade) {
-      // Маппинг grade на уровень
-      const gradeToLevelMap: { [key: number]: string } = {
-        1: '1-3 класс',
-        2: '1-3 класс',
-        3: '4-5 класс',
-        4: '4-5 класс',
-        5: '6-7 класс',
-        6: '6-7 класс',
-        7: '8-9 класс',
-        8: '8-9 класс',
-        9: '10-11 класс',
-        10: '10-11 класс',
-        11: '10-11 класс',
-        100: 'Вуз'
-      };
-
-      const level = gradeToLevelMap[gradeFromUrl] || '1-3 класс';
-      setSelectedLevel(level);
-      setSelectedGrade(gradeFromUrl);
-      setShowTopicInput(true);
+      // Для классов 1-10 сразу переходим к выбору курса
+      if (gradeFromUrl >= 1 && gradeFromUrl <= 10) {
+        navigate('/available-courses');
+      }
     }
-  }, [gradeFromUrl, selectedGrade]);
+  }, [gradeFromUrl, selectedGrade, navigate]);
 
   // Маппинг уровней на grade значения
   // Используем доступные наборы вопросов (1, 3, 5, 7, 9 классы, 100 - ЕГЭ)
@@ -79,12 +61,8 @@ const AssessmentLevel = () => {
     const grade = levelToGradeMap[level];
     setSelectedLevel(level);
     setSelectedGrade(grade);
-    setShowTopicInput(true);
-  };
-
-  const handleTopicSubmit = (topic: string) => {
-    // Перейти в чат с выбранным уровнем и последней темой
-    navigate(`/chat?courseId=${courseId}&start=true&grade=${selectedGrade}&level=${selectedLevel}&lastTopic=${encodeURIComponent(topic)}`);
+    // Сразу переходим к выбору курса
+    navigate('/available-courses');
   };
 
   const handleAdaptiveTestComplete = (determinedGrade: number) => {
@@ -102,20 +80,8 @@ const AssessmentLevel = () => {
     setSelectedLevel(level);
     setSelectedGrade(determinedGrade);
     setShowAdaptiveTest(false);
-    setShowTopicInput(true);
-  };
-
-  // Отображение компонента выбора темы вместо основного интерфейса
-  if (showTopicInput && selectedLevel && selectedGrade) {
-    return (
-      <LastTopicInput
-        level={selectedLevel}
-        levelGrade={selectedGrade}
-        courseId={courseIdNum}
-        onSubmit={handleTopicSubmit}
-        onBack={() => navigate('/available-courses')}
-      />
-    );
+    // Сразу переходим к выбору курса
+    navigate('/available-courses');
   }
 
   // Отображение адаптивного теста

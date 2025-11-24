@@ -123,7 +123,7 @@ export const AdaptiveGradeLevelTest: React.FC<AdaptiveGradeLevelTestProps> = ({
             className="mb-6 gap-2 text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="w-4 h-4" />
-            Вернуться к выбору уровня
+            Назад
           </Button>
 
           {/* Main Card */}
