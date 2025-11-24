@@ -7,7 +7,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import React, { ReactNode } from "react";
-import { Brain, BookOpen, MessageCircle, Award, LogOut, Menu, X, User, Home } from "lucide-react";
+import { Brain, BookOpen, MessageCircle, Award, LogOut, Menu, X, User, Home, GraduationCap } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
@@ -81,6 +81,14 @@ const HeaderWithHero = ({ title, subtitle, showHero = true }: HeaderWithHeroProp
                 <Award className="w-4 h-4" />
                 Достижения
               </Button>
+              <Button
+                variant="ghost"
+                className="flex items-center gap-2"
+                onClick={() => navigate('/exams')}
+              >
+                <GraduationCap className="w-4 h-4" />
+                Экзамены
+              </Button>
             </nav>
           </div>
 
@@ -134,6 +142,16 @@ const HeaderWithHero = ({ title, subtitle, showHero = true }: HeaderWithHeroProp
             >
               <Award className="w-4 h-4" />
                   Достижения
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    navigate('/exams');
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="flex items-center gap-2"
+            >
+              <GraduationCap className="w-4 h-4" />
+                  Экзамены
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
@@ -271,6 +289,14 @@ const Header = () => {
               <Award className="w-4 h-4" />
               Достижения
             </Button>
+            <Button
+              variant="ghost"
+              className="flex items-center gap-2"
+              onClick={() => navigate('/exams')}
+            >
+              <GraduationCap className="w-4 h-4" />
+              Экзамены
+            </Button>
           </nav>
 
           {/* Мобильная навигация */}
@@ -310,6 +336,13 @@ const Header = () => {
                 >
                   <Award className="w-4 h-4" />
                   Достижения
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => navigate('/exams')}
+                  className="flex items-center gap-2"
+                >
+                  <GraduationCap className="w-4 h-4" />
+                  Экзамены
                 </DropdownMenuItem>
                 {isAuthenticated ? (
                   <>

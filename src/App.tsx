@@ -23,6 +23,8 @@ import Privacy from "./pages/Privacy";
 import NotFound from "./pages/NotFound";
 import StreamingChatTest from "./examples/StreamingChatTest";
 import GradeSelection from "./pages/GradeSelection";
+import Exams from "./pages/Exams";
+import ExamAddCourse from "./pages/ExamAddCourse";
 
 // Component to handle TTS cleanup on navigation
 const TTSNavigationHandler = () => {
@@ -67,6 +69,8 @@ const App = () => (
                 <Route path="/achievements" element={<Achievements />} />
                 <Route path="/assessment-level" element={<AssessmentLevel />} />
                 <Route path="/account" element={<PersonalAccount />} />
+                <Route path="/exams" element={<Exams />} />
+                <Route path="/exams/:examType/add" element={<ExamAddCourse />} />
                 <Route path="/terms" element={<Terms />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/streaming-test" element={<StreamingChatTest />} />
