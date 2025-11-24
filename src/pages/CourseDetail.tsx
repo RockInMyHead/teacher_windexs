@@ -700,6 +700,8 @@ export default function CourseDetail() {
         }
 
         if (examCourse) {
+
+        if (examCourse) {
           console.log('✅ Found exam course:', examCourse);
 
             // Создаем данные курса на основе examCourse
