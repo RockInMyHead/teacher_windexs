@@ -17,6 +17,14 @@ export class ChatService {
   private apiPrefix = API_CONFIG.API_PREFIX;
 
   /**
+   * Send educational message with optimized settings for learning
+   */
+  async sendEducationalMessage(messages: ChatMessage[], maxTokens: number = 2000): Promise<ChatCompletionResponse> {
+    const request = this.createEducationalRequest(messages, 'gpt-4o-mini', maxTokens);
+    return this.sendMessage(request);
+  }
+
+  /**
    * Send message to AI and get response
    */
   async sendMessage(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
@@ -169,13 +177,35 @@ export class ChatService {
     messages: ChatMessage[],
     model: string = 'gpt-4o-mini',
     maxTokens: number = 2000,
-    temperature: number = 0.7
+    temperature: number = 0.4 // СНИЖЕНА для лучшего качества текста
   ): ChatCompletionRequest {
     return {
       model,
       messages,
       max_completion_tokens: maxTokens,
       temperature,
+      top_p: 0.9, // ДОБАВЛЕНО для более coherent ответов
+      presence_penalty: 0.1, // ДОБАВЛЕНО для разнообразия
+      frequency_penalty: 0.1, // ДОБАВЛЕНО для избежания повторений
+    };
+  }
+
+  /**
+   * Create educational message request with optimized settings
+   */
+  createEducationalRequest(
+    messages: ChatMessage[],
+    model: string = 'gpt-4o-mini',
+    maxTokens: number = 2000
+  ): ChatCompletionRequest {
+    return {
+      model,
+      messages,
+      max_completion_tokens: maxTokens,
+      temperature: 0.3, // ЕЩЕ НИЖЕ для образовательного контента
+      top_p: 0.8, // Более focused ответы
+      presence_penalty: 0.2, // Больше разнообразия
+      frequency_penalty: 0.2, // Меньше повторений
     };
   }
 

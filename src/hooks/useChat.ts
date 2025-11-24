@@ -7,6 +7,45 @@ import type { Message, ChatCompletionRequest, UseChatReturn, AppError } from '@/
 import { chatService } from '@/services/api/chatService';
 import { handleApiError, getUserFriendlyErrorMessage } from '@/services/api/errorHandler';
 import { logger } from '@/utils/logger';
+import { learningProgressService } from '@/services';
+
+/**
+ * Функция пост-обработки текста для исправления распространенных ошибок
+ */
+function postProcessText(text: string): string {
+  let processed = text;
+
+  // Исправление распространенных ошибок
+  const corrections = [
+    // Слитные слова
+    [/изменениелаголов/g, 'изменение глаголов'],
+    [/спреннями/g, 'спряжениями'],
+    [/спрение/g, 'спряжение'],
+    [/голы/g, 'глаголы'],
+    [/напр\./g, 'например'],
+    [/кот\./g, 'которые'],
+    [/т\.е\./g, 'то есть'],
+    [/и\.т\.д\./g, 'и так далее'],
+
+    // Неполные предложения
+    [/спряж\.$/g, 'спряжения.'],
+
+    // Ошибки в окончаниях
+    [/спрениями/g, 'спряжениями'],
+    [/спрении/g, 'спряжения'],
+
+    // Пунктуация
+    [/-ять -еть \(/g, '-ять, -еть ('],
+    [/-ять -еть,/g, '-ять, -еть,'],
+    [/-ить или -/g, '-ить или -еть ('],
+  ];
+
+  corrections.forEach(([pattern, replacement]) => {
+    processed = processed.replace(pattern, replacement as string);
+  });
+
+  return processed;
+}
 
 /**
  * Convert file to base64 data URL
@@ -148,13 +187,45 @@ export const useChat = (options: UseChatOptions = {}): UseChatReturn => {
           });
         }
 
+        // Определяем тип чата и соответствующие настройки
+        const lessonContext = learningProgressService.getLessonContext();
+        const isLessonChat = !!lessonContext;
+
+        console.log('🎓 Chat type determination:', {
+          hasLessonContext: !!lessonContext,
+          isLessonChat,
+          lessonTitle: lessonContext?.currentLessonTitle
+        });
+
+        // Настройки для разных типов чата
+        const chatSettings = isLessonChat ? {
+          // Образовательный чат - более строгие настройки для качества
+          temperature: 0.3,
+          top_p: 0.8,
+          presence_penalty: 0.2,
+          frequency_penalty: 0.2,
+          max_tokens: 2500
+        } : {
+          // Общий чат - более креативные настройки
+          temperature: 0.7,
+          top_p: 0.9,
+          presence_penalty: 0.1,
+          frequency_penalty: 0.1,
+          max_tokens: 2000
+        };
+
         // Get AI response with streaming
         const request: ChatCompletionRequest = {
           model,
           messages: resolvedChatMessages as any,
-          max_completion_tokens: 2000,
-          temperature: 0.7,
+          max_completion_tokens: chatSettings.max_tokens,
+          temperature: chatSettings.temperature,
+          top_p: chatSettings.top_p,
+          presence_penalty: chatSettings.presence_penalty,
+          frequency_penalty: chatSettings.frequency_penalty,
         };
+
+        console.log('🎛️ Using chat settings:', chatSettings);
 
         // Initialize streaming message
         console.log('🚀 Initializing streaming message');
@@ -180,15 +251,26 @@ export const useChat = (options: UseChatOptions = {}): UseChatReturn => {
         // Finalize streaming message
         setStreamingMessage(prev => {
           if (!prev) return null;
-          console.log('✅ Finalizing streaming message with', prev.content.length, 'characters');
+
+          // Применяем пост-обработку для исправления ошибок в образовательном контенте
+          const processedContent = isLessonChat ? postProcessText(prev.content) : prev.content;
+          const processedMessage = {
+            ...prev,
+            content: processedContent
+          };
+
+          console.log('✅ Finalizing streaming message with', processedContent.length, 'characters');
+          console.log('📝 Original content:', prev.content);
+          console.log('📝 Processed content:', processedContent);
+
           setMessages(currentMessages => {
-            const updated = [...currentMessages, prev];
+            const updated = [...currentMessages, processedMessage];
           if (updated.length > maxMessages) {
             return updated.slice(-maxMessages);
           }
           return updated;
         });
-          onMessageReceived?.(prev);
+          onMessageReceived?.(processedMessage);
           return null;
         });
 

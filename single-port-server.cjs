@@ -238,7 +238,84 @@ function startSinglePortServer() {
       CREATE INDEX IF NOT EXISTS idx_lesson_sessions_status ON lesson_sessions(session_status);
       CREATE INDEX IF NOT EXISTS idx_generated_lessons_course ON generated_lessons(course_name, lesson_title);
       CREATE INDEX IF NOT EXISTS idx_generated_lessons_active ON generated_lessons(is_active);
+
+      -- Новые таблицы для системы прогресса обучения
+      CREATE TABLE IF NOT EXISTS user_courses (
+        id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+        user_id TEXT NOT NULL,
+        course_id TEXT NOT NULL,
+        enrolled_at TEXT DEFAULT (datetime('now')),
+        last_accessed_at TEXT,
+        current_lesson_number INTEGER DEFAULT 1,
+        completed_lessons INTEGER DEFAULT 0,
+        progress_percentage REAL DEFAULT 0 CHECK (progress_percentage >= 0 AND progress_percentage <= 100),
+        total_study_time_minutes INTEGER DEFAULT 0,
+        average_score REAL DEFAULT 0,
+        status TEXT DEFAULT 'active' CHECK (status IN ('active', 'completed', 'paused', 'dropped')),
+        UNIQUE (user_id, course_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS user_lessons (
+        id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+        user_id TEXT NOT NULL,
+        lesson_id TEXT NOT NULL,
+        user_course_id TEXT NOT NULL,
+        status TEXT DEFAULT 'not_started' CHECK (status IN ('not_started', 'in_progress', 'completed', 'reviewed')),
+        started_at TEXT,
+        completed_at TEXT,
+        score REAL,
+        time_spent_minutes INTEGER DEFAULT 0,
+        attempts_count INTEGER DEFAULT 0,
+        homework_submitted INTEGER DEFAULT 0,
+        homework_submitted_at TEXT,
+        homework_content TEXT,
+        homework_feedback TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        UNIQUE (user_id, lesson_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_user_courses_user_id ON user_courses(user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_courses_course_id ON user_courses(course_id);
+      CREATE INDEX IF NOT EXISTS idx_user_courses_status ON user_courses(status);
+      CREATE INDEX IF NOT EXISTS idx_user_lessons_user_id ON user_lessons(user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_lessons_lesson_id ON user_lessons(lesson_id);
+      CREATE INDEX IF NOT EXISTS idx_user_lessons_status ON user_lessons(status);
     `);
+
+    // Инициализируем начальные данные
+    try {
+      db.exec(`
+        -- Insert sample courses
+        INSERT OR IGNORE INTO courses (id, title, description, subject, grade, difficulty_level, total_lessons, estimated_hours, icon_name)
+        VALUES
+          ('physics-5', 'Физика для 5 класса', 'Вводный курс физики для пятого класса с основами механики, электричества и оптики.', 'physics', 5, 'easy', 34, 68, 'Atom'),
+          ('math-5', 'Математика для 5 класса', 'Базовый курс математики: дроби, уравнения, геометрия.', 'math', 5, 'medium', 40, 80, 'Calculator'),
+          ('english-5', 'Английский 5 класс', 'Начальный курс английского языка для 5 класса.', 'english', 5, 'easy', 36, 72, 'Globe'),
+          ('russian-8', 'Русский язык для 8 класса', 'Курс русского языка для восьмого класса с углубленным изучением орфографии и синтаксиса.', 'russian', 8, 'medium', 42, 84, 'BookOpen'),
+          ('biology-9', 'Биология для 9 класса', 'Курс биологии для девятого класса: анатомия, генетика, эволюция.', 'biology', 9, 'medium', 38, 76, 'Dna'),
+          ('exam-ege-math', 'Математика (профиль) ЕГЭ', 'Подготовка к профильной математике ЕГЭ. Полный курс с разбором всех типов заданий.', 'math', NULL, 'hard', 50, 100, 'Calculator'),
+          ('exam-ege-russian', 'Русский язык ЕГЭ', 'Подготовка к ЕГЭ по русскому языку. Орфография, пунктуация, сочинение.', 'russian', NULL, 'hard', 45, 90, 'BookOpen'),
+          ('exam-oge-math', 'Математика ОГЭ', 'Подготовка к ОГЭ по математике. Алгебра и геометрия.', 'math', NULL, 'medium', 40, 80, 'Calculator'),
+          ('exam-oge-biology', 'Биология ОГЭ', 'Подготовка к ОГЭ по биологии. Все разделы школьного курса.', 'biology', NULL, 'medium', 35, 70, 'Dna');
+
+        -- Update exam_type for exam courses
+        UPDATE courses SET exam_type = 'ЕГЭ' WHERE id LIKE 'exam-ege-%';
+        UPDATE courses SET exam_type = 'ОГЭ' WHERE id LIKE 'exam-oge-%';
+
+        -- Insert sample lessons
+        INSERT OR IGNORE INTO lessons (course_id, lesson_number, title, topic, description, content)
+        VALUES
+          ('physics-5', 1, 'Что такое физика и зачем она нужна', 'Вводный модуль: физика как наука', 'Определение физики; место физики среди наук; роль физики в технике и быту; примеры физических объектов и процессов', 'Физика - это наука о природе, изучающая простейшие и вместе с тем наиболее общие свойства материального мира...'),
+          ('english-5', 1, 'Алфавит и базовые звуки', 'Знакомство с английским алфавитом', 'Изучение английского алфавита, правила произношения букв и звуков. Основные звуковые сочетания.', 'Английский алфавит состоит из 26 букв...'),
+          ('english-5', 2, 'Приветствия и знакомство', 'Базовые фразы для общения', 'Hello, Hi, Good morning, How are you? Представление себя: My name is..., I am... Nice to meet you.', 'В этом уроке мы научимся здороваться и представляться...'),
+          ('exam-ege-math', 1, 'Введение в математику ЕГЭ', 'Основные понятия и термины', 'Знакомство с основными понятиями и терминами математики ЕГЭ. Числа, множества, функции. Подготовка к успешной сдаче экзамена.', 'Профильная математика ЕГЭ - один из самых сложных экзаменов...');
+      `);
+      console.log('✅ Database seed data initialized');
+    } catch (error) {
+      console.error('❌ Error initializing database seed data:', error.message);
+    }
+
     console.log('✅ Database tables initialized');
   } catch (error) {
     console.error('❌ Error initializing database tables:', error.message);
@@ -1301,6 +1378,272 @@ grade >= 7 ?
     }
   });
 
+  // ==================== LEARNING PROGRESS API ROUTES ====================
+
+  // POST /api/learning-progress/enroll - Записать пользователя на курс
+  app.post('/api/learning-progress/enroll', async (req, res) => {
+    try {
+      const { userId, courseId } = req.body;
+
+      if (!userId || !courseId) {
+        return res.status(400).json({ error: 'Missing userId or courseId' });
+      }
+
+      // Проверяем, не записан ли уже пользователь
+      const existing = db.prepare('SELECT * FROM user_courses WHERE user_id = ? AND course_id = ?').get(userId, courseId);
+
+      if (existing) {
+        return res.json({ userCourse: existing });
+      }
+
+      // Записываем пользователя на курс
+      const result = db.prepare(
+        `INSERT INTO user_courses (user_id, course_id, current_lesson_number, completed_lessons, progress_percentage, total_study_time_minutes, average_score, status)
+         VALUES (?, ?, 1, 0, 0, 0, 0, 'active')`
+      ).run(userId, courseId);
+
+      const userCourse = db.prepare('SELECT * FROM user_courses WHERE id = ?').get(result.lastInsertRowid);
+
+      res.status(201).json({ userCourse });
+    } catch (error) {
+      console.error('Error enrolling in course:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // GET /api/learning-progress/users/:userId/courses/:courseId - Получить прогресс по курсу
+  app.get('/api/learning-progress/users/:userId/courses/:courseId', async (req, res) => {
+    try {
+      const { userId, courseId } = req.params;
+
+      // Получаем прогресс по курсу
+      const userCourse = db.prepare('SELECT * FROM user_courses WHERE user_id = ? AND course_id = ?').get(userId, courseId);
+
+      if (!userCourse) {
+        return res.status(404).json({ error: 'User course not found' });
+      }
+
+      // Получаем прогресс по урокам
+      const lessons = db.prepare(
+        `SELECT ul.*, l.title, l.topic, l.lesson_number
+         FROM user_lessons ul
+         JOIN lessons l ON ul.lesson_id = l.id
+         WHERE ul.user_id = ? AND ul.user_course_id = ?
+         ORDER BY l.lesson_number ASC`
+      ).all(userId, userCourse.id);
+
+      res.json({ userCourse, lessons });
+    } catch (error) {
+      console.error('Error fetching user course progress:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // POST /api/learning-progress/lessons/start - Начать урок
+  app.post('/api/learning-progress/lessons/start', async (req, res) => {
+    try {
+      const { userId, lessonId, userCourseId } = req.body;
+
+      if (!userId || !lessonId || !userCourseId) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+
+      // Проверяем, не начат ли уже урок
+      const existing = db.prepare('SELECT * FROM user_lessons WHERE user_id = ? AND lesson_id = ?').get(userId, lessonId);
+
+      if (existing) {
+        // Обновляем статус, если урок уже существует
+        db.prepare(
+          `UPDATE user_lessons
+           SET status = 'in_progress', started_at = datetime('now'), attempts_count = attempts_count + 1, updated_at = datetime('now')
+           WHERE id = ?`
+        ).run(existing.id);
+
+        const updated = db.prepare('SELECT * FROM user_lessons WHERE id = ?').get(existing.id);
+        return res.json({ lessonProgress: updated });
+      }
+
+      // Создаем новую запись прогресса урока
+      const result = db.prepare(
+        `INSERT INTO user_lessons (user_id, lesson_id, user_course_id, status, started_at, attempts_count)
+         VALUES (?, ?, ?, 'in_progress', datetime('now'), 1)`
+      ).run(userId, lessonId, userCourseId);
+
+      const lessonProgress = db.prepare('SELECT * FROM user_lessons WHERE id = ?').get(result.lastInsertRowid);
+
+      // Обновляем время последнего доступа к курсу
+      db.prepare(
+        `UPDATE user_courses SET last_accessed_at = datetime('now') WHERE id = ?`
+      ).run(userCourseId);
+
+      res.status(201).json({ lessonProgress });
+    } catch (error) {
+      console.error('Error starting lesson:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // POST /api/learning-progress/lessons/complete - Завершить урок
+  app.post('/api/learning-progress/lessons/complete', async (req, res) => {
+    try {
+      const { userId, lessonId, score, timeSpentMinutes } = req.body;
+
+      if (!userId || !lessonId) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+
+      // Получаем запись урока
+      const lessonProgress = db.prepare('SELECT * FROM user_lessons WHERE user_id = ? AND lesson_id = ?').get(userId, lessonId);
+
+      if (!lessonProgress) {
+        return res.status(404).json({ error: 'Lesson progress not found' });
+      }
+
+      // Обновляем статус урока
+      db.prepare(
+        `UPDATE user_lessons
+         SET status = 'completed',
+             completed_at = datetime('now'),
+             score = ?,
+             time_spent_minutes = time_spent_minutes + ?,
+             updated_at = datetime('now')
+         WHERE id = ?`
+      ).run(score || null, timeSpentMinutes || 0, lessonProgress.id);
+
+      // Обновляем прогресс курса
+      const userCourse = db.prepare('SELECT * FROM user_courses WHERE id = ?').get(lessonProgress.user_course_id);
+
+      if (userCourse) {
+        const courseId = userCourse.course_id;
+
+        // Получаем общее количество уроков в курсе
+        const totalLessons = db.prepare('SELECT COUNT(*) as count FROM lessons WHERE course_id = ?').get(courseId).count;
+
+        // Получаем количество завершенных уроков
+        const completedLessons = db.prepare(
+          `SELECT COUNT(*) as count FROM user_lessons
+           WHERE user_course_id = ? AND status = 'completed'`
+        ).get(userCourse.id).count;
+
+        const progress = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
+
+        // Вычисляем средний балл
+        const avgScoreResult = db.prepare(
+          `SELECT AVG(score) as avg_score FROM user_lessons
+           WHERE user_course_id = ? AND score IS NOT NULL`
+        ).get(userCourse.id);
+
+        const avgScore = avgScoreResult.avg_score || 0;
+
+        // Обновляем прогресс курса
+        db.prepare(
+          `UPDATE user_courses
+           SET completed_lessons = ?,
+               progress_percentage = ?,
+               average_score = ?,
+               total_study_time_minutes = total_study_time_minutes + ?,
+               last_accessed_at = datetime('now'),
+               current_lesson_number = current_lesson_number + 1
+           WHERE id = ?`
+        ).run(completedLessons, progress, avgScore, timeSpentMinutes || 0, userCourse.id);
+      }
+
+      const updatedLesson = db.prepare('SELECT * FROM user_lessons WHERE id = ?').get(lessonProgress.id);
+      const updatedCourse = db.prepare('SELECT * FROM user_courses WHERE id = ?').get(lessonProgress.user_course_id);
+
+      res.json({
+        lessonProgress: updatedLesson,
+        userCourse: updatedCourse
+      });
+    } catch (error) {
+      console.error('Error completing lesson:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // GET /api/learning-progress/users/:userId/courses/:courseId/llm-context - Получить контекст для LLM
+  app.get('/api/learning-progress/users/:userId/courses/:courseId/llm-context', async (req, res) => {
+    try {
+      const { userId, courseId } = req.params;
+
+      // Получаем информацию о курсе
+      const course = db.prepare('SELECT * FROM courses WHERE id = ?').get(courseId);
+
+      if (!course) {
+        return res.status(404).json({ error: 'Course not found' });
+      }
+
+      // Получаем прогресс пользователя
+      const userCourse = db.prepare('SELECT * FROM user_courses WHERE user_id = ? AND course_id = ?').get(userId, courseId);
+
+      // Получаем текущий урок
+      let currentLesson = null;
+      if (userCourse) {
+        currentLesson = db.prepare('SELECT * FROM lessons WHERE course_id = ? AND lesson_number = ?').get(courseId, userCourse.current_lesson_number);
+      }
+
+      // Получаем предыдущее домашнее задание
+      let previousHomework = null;
+      if (userCourse && userCourse.current_lesson_number > 1) {
+        const prevLesson = db.prepare('SELECT * FROM lessons WHERE course_id = ? AND lesson_number = ?').get(courseId, userCourse.current_lesson_number - 1);
+
+        if (prevLesson) {
+          const homework = db.prepare('SELECT * FROM user_lessons WHERE user_id = ? AND lesson_id = ?').get(userId, prevLesson.id);
+
+          if (homework) {
+            previousHomework = {
+              task: prevLesson.homework ? JSON.parse(prevLesson.homework).task : null,
+              submitted: homework.homework_submitted === 1,
+              feedback: homework.homework_feedback ? JSON.parse(homework.homework_feedback) : null
+            };
+          }
+        }
+      }
+
+      // Получаем историю пройденных тем
+      const completedLessons = db.prepare(
+        `SELECT l.title, l.topic, ul.completed_at
+         FROM user_lessons ul
+         JOIN lessons l ON ul.lesson_id = l.id
+         WHERE ul.user_course_id = ? AND ul.status = 'completed'
+         ORDER BY l.lesson_number ASC`
+      ).all(userCourse?.id);
+
+      const topicsCovered = completedLessons.map(l => l.topic);
+
+      // Получаем общее количество уроков
+      const totalLessons = db.prepare('SELECT COUNT(*) as count FROM lessons WHERE course_id = ?').get(courseId).count;
+
+      // Формируем контекст для LLM
+      const context = {
+        courseTitle: course.title,
+        courseDescription: course.description,
+        grade: course.grade,
+        subject: course.subject,
+        currentLessonNumber: userCourse?.current_lesson_number || 1,
+        completedLessons: userCourse?.completed_lessons || 0,
+        totalLessons,
+        progressPercentage: userCourse?.progress_percentage || 0,
+        currentLessonTitle: currentLesson?.title,
+        currentLessonTopic: currentLesson?.topic,
+        currentLessonObjectives: currentLesson?.learning_objectives
+          ? JSON.parse(currentLesson.learning_objectives)
+          : [],
+        previousHomework,
+        studyHistory: {
+          topicsCovered,
+          lastStudyDate: userCourse?.last_accessed_at,
+          totalStudyTime: userCourse?.total_study_time_minutes || 0
+        }
+      };
+
+      res.json({ context });
+    } catch (error) {
+      console.error('Error fetching LLM context:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
   // Запускаем сервер
   const server = app.listen(process.env.PORT, () => {
     console.log(`✅ Единый сервер запущен на порту ${process.env.PORT}`);
@@ -1330,7 +1673,7 @@ grade >= 7 ?
   // Get database health
   app.get('/api/db/health', (req, res) => {
     try {
-      const result = db.prepare('SELECT COUNT(*) as count FROM sqlite_master WHERE type="table"').get();
+      const result = db.prepare("SELECT COUNT(*) as count FROM sqlite_master WHERE type='table'").get();
       res.json({
         status: 'ok',
         message: 'Database is healthy',

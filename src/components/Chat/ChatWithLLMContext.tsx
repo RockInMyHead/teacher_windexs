@@ -8,6 +8,44 @@ import { useLLMContext } from '@/hooks/useLLMContext';
 import { ChatContainer } from '@/components/Chat';
 import { Loader2 } from 'lucide-react';
 
+/**
+ * Функция пост-обработки текста для исправления распространенных ошибок
+ */
+function postProcessText(text: string): string {
+  let processed = text;
+
+  // Исправление распространенных ошибок
+  const corrections = [
+    // Слитные слова
+    [/изменениелаголов/g, 'изменение глаголов'],
+    [/спреннями/g, 'спряжениями'],
+    [/спрение/g, 'спряжение'],
+    [/голы/g, 'глаголы'],
+    [/напр\./g, 'например'],
+    [/кот\./g, 'которые'],
+    [/т\.е\./g, 'то есть'],
+    [/и\.т\.д\./g, 'и так далее'],
+
+    // Неполные предложения
+    [/спряж\.$/g, 'спряжения.'],
+
+    // Ошибки в окончаниях
+    [/спрениями/g, 'спряжениями'],
+    [/спрении/g, 'спряжения'],
+
+    // Пунктуация
+    [/-ять -еть \(/g, '-ять, -еть ('],
+    [/-ять -еть,/g, '-ять, -еть,'],
+    [/-ить или -/g, '-ить или -еть ('],
+  ];
+
+  corrections.forEach(([pattern, replacement]) => {
+    processed = processed.replace(pattern, replacement as string);
+  });
+
+  return processed;
+}
+
 interface ChatWithLLMContextProps {
   userId?: string;
   courseId?: string;
@@ -61,8 +99,11 @@ export const ChatWithLLMContext: React.FC<ChatWithLLMContextProps> = ({
         onMessageSent?.(message);
       }}
       onReceiveMessage={(response) => {
-        console.log('📥 Assistant response:', response);
-        onResponseReceived?.(response);
+        // Применяем пост-обработку текста для исправления ошибок
+        const processedResponse = postProcessText(response);
+        console.log('📥 Assistant response (original):', response);
+        console.log('📥 Assistant response (processed):', processedResponse);
+        onResponseReceived?.(processedResponse);
       }}
     />
   );
