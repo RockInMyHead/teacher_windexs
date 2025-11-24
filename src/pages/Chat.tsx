@@ -464,28 +464,28 @@ const Chat = () => {
             setPersonalizedCourseData(null);
             setLessonSessionData(null);
 
-            // Set course context for the chat (but DON'T set currentLesson to avoid triggering lesson generation)
-            setPersonalizedCourseData({
-              courseInfo: {
+          // Set course context for the chat (but DON'T set currentLesson to avoid triggering lesson generation)
+          setPersonalizedCourseData({
+            courseInfo: {
                 id: courseData.id,
-                title: courseData.title,
-                grade: courseData.grade,
-                description: courseData.description
-              },
-              lessons: []
-            });
+              title: courseData.title,
+              grade: courseData.grade,
+              description: courseData.description
+            },
+            lessons: []
+          });
 
-            // Set lesson session data if available
-            if (courseData.sessionData) {
-              setLessonSessionData(courseData.sessionData);
-              console.log('Loaded lesson session data:', courseData.sessionData);
+          // Set lesson session data if available
+          if (courseData.sessionData) {
+            setLessonSessionData(courseData.sessionData);
+            console.log('Loaded lesson session data:', courseData.sessionData);
             } else if (parsedLessonSessionData) {
               setLessonSessionData(parsedLessonSessionData);
               console.log('Loaded parsed lesson session data:', parsedLessonSessionData);
-            }
+          }
 
-            // DON'T set currentLesson in chat mode - we only need course context, not lesson mode
-            // This prevents automatic lesson generation from triggering
+          // DON'T set currentLesson in chat mode - we only need course context, not lesson mode
+          // This prevents automatic lesson generation from triggering
 
           } else {
             console.log('⚠️ No lesson session data - treating as general chat');

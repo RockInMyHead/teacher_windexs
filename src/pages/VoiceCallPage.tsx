@@ -38,6 +38,35 @@ const VoiceCallPage: React.FC = () => {
   // Web Speech Recognition instance
   const recognitionRef = useRef<any>(null);
 
+  // Audio analysis refs
+  const analyserRef = useRef<any>(null);
+  const animationFrameRef = useRef<number | null>(null);
+
+  // Audio detection refs
+  const speechFramesRef = useRef<number>(0);
+  const silenceFramesRef = useRef<number>(0);
+  const silenceAfterSpeechRef = useRef<number>(0);
+  const speechDetectedRef = useRef<boolean>(false);
+  const processingTypeRef = useRef<string | null>(null);
+
+  // Audio calibration refs
+  const isCalibrationDoneRef = useRef<boolean>(false);
+  const calibrationSamplesRef = useRef<number[]>([]);
+  const noiseFloorRef = useRef<number>(0);
+  const isQuickCalibrationRef = useRef<boolean>(false);
+
+  // Media recording refs
+  const mediaRecorderRef = useRef<any>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  // Audio detection constants
+  const MIN_THRESHOLD = 5;
+  const REQUIRED_SPEECH_FRAMES = 30;
+  const MIN_SPEECH_DURATION = 15;
+  const SILENCE_AFTER_SPEECH_FRAMES = 90;
+  const QUICK_CALIBRATION_FRAMES = 30;
+  const CALIBRATION_FRAMES = 150;
+
   // Web Speech API parameters
   const SILENCE_TIMEOUT = 2000; // 2 seconds of silence to consider speech ended
 
@@ -98,6 +127,92 @@ const VoiceCallPage: React.FC = () => {
     isActiveRef.current = false;
     
     console.log('✅ Cleanup complete');
+  };
+
+  // Stop audio recording
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+      console.log('🛑 Recording stopped');
+    }
+  };
+
+  // Setup audio analysis for speech detection
+  const setupAudioAnalysis = (stream: MediaStream) => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const analyser = audioContext.createAnalyser();
+      const source = audioContext.createMediaStreamSource(stream);
+
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+      analyser.minDecibels = -90;
+      analyser.maxDecibels = -10;
+
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      console.log('🎵 Audio analysis setup complete');
+    } catch (error) {
+      console.error('❌ Audio analysis setup failed:', error);
+    }
+  };
+
+  // Handle speech audio processing
+  const handleSpeech = async (audioBlob: Blob) => {
+    try {
+      console.log('🎤 Processing speech audio...', audioBlob.size, 'bytes');
+
+      setIsProcessing(true);
+      setError(null);
+
+      // Convert blob to base64 for API
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          const base64Audio = reader.result as string;
+
+          // Send to Whisper API for transcription
+          const response = await fetch('/api/transcribe', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              audio: base64Audio,
+              language: 'ru'
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`Transcription failed: ${response.statusText}`);
+          }
+
+          const result = await response.json();
+          const transcript = result.transcript || '';
+
+          if (transcript.trim()) {
+            console.log('📝 Transcribed:', transcript);
+            await handleSpeechTranscript(transcript.trim());
+          } else {
+            console.log('🤷 Empty transcript, resuming listening...');
+            resumeListening();
+          }
+        } catch (error) {
+          console.error('❌ Transcription error:', error);
+          setError('Ошибка распознавания речи');
+          resumeListening();
+        } finally {
+          setIsProcessing(false);
+        }
+      };
+
+      reader.readAsDataURL(audioBlob);
+    } catch (error) {
+      console.error('❌ Speech handling error:', error);
+      setIsProcessing(false);
+      resumeListening();
+    }
   };
 
   // Start Web Speech API listening
@@ -514,7 +629,7 @@ const VoiceCallPage: React.FC = () => {
       setIsProcessing(true);
 
       const message = "Есть вопросы? Я готова помочь!";
-
+      
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: message,
@@ -1137,7 +1252,7 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
         await sendWelcomeMessage();
       }
 
-      startListening();
+    startListening();
     };
 
     initializeChat();
