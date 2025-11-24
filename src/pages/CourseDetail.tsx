@@ -37,6 +37,9 @@ export default function CourseDetail() {
   const [currentLessonNumber, setCurrentLessonNumber] = useState(1);
   const [learningPlan, setLearningPlan] = useState<any>(null);
 
+  // Debug logging
+  console.log('🎯 CourseDetail rendered:', { courseId, mode });
+
   // Voice call states
   const [showVideoCall, setShowVideoCall] = useState(false);
   const [isCallActive, setIsCallActive] = useState(false);
@@ -987,7 +990,9 @@ ${context}
   const progressPercentage = course.progress;
 
   // Если это режим выбора типа обучения
+  console.log('🔍 Checking mode for select-mode:', mode);
   if (mode === 'select-mode') {
+    console.log('✅ Showing select-mode page');
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
