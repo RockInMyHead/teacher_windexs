@@ -441,20 +441,18 @@ const Chat = () => {
           const courseData = JSON.parse(storedCourseData);
           console.log('Loaded course data for chat session:', courseData);
 
-          // Set course context for the chat
+          // Set course context for the chat (but DON'T set currentLesson to avoid triggering lesson generation)
           setPersonalizedCourseData({
             courseInfo: {
               title: courseData.title,
               grade: courseData.grade,
               description: courseData.description
             },
-            lessons: courseData.currentLesson ? [courseData.currentLesson] : []
+            lessons: []
           });
 
-          // Set current lesson if available
-          if (courseData.currentLesson) {
-            setCurrentLesson(courseData.currentLesson);
-          }
+          // DON'T set currentLesson in chat mode - we only need course context, not lesson mode
+          // This prevents automatic lesson generation from triggering
 
         } catch (error) {
           console.error('Failed to parse course data for chat:', error);
