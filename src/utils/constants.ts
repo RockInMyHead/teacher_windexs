@@ -5,7 +5,8 @@
 export const TIMEOUT_DURATIONS = {
   TTS_GENERATION: 30000,      // 30 seconds
   VOICE_RECOGNITION: 60000,   // 60 seconds
-  API_CALL: 30000,            // 30 seconds
+  API_CALL: 120000,           // 120 seconds (2 minutes)
+  STREAMING_API_CALL: 180000, // 180 seconds (3 minutes) for streaming
   DEBOUNCE: 300,              // 300ms
   ANIMATION: 300,             // 300ms
 } as const;
@@ -14,6 +15,7 @@ export const API_CONFIG = {
   BASE_URL: typeof window !== 'undefined' ? window.location.origin : '',
   API_PREFIX: '/api',
   TIMEOUT: TIMEOUT_DURATIONS.API_CALL,
+  STREAMING_TIMEOUT: TIMEOUT_DURATIONS.STREAMING_API_CALL,
 } as const;
 
 export const VOICE_CONFIG = {

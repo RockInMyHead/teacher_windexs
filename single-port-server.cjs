@@ -689,40 +689,56 @@ function startSinglePortServer() {
       console.log('📡 Streaming mode:', isStreaming);
 
       if (isStreaming) {
-        // Handle streaming response
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
+        // Handle streaming response using fetch instead of curl for better SSE support
+        console.log('🌊 [STREAMING] Using fetch-based streaming');
 
-        const stream = await curlWithProxy('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-            'Content-Type': 'application/json',
-            'User-Agent': 'curl/7.68.0',
-            'Accept': '*/*'
-          },
-          data: req.body,
-          stream: true
-        });
+        try {
+          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(req.body),
+          });
 
-        // Set UTF-8 encoding on the stream to properly handle multi-byte characters
-        stream.setEncoding('utf8');
+          if (!response.ok) {
+            throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+          }
 
-        // Pipe the stream to response
-        stream.on('data', (chunk) => {
-          // chunk is already a string with proper UTF-8 encoding
-          res.write(chunk);
-        });
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-cache');
+          res.setHeader('Connection', 'keep-alive');
 
-        stream.on('end', () => {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+
+              if (done) {
+                console.log('🌊 [STREAMING] Stream completed');
+                break;
+              }
+
+              const chunk = decoder.decode(value, { stream: true });
+              console.log('🌊 [STREAMING] Received chunk:', chunk.length, 'characters');
+
+              // Write chunk directly to response
+              res.write(chunk);
+            }
+          } finally {
+            reader.releaseLock();
+          }
+
           res.end();
-        });
+          console.log('🌊 [STREAMING] Response ended successfully');
 
-        stream.on('error', (error) => {
+        } catch (error) {
           console.error('❌ Streaming error:', error);
-          res.status(500).end();
-        });
+          res.status(500).json({ error: 'Streaming failed', details: error.message });
+        }
 
       } else {
         // Handle regular response

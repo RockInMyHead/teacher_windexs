@@ -85,7 +85,7 @@ export class ChatService {
       const controller = new AbortController();
       const timeoutId = setTimeout(
         () => controller.abort(),
-        getTimeoutDuration('API_CALL')
+        getTimeoutDuration('STREAMING_API_CALL')
       );
 
       const response = await fetch(url, {
