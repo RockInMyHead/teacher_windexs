@@ -848,7 +848,7 @@ export default function CourseDetail() {
     }
   };
 
-  const startInteractiveLesson = () => {
+  const startInteractiveLesson = async () => {
     // Start new chat session with the teacher
     console.log('🚀 [COURSE DETAIL] startInteractiveLesson called - starting new chat session');
     console.log('📍 Current location:', window.location.href);
@@ -859,6 +859,9 @@ export default function CourseDetail() {
     localStorage.removeItem('lessonContext');
     localStorage.removeItem('currentCourse'); // Clear old course data
     localStorage.removeItem('personalizedCourseData'); // Clear any cached course data
+    localStorage.removeItem('currentLessonContext');
+
+    const userId = 'default_user'; // TODO: получить реальный userId из контекста авторизации
 
     // Save course info for the chat session with lesson context
     const courseData = {
@@ -895,12 +898,43 @@ export default function CourseDetail() {
     // Save current course with session info
     const courseWithSession = {
       ...courseData,
-      sessionData
+      sessionData,
+      userId // Добавляем userId для использования в Chat
     };
 
     localStorage.setItem('currentCourse', JSON.stringify(courseWithSession));
 
     console.log('💾 [COURSE DETAIL] Saved course data for chat session:', courseData);
+
+    // Начинаем урок в БД
+    try {
+      const { learningProgressService } = await import('@/services');
+      
+      // Получаем ID урока (если есть currentLesson)
+      if (course?.currentLesson) {
+        console.log('📝 Starting lesson in database...');
+        
+        // Получаем user_course_id
+        const progressData = await learningProgressService.getUserCourseProgress(userId, course.id as string);
+        
+        if (progressData.userCourse) {
+          // Стартуем урок (в реальной системе нужно получить lesson_id из БД)
+          // Пока используем mock ID
+          const lessonId = `lesson_${course.id}_${sessionData.lessonNumber}`;
+          
+          await learningProgressService.startLesson({
+            userId,
+            lessonId,
+            userCourseId: progressData.userCourse.id
+          });
+          
+          console.log('✅ Lesson started in database');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error starting lesson in database:', error);
+      // Продолжаем даже если не удалось записать в БД
+    }
 
     // Navigate to chat page
     console.log('🧭 [COURSE DETAIL] Navigating to /chat...');

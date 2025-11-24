@@ -328,7 +328,7 @@ const AvailableCourses = () => {
     }
   };
 
-  const startCourseWithGrade = (course: any, grade: number) => {
+  const startCourseWithGrade = async (course: any, grade: number) => {
     const coursePlans = COURSE_PLANS.filter(cp => cp.title.includes(course.title.split(' ')[0]));
     const specificPlan = coursePlans.find(cp => cp.grade === grade);
 
@@ -363,6 +363,7 @@ const AvailableCourses = () => {
     localStorage.removeItem('currentLesson');
     localStorage.removeItem('courseInfo');
     localStorage.removeItem('lessonContext');
+    localStorage.removeItem('currentLessonContext');
 
     // Сохраняем правильные данные выбранного курса
     const courseData = {
@@ -374,11 +375,29 @@ const AvailableCourses = () => {
       modules: specificPlan.lessons.length,
       color: course.color,
       icon: course.icon.name,
-      students: course.students
+      students: course.students,
+      subject: course.title.split(' ')[0] // Извлекаем предмет (например, "Математика")
     };
 
     console.log('💾 Saving new course data to localStorage:', courseData);
     localStorage.setItem('selectedCourseData', JSON.stringify(courseData));
+
+    // Записываем пользователя на курс в БД (если есть userId)
+    const userId = user?.id || 'default_user'; // TODO: получить реальный userId
+    try {
+      // Импортируем сервис динамически, чтобы избежать циклических зависимостей
+      const { learningProgressService } = await import('@/services');
+      
+      console.log('📝 Enrolling user in course in database...');
+      await learningProgressService.enrollInCourse({
+        userId,
+        courseId: courseData.id
+      });
+      console.log('✅ User enrolled successfully');
+    } catch (error) {
+      console.error('❌ Error enrolling user in course:', error);
+      // Продолжаем даже если запись не удалась - используем localStorage как fallback
+    }
 
     // Переходим сразу к выбору способа урока
     const courseId = `${course.id}-${grade}`;

@@ -27,6 +27,7 @@ const coursesRoutes = require('./routes/courses');
 const chatRoutes = require('./routes/chat');
 const learningPlansRoutes = require('./routes/learningPlans');
 const examsRoutes = require('./routes/exams');
+const learningProgressRoutes = require('./routes/learningProgress');
 
 // Mount routes
 app.use('/api/users', usersRoutes);
@@ -34,6 +35,7 @@ app.use('/api/courses', coursesRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/learning-plans', learningPlansRoutes);
 app.use('/api/exams', examsRoutes);
+app.use('/api/learning-progress', learningProgressRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
