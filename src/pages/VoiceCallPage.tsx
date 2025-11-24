@@ -705,51 +705,130 @@ const VoiceCallPage: React.FC = () => {
     );
   };
 
-  // Transcribe audio
+  // Check if lesson requires OpenAI (English, Chinese, Arabic)
+  const shouldUseOpenAI = (): boolean => {
+    const lessonContext = lessonContextRef.current;
+    if (!lessonContext) return false;
+
+    const title = lessonContext.title.toLowerCase();
+    const description = lessonContext.description?.toLowerCase() || '';
+
+    // Always use OpenAI for these languages
+    return (
+      title.includes('english') || title.includes('английский') ||
+      title.includes('англ.') || description.includes('english') ||
+      title.includes('китайский') || title.includes('chinese') ||
+      title.includes('арабский') || title.includes('arabic') ||
+      title.includes('arab.')
+    );
+  };
+
+  // Transcribe audio with smart method selection
   const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
-      const formData = new FormData();
-      formData.append('file', audioBlob, 'audio.webm');
-      formData.append('model', 'whisper-1');
+    // Determine which transcription method to use
+    const useOpenAI = shouldUseOpenAI();
+    const webSpeechAvailable = isWebSpeechSupported();
 
-      // Determine language based on lesson context
-      const lessonContext = lessonContextRef.current;
-      let language = 'ru'; // Default to Russian
+    console.log('🎤 Transcription method selection:');
+    console.log('  - OpenAI required:', useOpenAI);
+    console.log('  - Web Speech available:', webSpeechAvailable);
 
-      if (lessonContext) {
-        const title = lessonContext.title.toLowerCase();
-        const description = lessonContext.description?.toLowerCase() || '';
+    // Always use OpenAI for English, Chinese, Arabic
+    if (useOpenAI) {
+      console.log('🎯 Using OpenAI Whisper (required for this language)');
+      return transcribeWithOpenAI(audioBlob);
+    }
 
-        // Check if it's an English lesson
-        if (title.includes('english') || title.includes('английский') ||
-            title.includes('англ.') || description.includes('english')) {
-          language = 'en';
-          console.log('🌍 Detected English lesson, using language: en');
-        } else if (title.includes('китайский') || title.includes('chinese')) {
-          language = 'zh';
-          console.log('🌍 Detected Chinese lesson, using language: zh');
-        } else {
-          console.log('🌍 Using default language: ru');
-        }
+    // For other languages, try Web Speech API first, then OpenAI fallback
+    if (webSpeechAvailable) {
+      try {
+        console.log('🎯 Trying Web Speech API first...');
+        return await transcribeWithWebSpeech(audioBlob);
+      } catch (webSpeechError) {
+        console.log('⚠️ Web Speech API failed, falling back to OpenAI:', webSpeechError.message);
+        return transcribeWithOpenAI(audioBlob);
+      }
+    } else {
+      console.log('🎯 Web Speech API not available, using OpenAI');
+      return transcribeWithOpenAI(audioBlob);
+    }
+  };
+
+  // Transcribe with Web Speech API (client-side)
+  const transcribeWithWebSpeech = async (audioBlob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      // Check if Web Speech API is available
+      const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+      if (!SpeechRecognition) {
+        reject(new Error('Web Speech API not supported'));
+        return;
       }
 
-      formData.append('language', language);
+      // Web Speech API works with live microphone, not recorded audio
+      // For now, we'll create a simple implementation that simulates recognition
+      // TODO: Implement full Web Speech API integration for live recognition
 
-      console.log('🎤 Sending transcription request to server...');
+      // For recorded audio, we'll use a timeout to simulate processing
+      // and return a placeholder result
+      setTimeout(() => {
+        console.log('🎤 Web Speech API simulation for recorded audio');
+        // In a real implementation, this would process the audioBlob
+        // For now, we'll reject to use OpenAI fallback
+        reject(new Error('Web Speech API requires live microphone access, using OpenAI fallback'));
+      }, 100);
+    });
+  };
 
-      const response = await fetch('/api/audio/transcriptions', {
-        method: 'POST',
-        body: formData
-      });
+  // Transcribe with OpenAI Whisper
+  const transcribeWithOpenAI = async (audioBlob: Blob): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'audio.webm');
+    formData.append('model', 'whisper-1');
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        console.error('❌ Transcription request failed:', response.status, errorText);
-        throw new Error(`Transcription failed: ${response.status} ${errorText}`);
+    // Determine language based on lesson context
+    const lessonContext = lessonContextRef.current;
+    let language = 'ru'; // Default to Russian
+
+    if (lessonContext) {
+      const title = lessonContext.title.toLowerCase();
+      const description = lessonContext.description?.toLowerCase() || '';
+
+      // Check if it's an English lesson
+      if (title.includes('english') || title.includes('английский') ||
+          title.includes('англ.') || description.includes('english')) {
+        language = 'en';
+        console.log('🌍 Detected English lesson, using language: en');
+      } else if (title.includes('китайский') || title.includes('chinese')) {
+        language = 'zh';
+        console.log('🌍 Detected Chinese lesson, using language: zh');
+      } else if (title.includes('арабский') || title.includes('arabic') ||
+                 title.includes('arab.')) {
+        language = 'ar';
+        console.log('🌍 Detected Arabic lesson, using language: ar');
+      } else {
+        console.log('🌍 Using default language: ru');
       }
+    }
 
-      const result = await response.json();
-      console.log('✅ Transcription result:', result.text?.substring(0, 50) + '...');
-      return result.text || '';
+    formData.append('language', language);
+
+    console.log('🎤 Sending transcription request to server...');
+
+    const response = await fetch('/api/audio/transcriptions', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      console.error('❌ Transcription request failed:', response.status, errorText);
+      throw new Error(`Transcription failed: ${response.status} ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ Transcription result:', result.text?.substring(0, 50) + '...');
+    return result.text || '';
   };
 
   // Clean markdown headers from response for better TTS and display
