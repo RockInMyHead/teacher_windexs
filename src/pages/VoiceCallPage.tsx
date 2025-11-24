@@ -74,6 +74,10 @@ const VoiceCallPage: React.FC = () => {
       console.log('🔇 Microphone muted');
       stopRecording();
     }
+    // Hide audio blocked indicator after user interaction
+    if (audioBlocked) {
+      setAudioBlocked(false);
+    }
   };
 
   // End lesson and navigate back
@@ -82,6 +86,10 @@ const VoiceCallPage: React.FC = () => {
     stopRecording();
     cleanup();
     setSpeechTheses([]);
+    // Hide audio blocked indicator after user interaction
+    if (audioBlocked) {
+      setAudioBlocked(false);
+    }
     navigate(-1);
   };
 
@@ -1133,10 +1141,18 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
 
                   {/* Audio blocked indicator */}
                   {audioBlocked && (
-                    <div className="absolute top-2 left-1/2 transform -translate-x-1/2 bg-yellow-100 border border-yellow-300 px-2 py-1 rounded-md shadow-sm">
-                      <span className="text-xs text-yellow-800 flex items-center gap-1">
-                        🔇 Автовоспроизведение заблокировано
-                      </span>
+                    <div
+                      className="absolute top-2 left-1/2 transform -translate-x-1/2 bg-yellow-50 border border-yellow-200 px-3 py-2 rounded-lg shadow-md max-w-xs cursor-pointer hover:bg-yellow-100 transition-colors"
+                      onClick={() => setAudioBlocked(false)}
+                    >
+                      <div className="text-xs text-yellow-800 text-center">
+                        <div className="flex items-center justify-center gap-1 font-medium mb-1">
+                          🔇 Автовоспроизведение заблокировано
+                        </div>
+                        <div className="text-xs opacity-90">
+                          Нажмите на любую кнопку для включения звука
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
