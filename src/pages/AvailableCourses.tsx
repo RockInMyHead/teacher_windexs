@@ -23,7 +23,8 @@ import {
   Brain,
   Star,
   CheckCircle,
-  Play
+  Play,
+  GraduationCap
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { HeaderWithHero } from '@/components/Header';
@@ -468,17 +469,33 @@ const AvailableCourses = () => {
                 Выберите класс для обучения {selectedCourse?.title?.toLowerCase() || 'предмету'}
               </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-3 gap-3 py-4">
-              {selectedCourse?.availableGrades?.map((grade: number) => (
-                <Button
-                  key={grade}
-                  variant="outline"
-                  className="h-12 text-lg font-medium"
-                  onClick={() => handleGradeSelect(grade)}
-                >
-                  {grade} класс
-                </Button>
-              ))}
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                {selectedCourse?.availableGrades?.map((grade: number) => (
+                  <Button
+                    key={grade}
+                    variant="outline"
+                    className="h-12 text-lg font-medium"
+                    onClick={() => handleGradeSelect(grade)}
+                  >
+                    {grade} класс
+                  </Button>
+                ))}
+              </div>
+
+              {/* Начинаю учить button */}
+              <Button
+                className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl"
+                onClick={() => {
+                  // Выбрать первый доступный класс по умолчанию
+                  if (selectedCourse?.availableGrades?.length > 0) {
+                    handleGradeSelect(selectedCourse.availableGrades[0]);
+                  }
+                }}
+              >
+                <Play className="w-4 h-4 mr-2" />
+                Начинаю учить
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
