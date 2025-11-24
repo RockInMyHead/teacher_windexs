@@ -695,6 +695,16 @@ const VoiceCallPage: React.FC = () => {
     setTimeout(() => startListening(), 1500);
   };
 
+  // Check if Web Speech API is available
+  const isWebSpeechSupported = (): boolean => {
+    return !!(
+      window.SpeechRecognition ||
+      (window as any).webkitSpeechRecognition ||
+      (window as any).mozSpeechRecognition ||
+      (window as any).msSpeechRecognition
+    );
+  };
+
   // Transcribe audio
   const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
       const formData = new FormData();
@@ -1057,6 +1067,7 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
   // Mount effect
   useEffect(() => {
     console.log('🎓 VoiceCallPage mounted');
+    console.log('🎤 Web Speech API supported:', isWebSpeechSupported());
     startListening();
 
     return () => {
