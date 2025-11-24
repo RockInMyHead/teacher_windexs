@@ -1408,6 +1408,89 @@ grade >= 7 ?
     }
   });
 
+  // ==================== EXAMS API ROUTES ====================
+
+  // GET /api/exams/user/:userId - Получить экзаменационные курсы пользователя
+  app.get('/api/exams/user/:userId', async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { examType } = req.query;
+
+      // For now, return mock data since we don't have SQLite schema for exams
+      const mockExamCourses = [
+        {
+          id: 'ЕГЭ-math-profile-1234567890',
+          user_id: userId,
+          exam_type: 'ЕГЭ',
+          subject: 'Математика (профиль)',
+          progress_percentage: 0,
+          total_topics: 50,
+          topics_completed: 0,
+          last_studied_at: new Date().toISOString(),
+          created_at: new Date().toISOString()
+        }
+      ];
+
+      let filteredCourses = mockExamCourses.filter(course => course.user_id === userId);
+
+      if (examType) {
+        filteredCourses = filteredCourses.filter(course => course.exam_type === examType);
+      }
+
+      res.json({ examCourses: filteredCourses });
+    } catch (error) {
+      console.error('Error fetching exam courses:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // POST /api/exams/bulk - Добавить несколько экзаменационных курсов
+  app.post('/api/exams/bulk', async (req, res) => {
+    try {
+      const { userId, examCourses } = req.body;
+
+      if (!userId || !examCourses || !Array.isArray(examCourses)) {
+        return res.status(400).json({ error: 'Invalid request' });
+      }
+
+      // For now, return success since we don't have SQLite schema for exams
+      // In production, this would insert into database
+      const insertedCourses = examCourses.map(course => ({
+        id: `${course.examType}-${course.subject.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`,
+        user_id: userId,
+        exam_type: course.examType,
+        subject: course.subject,
+        progress_percentage: course.progress || 0,
+        total_topics: course.totalTopics || 50,
+        topics_completed: course.completedTopics || 0,
+        last_studied_at: new Date().toISOString(),
+        created_at: new Date().toISOString()
+      }));
+
+      console.log('✅ Added exam courses:', insertedCourses.length);
+
+      res.status(201).json({ examCourses: insertedCourses });
+    } catch (error) {
+      console.error('Error creating bulk exam courses:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // DELETE /api/exams/:examCourseId - Удалить экзаменационный курс
+  app.delete('/api/exams/:examCourseId', async (req, res) => {
+    try {
+      const { examCourseId } = req.params;
+
+      // For now, just return success since we don't have SQLite schema for exams
+      console.log('🗑️ Deleted exam course:', examCourseId);
+
+      res.json({ message: 'Exam course deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting exam course:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
   // ==================== LEARNING PROGRESS API ROUTES ====================
 
   // POST /api/learning-progress/enroll - Записать пользователя на курс
