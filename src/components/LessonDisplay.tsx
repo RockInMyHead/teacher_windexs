@@ -51,6 +51,22 @@ export const LessonDisplay: React.FC<LessonDisplayProps> = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [taskAnswer, setTaskAnswer] = useState('');
   const [playingSections, setPlayingSections] = useState<Set<number>>(new Set());
+  const [autoSpokenSections, setAutoSpokenSections] = useState<Set<number>>(new Set());
+
+  // Auto-speak first section when structured content loads
+  useEffect(() => {
+    if (structuredContent && structuredContent.length > 0 && !isGenerating) {
+      const firstSection = structuredContent[0];
+      if (firstSection && !autoSpokenSections.has(0)) {
+        console.log('🎵 Auto-speaking first lesson section');
+        // Add small delay to let UI render
+        setTimeout(() => {
+          speakSection(0, firstSection);
+          setAutoSpokenSections(prev => new Set(prev).add(0));
+        }, 1000);
+      }
+    }
+  }, [structuredContent, isGenerating, autoSpokenSections]);
 
   // Reset animation when content changes
   useEffect(() => {
