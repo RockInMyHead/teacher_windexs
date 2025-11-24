@@ -158,7 +158,7 @@ export const ChatMessages = React.memo(
             <div className="flex h-full items-center justify-center text-muted-foreground px-4">
               <div className="text-center">
                 <MessageSquare className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-                <p className="text-lg">Нет сообщений. Начните разговор!</p>
+                <p className="text-lg">Я универсальный учитель по любым предметам. Задайте мне вопрос и мы разберем тему!</p>
               </div>
             </div>
           ) : (
