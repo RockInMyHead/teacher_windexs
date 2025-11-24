@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  teacher-app:
+    build: .
+    ports:
+      - "1031:1031"
+    environment:
+      - NODE_ENV=production
+      - PORT=1031
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DATABASE_PATH=/app/data/teacher_platform.db
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1031/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
