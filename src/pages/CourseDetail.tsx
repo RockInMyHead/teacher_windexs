@@ -592,7 +592,7 @@ export default function CourseDetail() {
     localStorage.removeItem('chatHistory');
     localStorage.removeItem('lessonContext');
 
-    // Save course info for the chat session
+    // Save course info for the chat session with lesson context
     const courseData = {
       id: course?.id,
       title: course?.title,
@@ -601,7 +601,36 @@ export default function CourseDetail() {
       currentLesson: course?.currentLesson
     };
 
-    localStorage.setItem('currentCourse', JSON.stringify(courseData));
+    // Get or create lesson session data
+    const lessonSessionKey = `lesson_session_${course?.id}`;
+    const existingSession = localStorage.getItem(lessonSessionKey);
+    let sessionData;
+
+    if (existingSession) {
+      sessionData = JSON.parse(existingSession);
+      // Increment lesson number for next lesson
+      sessionData.lessonNumber = (sessionData.lessonNumber || 0) + 1;
+      sessionData.lastLessonDate = new Date().toISOString();
+    } else {
+      // First lesson
+      sessionData = {
+        lessonNumber: 1,
+        completedLessons: [],
+        homeworks: [],
+        lastLessonDate: new Date().toISOString()
+      };
+    }
+
+    // Save lesson session
+    localStorage.setItem(lessonSessionKey, JSON.stringify(sessionData));
+    
+    // Save current course with session info
+    const courseWithSession = {
+      ...courseData,
+      sessionData
+    };
+
+    localStorage.setItem('currentCourse', JSON.stringify(courseWithSession));
 
     console.log('💾 [COURSE DETAIL] Saved course data for chat session:', courseData);
 

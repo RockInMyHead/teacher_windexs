@@ -97,6 +97,7 @@ const Chat = () => {
   const [lessonProgress, setLessonProgress] = useState(0);
   const [isLessonMode, setIsLessonMode] = useState(false);
   const [autoGenerateLesson, setAutoGenerateLesson] = useState(false);
+  const [lessonSessionData, setLessonSessionData] = useState<any>(null);
 
   // Lesson plan and interactive lesson states
   const [lessonPlan, setLessonPlan] = useState<any>(null);
@@ -451,6 +452,12 @@ const Chat = () => {
             lessons: []
           });
 
+          // Set lesson session data if available
+          if (courseData.sessionData) {
+            setLessonSessionData(courseData.sessionData);
+            console.log('Loaded lesson session data:', courseData.sessionData);
+          }
+
           // DON'T set currentLesson in chat mode - we only need course context, not lesson mode
           // This prevents automatic lesson generation from triggering
 
@@ -462,6 +469,7 @@ const Chat = () => {
         // Clear any existing lesson context
         setCurrentLesson(null);
         setPersonalizedCourseData(null);
+        setLessonSessionData(null);
       }
     }
   }, [searchParams]);
@@ -1773,6 +1781,61 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
     }
   };
 
+  // Function to save homework from chat messages
+  const saveHomeworkFromChat = useCallback(() => {
+    if (!personalizedCourseData || !lessonSessionData) return;
+
+    // Get chat messages from ChatContainer
+    // We'll look for messages containing "Домашнее задание:" pattern
+    const chatMessages = chatContainerRef.current?.messages || [];
+    
+    // Find the last message from teacher that contains homework
+    const homeworkPattern = /(?:Домашнее задание|домашнее задание|Домашка|ДЗ):\s*(.+?)(?:\n|$)/i;
+    
+    for (let i = chatMessages.length - 1; i >= 0; i--) {
+      const msg = chatMessages[i];
+      if (msg.role === 'assistant' || msg.role === 'teacher') {
+        const match = msg.content.match(homeworkPattern);
+        if (match && match[1]) {
+          const homework = match[1].trim();
+          
+          // Save homework to session data
+          const lessonSessionKey = `lesson_session_${personalizedCourseData.courseInfo.id || 'default'}`;
+          const updatedSessionData = {
+            ...lessonSessionData,
+            homeworks: [
+              ...(lessonSessionData.homeworks || []),
+              {
+                lessonNumber: lessonSessionData.lessonNumber,
+                task: homework,
+                assignedDate: new Date().toISOString(),
+                checked: false
+              }
+            ]
+          };
+          
+          localStorage.setItem(lessonSessionKey, JSON.stringify(updatedSessionData));
+          setLessonSessionData(updatedSessionData);
+          console.log('📝 Saved homework:', homework);
+          break;
+        }
+      }
+    }
+  }, [personalizedCourseData, lessonSessionData]);
+
+  // Save homework when user leaves the page
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      saveHomeworkFromChat();
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      saveHomeworkFromChat(); // Save on unmount
+    };
+  }, [saveHomeworkFromChat]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
 
@@ -1924,14 +1987,28 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
 - Класс: ${personalizedCourseData.courseInfo.grade}
 - Описание: ${personalizedCourseData.courseInfo.description || 'Общеобразовательный курс'}
 
+${lessonSessionData ? `КОНТЕКСТ УРОКА:
+- Номер урока: ${lessonSessionData.lessonNumber}
+- Это ${lessonSessionData.lessonNumber === 1 ? 'первый урок' : `урок номер ${lessonSessionData.lessonNumber}`}
+${lessonSessionData.lessonNumber > 1 && lessonSessionData.homeworks && lessonSessionData.homeworks.length > 0 ? `- На прошлом уроке было задано домашнее задание: "${lessonSessionData.homeworks[lessonSessionData.homeworks.length - 1].task}"
+- ВАЖНО: В начале урока ОБЯЗАТЕЛЬНО проверьте это домашнее задание! Спросите ученика, как он его выполнил, разберите ошибки.` : ''}
+` : ''}
+
 ВАША РОЛЬ:
-Вы - учитель этого курса. Ученик пришёл к вам на индивидуальное занятие.
+Вы - учитель этого курса. Ученик пришёл к вам на индивидуальное занятие${lessonSessionData ? ` (урок ${lessonSessionData.lessonNumber})` : ''}.
 
 ПРИ ПЕРВОМ СООБЩЕНИИ:
-1. Поприветствуйте ученика тепло и дружелюбно
-2. Представьтесь как учитель по предмету "${personalizedCourseData.courseInfo.title}"
-3. Спросите, что конкретно ученик хочет изучить или какие вопросы у него есть по этому предмету
-4. Предложите помощь с домашним заданием, объяснением темы или подготовкой к контрольной
+1. Поприветствуйте ученика: "Добро пожаловать на урок по ${personalizedCourseData.courseInfo.title}!"
+${lessonSessionData && lessonSessionData.lessonNumber > 1 && lessonSessionData.homeworks && lessonSessionData.homeworks.length > 0 ? `2. СРАЗУ ПРОВЕРЬТЕ ДОМАШНЕЕ ЗАДАНИЕ: Спросите про задание с прошлого урока: "${lessonSessionData.homeworks[lessonSessionData.homeworks.length - 1].task}". Попросите рассказать, как ученик его выполнил.
+3. После проверки домашнего задания разберите ошибки (если были) и похвалите за правильные части` : `2. Представьтесь как учитель по предмету "${personalizedCourseData.courseInfo.title}"
+3. Спросите, что конкретно ученик хочет изучить или какие вопросы у него есть по этому предмету`}
+${!lessonSessionData || lessonSessionData.lessonNumber === 1 ? `4. Предложите помощь с домашним заданием, объяснением темы или подготовкой к контрольной` : ''}
+
+ДОМАШНИЕ ЗАДАНИЯ:
+- В конце урока (примерно после 30-40 минут обсуждения или когда тема хорошо разобрана) дайте ученику домашнее задание
+- Домашнее задание должно быть по теме урока
+- Формулируйте четко: "Домашнее задание: [конкретное задание]"
+- Запомните это домашнее задание - на следующем уроке вы ОБЯЗАТЕЛЬНО должны его проверить!
 
 ОСОБЕННОСТИ ВАШЕГО СТИЛЯ:
 - Объясняйте сложное простыми словами, как если бы разговаривали с учеником ${personalizedCourseData.courseInfo.grade} класса
@@ -1945,7 +2022,9 @@ ${conversationHistory.slice(-3).map(h => `${h.role === 'teacher' ? 'Юля' : '�
 
 ПОМНИТЕ:
 - Вы учитель по предмету "${personalizedCourseData.courseInfo.title}", поэтому все объяснения должны быть в контексте этого предмета
-- Ученик выбрал именно ваш курс, значит ему нужна помощь по этому предмету
+- Это урок ${lessonSessionData ? `номер ${lessonSessionData.lessonNumber}` : ''}
+${lessonSessionData && lessonSessionData.lessonNumber > 1 ? '- ОБЯЗАТЕЛЬНО начните с проверки домашнего задания!' : ''}
+- В конце урока дайте домашнее задание
 - Спрашивайте, что конкретно нужно изучить, чтобы помочь максимально эффективно`
                 : 
                 `Вы - Юлия, профессиональный педагог и эксперт в образовании. 
