@@ -45,7 +45,7 @@ const HeaderWithHero = ({ title, subtitle, showHero = true }: HeaderWithHeroProp
 
           {/* Центральная часть - Навигация */}
           <div className="flex-1 flex justify-center">
-            <nav className="hidden md:flex items-center space-x-6 lg:space-x-8">
+            <nav className="hidden md:flex items-center space-x-4 lg:space-x-6">
               <Button
                 variant="ghost"
                 className="flex items-center gap-2"
@@ -256,7 +256,7 @@ const Header = () => {
           </div>
 
           {/* Центральная часть - Навигация */}
-          <nav className="hidden md:flex items-center space-x-6 lg:space-x-8">
+          <nav className="hidden md:flex items-center space-x-4 lg:space-x-6">
             <Button
               variant="ghost"
               className="flex items-center gap-2"
