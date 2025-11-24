@@ -356,9 +356,33 @@ const AvailableCourses = () => {
       });
     }
 
+    // КРИТИЧНО: Очищаем старые данные курса из localStorage
+    console.log('🧹 Clearing old course data from localStorage');
+    localStorage.removeItem('selectedCourseData');
+    localStorage.removeItem('currentCourse');
+    localStorage.removeItem('currentLesson');
+    localStorage.removeItem('courseInfo');
+    localStorage.removeItem('lessonContext');
+
+    // Сохраняем правильные данные выбранного курса
+    const courseData = {
+      id: `${course.id}-${grade}`,
+      title: specificPlan.title,
+      description: specificPlan.description,
+      level: course.level,
+      grade: grade,
+      modules: specificPlan.lessons.length,
+      color: course.color,
+      icon: course.icon.name,
+      students: course.students
+    };
+
+    console.log('💾 Saving new course data to localStorage:', courseData);
+    localStorage.setItem('selectedCourseData', JSON.stringify(courseData));
+
     // Переходим сразу к выбору способа урока
     const courseId = `${course.id}-${grade}`;
-    console.log('Navigating to course select-mode for course:', courseId);
+    console.log('🧭 Navigating to course select-mode for course:', courseId);
     navigate(`/course/${courseId}/select-mode`);
   };
 

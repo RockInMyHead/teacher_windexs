@@ -435,47 +435,74 @@ const Chat = () => {
     // This prevents loading course data for plain general chat at /chat
     if (!isLessonModeParam) {
       console.log('Regular chat mode - checking for lesson context');
+      console.log('Current URL:', window.location.href);
 
       // Check if there's lesson session data first
       const storedCourseData = localStorage.getItem('currentCourse');
-      const lessonSessionKey = storedCourseData ? `lesson_session_${JSON.parse(storedCourseData).id}` : null;
-      const lessonSessionData = lessonSessionKey ? localStorage.getItem(lessonSessionKey) : null;
-
-      // Only load course data if we have lesson session data (meaning this is a lesson chat)
-      if (storedCourseData && lessonSessionData) {
+      
+      if (storedCourseData) {
         try {
           const courseData = JSON.parse(storedCourseData);
-          console.log('Loaded course data for chat session:', courseData);
-          console.log('Course title from loaded data:', courseData.title);
+          console.log('📦 Found stored course data:', courseData);
+          console.log('🔍 Course ID from localStorage:', courseData.id);
+          
+          // Get lesson session data
+          const lessonSessionKey = `lesson_session_${courseData.id}`;
+          const lessonSessionDataStr = localStorage.getItem(lessonSessionKey);
+          
+          console.log('🔑 Lesson session key:', lessonSessionKey);
+          console.log('📦 Lesson session data exists:', !!lessonSessionDataStr);
 
-          // Clear any existing course data first to prevent old data from persisting
+          // Only load course data if we have lesson session data (meaning this is a lesson chat)
+          if (lessonSessionDataStr) {
+            const parsedLessonSessionData = JSON.parse(lessonSessionDataStr);
+            console.log('✅ Valid lesson chat detected');
+            console.log('📚 Course title:', courseData.title);
+            console.log('📖 Lesson number:', parsedLessonSessionData.lessonNumber);
+
+            // Clear any existing course data first to prevent old data from persisting
+            setPersonalizedCourseData(null);
+            setLessonSessionData(null);
+
+            // Set course context for the chat (but DON'T set currentLesson to avoid triggering lesson generation)
+            setPersonalizedCourseData({
+              courseInfo: {
+                id: courseData.id,
+                title: courseData.title,
+                grade: courseData.grade,
+                description: courseData.description
+              },
+              lessons: []
+            });
+
+            // Set lesson session data if available
+            if (courseData.sessionData) {
+              setLessonSessionData(courseData.sessionData);
+              console.log('Loaded lesson session data:', courseData.sessionData);
+            } else if (parsedLessonSessionData) {
+              setLessonSessionData(parsedLessonSessionData);
+              console.log('Loaded parsed lesson session data:', parsedLessonSessionData);
+            }
+
+            // DON'T set currentLesson in chat mode - we only need course context, not lesson mode
+            // This prevents automatic lesson generation from triggering
+
+          } else {
+            console.log('⚠️ No lesson session data - treating as general chat');
+            // No lesson session means general chat
+            setCurrentLesson(null);
+            setPersonalizedCourseData(null);
+            setLessonSessionData(null);
+          }
+        } catch (error) {
+          console.error('❌ Failed to parse course data for chat:', error);
+          // Clear any corrupted data
+          setCurrentLesson(null);
           setPersonalizedCourseData(null);
           setLessonSessionData(null);
-
-          // Set course context for the chat (but DON'T set currentLesson to avoid triggering lesson generation)
-          setPersonalizedCourseData({
-            courseInfo: {
-              title: courseData.title,
-              grade: courseData.grade,
-              description: courseData.description
-            },
-            lessons: []
-          });
-
-          // Set lesson session data if available
-          if (courseData.sessionData) {
-            setLessonSessionData(courseData.sessionData);
-            console.log('Loaded lesson session data:', courseData.sessionData);
-          }
-
-          // DON'T set currentLesson in chat mode - we only need course context, not lesson mode
-          // This prevents automatic lesson generation from triggering
-
-        } catch (error) {
-          console.error('Failed to parse course data for chat:', error);
         }
       } else {
-        console.log('No course data found for chat session');
+        console.log('📭 No course data found for chat session');
         // Clear any existing lesson context
         setCurrentLesson(null);
         setPersonalizedCourseData(null);

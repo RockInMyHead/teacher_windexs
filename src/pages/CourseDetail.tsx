@@ -330,6 +330,68 @@ export default function CourseDetail() {
           content: 'Формы культуры, культурные традиции, искусство.'
         }
       ],
+      english: [
+        {
+          number: 1,
+          title: 'Алфавит и базовые звуки',
+          topic: 'Знакомство с английским алфавитом',
+          content: 'Изучение английского алфавита, правила произношения букв и звуков. Основные звуковые сочетания.'
+        },
+        {
+          number: 2,
+          title: 'Приветствия и знакомство',
+          topic: 'Базовые фразы для общения',
+          content: 'Hello, Hi, Good morning, How are you? Представление себя: My name is..., I am... Nice to meet you.'
+        },
+        {
+          number: 3,
+          title: 'Цвета и числа',
+          topic: 'Основная лексика',
+          content: 'Изучение цветов (red, blue, green) и чисел от 1 до 20. Практика использования в предложениях.'
+        },
+        {
+          number: 4,
+          title: 'Моя семья',
+          topic: 'Семья и родственники',
+          content: 'Слова mother, father, sister, brother. Построение простых предложений о семье: This is my...'
+        },
+        {
+          number: 5,
+          title: 'Мой дом',
+          topic: 'Комнаты и предметы в доме',
+          content: 'Названия комнат (bedroom, kitchen, bathroom) и мебели (table, chair, bed). Предлоги места.'
+        },
+        {
+          number: 6,
+          title: 'Школа и учеба',
+          topic: 'Школьные предметы',
+          content: 'School subjects, classroom objects. I like..., I don\'t like... Выражение предпочтений.'
+        },
+        {
+          number: 7,
+          title: 'Еда и напитки',
+          topic: 'Продукты питания',
+          content: 'Названия еды (apple, bread, milk) и напитков. I would like... Can I have...?'
+        },
+        {
+          number: 8,
+          title: 'Животные',
+          topic: 'Домашние и дикие животные',
+          content: 'Dog, cat, lion, elephant. Описание животных: It is big/small, it can run/fly.'
+        },
+        {
+          number: 9,
+          title: 'Глагол to be',
+          topic: 'Основной глагол английского языка',
+          content: 'Формы I am, you are, he/she/it is, we/they are. Построение утвердительных и отрицательных предложений.'
+        },
+        {
+          number: 10,
+          title: 'Настоящее простое время',
+          topic: 'Present Simple',
+          content: 'Правила образования, использование для повседневных действий. I play, he plays, they don\'t like.'
+        }
+      ],
       arabic: [
         {
           number: 1,
@@ -681,15 +743,33 @@ export default function CourseDetail() {
       const savedCourseData = localStorage.getItem('selectedCourseData');
       if (savedCourseData) {
         console.log('📦 Loading course from localStorage');
-        courseData = JSON.parse(savedCourseData);
-        console.log('📦 Course data from localStorage:', courseData);
-      } else {
-        // Если нет в localStorage, пытаемся получить из API
+        const parsedCourseData = JSON.parse(savedCourseData);
+        console.log('📦 Parsed course data:', parsedCourseData);
+        console.log('🔍 Comparing IDs - URL courseId:', courseId, 'localStorage id:', parsedCourseData.id);
+        
+        // КРИТИЧНО: Проверяем, что ID курса совпадает с URL
+        if (parsedCourseData.id === courseId || parsedCourseData.id === courseId.toString()) {
+          courseData = parsedCourseData;
+          console.log('✅ Course IDs match, using localStorage data');
+        } else {
+          console.warn('⚠️ Course ID mismatch! URL:', courseId, 'localStorage:', parsedCourseData.id);
+          console.log('🧹 Clearing mismatched course data');
+          localStorage.removeItem('selectedCourseData');
+          courseData = null;
+        }
+      }
+      
+      // Если нет в localStorage или ID не совпал, пытаемся получить из API
+      if (!courseData) {
         console.log('📡 Loading course from API:', courseId);
-        const response = await fetch(`/api/courses/${courseId}`);
-        if (response.ok) {
-          courseData = await response.json();
-          console.log('📡 Course data from API:', courseData);
+        try {
+          const response = await fetch(`/api/courses/${courseId}`);
+          if (response.ok) {
+            courseData = await response.json();
+            console.log('📡 Course data from API:', courseData);
+          }
+        } catch (error) {
+          console.error('❌ API request failed:', error);
         }
       }
 
