@@ -994,53 +994,156 @@ ${context}
   if (mode === 'select-mode') {
     console.log('✅ Showing select-mode page');
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-          <div className="p-6">
-            <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">Выберите тип обучения</h1>
-              <p className="text-gray-600">Как вы хотите изучать курс "{course?.title}"?</p>
-            </div>
-
-            <div className="space-y-4">
-              <Button
-                size="lg"
-                onClick={startInteractiveLesson}
-                className="w-full h-auto py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-              >
-                <BookOpen className="w-6 h-6 mr-3 flex-shrink-0" />
-                <div className="text-left">
-                  <div className="font-semibold text-lg">Чат</div>
-                  <div className="text-sm opacity-90">Интерактивное обучение с ИИ-учителем</div>
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100">
+        {/* Header */}
+        <header className="bg-white shadow-sm border-b border-green-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center py-4">
+              <div className="flex items-center space-x-4">
+                <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
+                  <BookOpen className="w-6 h-6 text-white" />
                 </div>
-              </Button>
-
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={startVoiceCall}
-                className="w-full h-auto py-4 border-2 border-primary/30 hover:border-primary hover:bg-primary/5"
-              >
-                <Phone className="w-6 h-6 mr-3 flex-shrink-0" />
-                <div className="text-left">
-                  <div className="font-semibold text-lg">Онлайн общение</div>
-                  <div className="text-sm opacity-90">Голосовое обучение с Юлией</div>
+                <div>
+                  <h1 className="text-xl font-bold text-gray-900">Интерактивное обучение</h1>
+                  <p className="text-sm text-gray-600">с ИИ-учителем Юлией</p>
                 </div>
-              </Button>
-            </div>
+              </div>
 
-            <div className="mt-6 pt-4 border-t border-gray-200">
               <Button
                 variant="ghost"
                 onClick={() => navigate('/courses')}
-                className="w-full text-gray-600 hover:text-gray-800"
+                className="text-green-700 hover:text-green-800 hover:bg-green-50"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                Вернуться к курсам
+                К курсам
               </Button>
             </div>
           </div>
-        </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="flex items-center justify-center min-h-[calc(100vh-80px)] px-4 py-12">
+          <div className="max-w-2xl w-full">
+            {/* Welcome Section */}
+            <div className="text-center mb-12">
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full mb-6">
+                <BookOpen className="w-10 h-10 text-white" />
+              </div>
+              <h1 className="text-4xl font-bold text-gray-900 mb-4">
+                Выберите тип обучения
+              </h1>
+              <p className="text-xl text-gray-600 mb-2">
+                Как вы хотите изучать курс?
+              </p>
+              <div className="inline-block bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-medium">
+                {course?.title}
+              </div>
+            </div>
+
+            {/* Learning Options */}
+            <div className="grid md:grid-cols-2 gap-6 mb-8">
+              {/* Chat Option */}
+              <div className="group">
+                <div className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-green-200 hover:border-green-300 overflow-hidden">
+                  <div className="p-8">
+                    <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                      <BookOpen className="w-8 h-8 text-white" />
+                    </div>
+
+                    <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                      Чат
+                    </h3>
+
+                    <p className="text-gray-600 mb-6 leading-relaxed">
+                      Интерактивное обучение с ИИ-учителем в текстовом формате.
+                      Задавайте вопросы, получайте подробные объяснения.
+                    </p>
+
+                    <ul className="space-y-2 mb-8">
+                      <li className="flex items-center text-sm text-gray-700">
+                        <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                        Подробные объяснения
+                      </li>
+                      <li className="flex items-center text-sm text-gray-700">
+                        <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                        Мгновенные ответы
+                      </li>
+                      <li className="flex items-center text-sm text-gray-700">
+                        <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                        Персонализированный подход
+                      </li>
+                    </ul>
+
+                    <Button
+                      size="lg"
+                      onClick={startInteractiveLesson}
+                      className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl"
+                    >
+                      Начать чат-обучение
+                      <BookOpen className="w-5 h-5 ml-2" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Voice Option */}
+              <div className="group">
+                <div className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-green-200 hover:border-green-300 overflow-hidden">
+                  <div className="p-8">
+                    <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                      <Phone className="w-8 h-8 text-white" />
+                    </div>
+
+                    <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                      Онлайн общение
+                    </h3>
+
+                    <p className="text-gray-600 mb-6 leading-relaxed">
+                      Голосовое обучение с Юлией. Говорите естественно,
+                      получайте живые ответы и объяснения.
+                    </p>
+
+                    <ul className="space-y-2 mb-8">
+                      <li className="flex items-center text-sm text-gray-700">
+                        <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3"></div>
+                        Естественное общение
+                      </li>
+                      <li className="flex items-center text-sm text-gray-700">
+                        <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3"></div>
+                        Голосовые ответы
+                      </li>
+                      <li className="flex items-center text-sm text-gray-700">
+                        <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3"></div>
+                        Иммерсивное обучение
+                      </li>
+                    </ul>
+
+                    <Button
+                      size="lg"
+                      onClick={startVoiceCall}
+                      className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl"
+                    >
+                      Начать голосовое обучение
+                      <Phone className="w-5 h-5 ml-2" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Navigation */}
+            <div className="text-center">
+              <Button
+                variant="ghost"
+                onClick={() => navigate('/courses')}
+                className="text-green-700 hover:text-green-800 hover:bg-green-50 px-6 py-3 rounded-xl font-medium transition-all duration-300"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Вернуться к списку курсов
+              </Button>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
