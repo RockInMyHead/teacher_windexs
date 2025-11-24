@@ -59,7 +59,7 @@ const Exams: React.FC = () => {
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Page Header */}
         <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full mb-6">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full mb-6">
             <GraduationCap className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
@@ -75,12 +75,12 @@ const Exams: React.FC = () => {
           <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
             {/* ЕГЭ Card */}
             <Card
-              className="cursor-pointer hover:shadow-xl transition-all duration-300 border-2 hover:border-purple-300 group"
+              className="cursor-pointer hover:shadow-xl transition-all duration-300 border-2 hover:border-green-300 group"
               onClick={() => handleSelectExamType('ЕГЭ')}
             >
               <CardContent className="p-8">
                 <div className="text-center">
-                  <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
+                  <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
                     <Award className="w-10 h-10 text-white" />
                   </div>
                   <h2 className="text-3xl font-bold text-gray-900 mb-3">ЕГЭ</h2>
@@ -89,16 +89,16 @@ const Exams: React.FC = () => {
                   </p>
                   <div className="space-y-2 text-sm text-gray-700">
                     <div className="flex items-center justify-center gap-2">
-                      <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                       <span>11 класс</span>
                     </div>
                     <div className="flex items-center justify-center gap-2">
-                      <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                       <span>Поступление в ВУЗ</span>
                     </div>
                   </div>
                   <Button
-                    className="w-full mt-6 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700"
+                    className="w-full mt-6 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleSelectExamType('ЕГЭ');
@@ -113,12 +113,12 @@ const Exams: React.FC = () => {
 
             {/* ОГЭ Card */}
             <Card
-              className="cursor-pointer hover:shadow-xl transition-all duration-300 border-2 hover:border-blue-300 group"
+              className="cursor-pointer hover:shadow-xl transition-all duration-300 border-2 hover:border-green-300 group"
               onClick={() => handleSelectExamType('ОГЭ')}
             >
               <CardContent className="p-8">
                 <div className="text-center">
-                  <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
+                  <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
                     <BookOpen className="w-10 h-10 text-white" />
                   </div>
                   <h2 className="text-3xl font-bold text-gray-900 mb-3">ОГЭ</h2>
@@ -127,16 +127,16 @@ const Exams: React.FC = () => {
                   </p>
                   <div className="space-y-2 text-sm text-gray-700">
                     <div className="flex items-center justify-center gap-2">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                       <span>9 класс</span>
                     </div>
                     <div className="flex items-center justify-center gap-2">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                       <span>Аттестат об основном образовании</span>
                     </div>
                   </div>
                   <Button
-                    className="w-full mt-6 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700"
+                    className="w-full mt-6 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleSelectExamType('ОГЭ');
@@ -169,8 +169,8 @@ const Exams: React.FC = () => {
                   <div
                     className={`w-16 h-16 bg-gradient-to-br ${
                       selectedExamType === 'ЕГЭ'
-                        ? 'from-purple-500 to-indigo-600'
-                        : 'from-blue-500 to-cyan-600'
+                        ? 'from-green-500 to-emerald-600'
+                        : 'from-green-500 to-emerald-600'
                     } rounded-full flex items-center justify-center`}
                   >
                     {selectedExamType === 'ЕГЭ' ? (
@@ -197,8 +197,8 @@ const Exams: React.FC = () => {
                   onClick={handleAddCourse}
                   className={`bg-gradient-to-r ${
                     selectedExamType === 'ЕГЭ'
-                      ? 'from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700'
-                      : 'from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700'
+                      ? 'from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
+                      : 'from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
                   } gap-2`}
                 >
                   <Plus className="w-4 h-4" />
@@ -224,8 +224,8 @@ const Exams: React.FC = () => {
                     onClick={handleAddCourse}
                     className={`bg-gradient-to-r ${
                       selectedExamType === 'ЕГЭ'
-                        ? 'from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700'
-                        : 'from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700'
+                        ? 'from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
+                        : 'from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
                     } gap-2`}
                   >
                     <Plus className="w-4 h-4" />
@@ -239,7 +239,7 @@ const Exams: React.FC = () => {
                   <Card
                     key={course.id}
                     className="hover:shadow-lg transition-all duration-300 cursor-pointer"
-                    onClick={() => navigate(`/course/${course.id}`)}
+                    onClick={() => navigate(`/course/${course.id}/select-mode`)}
                   >
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between mb-4">
@@ -250,8 +250,8 @@ const Exams: React.FC = () => {
                           <Badge
                             className={
                               course.examType === 'ЕГЭ'
-                                ? 'bg-purple-100 text-purple-700'
-                                : 'bg-blue-100 text-blue-700'
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-green-100 text-green-700'
                             }
                           >
                             {course.examType}
@@ -282,8 +282,8 @@ const Exams: React.FC = () => {
                             <div
                               className={`h-2 rounded-full transition-all duration-500 ${
                                 course.examType === 'ЕГЭ'
-                                  ? 'bg-gradient-to-r from-purple-500 to-indigo-600'
-                                  : 'bg-gradient-to-r from-blue-500 to-cyan-600'
+                                  ? 'bg-gradient-to-r from-green-500 to-emerald-600'
+                                  : 'bg-gradient-to-r from-green-500 to-emerald-600'
                               }`}
                               style={{ width: `${course.progress}%` }}
                             ></div>

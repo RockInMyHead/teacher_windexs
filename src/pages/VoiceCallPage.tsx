@@ -407,7 +407,7 @@ const VoiceCallPage: React.FC = () => {
 
       // Basic validation - Web Speech API is usually reliable
       const hasOnlyEmoji = /^[\p{Emoji}\s]+$/u.test(transcription.trim());
-      const hasWeirdChars = /[^\w\sа-яё\-.,!?;:()"«»—–…№\s]/gi.test(transcription.trim());
+      const hasWeirdChars = /[^\w\sа-яё\-.,!?;:()"«»—–…№÷×±=≠<>≤≥√∛∜∫∑∏∆∞∞°%‰‱\s]/gi.test(transcription.trim());
 
       if (hasOnlyEmoji || hasWeirdChars) {
         console.warn('⚠️ Transcription contains only emoji or weird characters:', transcription);
@@ -472,6 +472,41 @@ const VoiceCallPage: React.FC = () => {
     }
   };
 
+  // Send welcome message when entering chat
+  const sendWelcomeMessage = async () => {
+    try {
+      console.log('👋 Sending welcome message...');
+      setIsProcessing(true);
+
+      // Get welcome message from LLM
+      const welcomeMessage = await getLLMResponse('');
+
+      // Extract theses from response
+      const theses = extractTheses(welcomeMessage);
+      setSpeechTheses(theses);
+
+      // Clean response from headers for TTS and display
+      const cleanResponse = cleanMarkdownHeaders(welcomeMessage);
+
+      // Add assistant message
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: cleanResponse,
+        timestamp: new Date()
+      }]);
+
+      setIsProcessing(false);
+      setIsSpeaking(true);
+      await speakText(cleanResponse);
+      setIsSpeaking(false);
+
+      console.log('✅ Welcome message sent');
+    } catch (error) {
+      console.error('❌ Error sending welcome message:', error);
+      setIsProcessing(false);
+    }
+  };
+
   // Handle silence
   const handleSilence = async () => {
     try {
@@ -479,7 +514,7 @@ const VoiceCallPage: React.FC = () => {
       setIsProcessing(true);
 
       const message = "Есть вопросы? Я готова помочь!";
-      
+
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: message,
@@ -874,6 +909,8 @@ const VoiceCallPage: React.FC = () => {
     // Always use Russian prompt for Julia, regardless of lesson type
     const systemPrompt = `Ты Юлия - профессиональный педагог с 20-летним стажем. Ведёшь урок по голосовой связи один-на-один.${lessonContextText}
 
+КРИТИЧНО ВАЖНО: СТРОГО ПРИДЕРЖИВАЙСЯ ТЕМЫ УРОКА! НИКОГДА НЕ ОТХОДИ ОТ ЗАДАННОЙ ТЕМЫ. ВСЕ ВОПРОСЫ И ЗАДАНИЯ ДОЛЖНЫ БЫТЬ СВЯЗАНЫ ТОЛЬКО С ТЕМОЙ УРОКА.
+
 ТВОЯ МЕТОДИКА:
 1. Давай только ОДНО задание за раз. Не перегружай ученика.
 2. Объясняй "на пальцах" - просто, понятно, с конкретными примерами из жизни.
@@ -887,18 +924,20 @@ const VoiceCallPage: React.FC = () => {
 - Вместо "5 минут" пиши "пять минут"
 - Вместо "10 слов" пиши "десять слов"
 - Это голосовой урок - числа должны быть понятны при произнесении
+- НИКОГДА НЕ СПРАШИВАЙ ПРО ЯБЛОКИ, ГРУШИ ИЛИ ДРУГИЕ НЕСВЯЗАННЫЕ ТЕМЫ!
 
 СТРУКТУРА УРОКА:
-- Если это первое сообщение: поприветствуй, скажи тему урока, дай ОДНО простое задание для разминки
-- Далее: реагируй на ответы, хвали прогресс, давай следующее задание по порядку
-- Если ученик не понял: объясни проще, приведи пример из жизни
+- Если это первое сообщение: поприветствуй, скажи тему урока, дай ОДНО простое задание для разминки ПО ТЕМЕ УРОКА
+- Далее: реагируй на ответы, хвали прогресс, давай следующее задание по порядку ТОЛЬКО ПО ТЕМЕ УРОКА
+- Если ученик не понял: объясни проще, приведи пример из жизни СВЯЗАННЫЙ С ТЕМОЙ УРОКА
+- ВСЕГДА оставайся в рамках темы урока - это критично важно!
 
 История разговора:
 ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.content}`).join('\n')}
 
 Ученик: ${userMessage}
 
-Ответь как Юлия (кратко, одно задание, на пальцах).
+Ответь как Юлия (кратко, одно задание, на пальцах). СТРОГО ПРИДЕРЖИВАЙСЯ ТЕМЫ УРОКА!
 
 ФОРМАТИРУЙ ОТВЕТ С ПОМОЩЬЮ MARKDOWN:
 - Используй ## для заголовков
@@ -1087,7 +1126,21 @@ ${messages.map(m => `${m.role === 'user' ? 'Ученик' : 'Юлия'}: ${m.con
   useEffect(() => {
     console.log('🎓 VoiceCallPage mounted');
     console.log('🎤 Web Speech API supported:', isWebSpeechSupported());
-    startListening();
+
+    // Send welcome message if chat is empty and lesson context is loaded
+    const initializeChat = async () => {
+      // Wait a bit for lesson context to load
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      if (messages.length === 0 && lessonContextRef.current) {
+        console.log('💬 Chat is empty, sending welcome message...');
+        await sendWelcomeMessage();
+      }
+
+      startListening();
+    };
+
+    initializeChat();
 
     return () => {
       console.log('🎓 VoiceCallPage unmounting');

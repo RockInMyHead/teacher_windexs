@@ -104,8 +104,8 @@ const ExamAddCourse: React.FC = () => {
             <div
               className={`inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br ${
                 isEGE
-                  ? 'from-purple-500 to-indigo-600'
-                  : 'from-blue-500 to-cyan-600'
+                  ? 'from-green-500 to-emerald-600'
+                  : 'from-green-500 to-emerald-600'
               } rounded-full mb-6`}
             >
               {isEGE ? (
@@ -142,8 +142,8 @@ const ExamAddCourse: React.FC = () => {
                 onClick={handleAddCourses}
                 className={`bg-gradient-to-r ${
                   isEGE
-                    ? 'from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700'
-                    : 'from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700'
+                  ? 'from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
+                  : 'from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
                 } gap-2`}
               >
                 <Plus className="w-4 h-4" />
@@ -163,8 +163,8 @@ const ExamAddCourse: React.FC = () => {
                 className={`cursor-pointer hover:shadow-lg transition-all duration-300 ${
                   isSelected
                     ? isEGE
-                      ? 'border-2 border-purple-500 bg-purple-50'
-                      : 'border-2 border-blue-500 bg-blue-50'
+                      ? 'border-2 border-green-500 bg-green-50'
+                      : 'border-2 border-green-500 bg-green-50'
                     : 'border-2 border-transparent hover:border-gray-300'
                 }`}
                 onClick={() => handleToggleSubject(subject.id)}
@@ -176,8 +176,8 @@ const ExamAddCourse: React.FC = () => {
                       <div
                         className={`w-8 h-8 rounded-full flex items-center justify-center ${
                           isEGE
-                            ? 'bg-purple-500'
-                            : 'bg-blue-500'
+                            ? 'bg-green-500'
+                            : 'bg-green-500'
                         }`}
                       >
                         <Check className="w-5 h-5 text-white" />
@@ -204,8 +204,8 @@ const ExamAddCourse: React.FC = () => {
               size="lg"
               className={`bg-gradient-to-r ${
                 isEGE
-                  ? 'from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700'
-                  : 'from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700'
+                  ? 'from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
+                  : 'from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
               } gap-2 px-12 py-6 text-lg`}
             >
               <Plus className="w-5 h-5" />

@@ -1,0 +1,25 @@
+# =====================================================
+# ENVIRONMENT VARIABLES
+# Copy this file to .env and fill in your values
+# =====================================================
+
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=teacher_platform
+DB_USER=postgres
+DB_PASSWORD=your_password_here
+
+# API Configuration
+API_PORT=3001
+NODE_ENV=development
+
+# Frontend Configuration (for CORS)
+VITE_API_URL=http://localhost:3001/api
+
+# OpenAI Configuration (existing)
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Session Secret (for future authentication)
+SESSION_SECRET=your_session_secret_here
+

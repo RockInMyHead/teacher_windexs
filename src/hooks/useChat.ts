@@ -4,7 +4,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import type { Message, ChatCompletionRequest, UseChatReturn, AppError } from '@/types';
-import { chatService } from '@/services/api';
+import { chatService } from '@/services';
 import { handleApiError, getUserFriendlyErrorMessage } from '@/services/api/errorHandler';
 import { logger } from '@/utils/logger';
 

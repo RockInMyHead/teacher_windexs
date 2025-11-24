@@ -441,6 +441,11 @@ const Chat = () => {
         try {
           const courseData = JSON.parse(storedCourseData);
           console.log('Loaded course data for chat session:', courseData);
+          console.log('Course title from loaded data:', courseData.title);
+
+          // Clear any existing course data first to prevent old data from persisting
+          setPersonalizedCourseData(null);
+          setLessonSessionData(null);
 
           // Set course context for the chat (but DON'T set currentLesson to avoid triggering lesson generation)
           setPersonalizedCourseData({
@@ -473,6 +478,101 @@ const Chat = () => {
       }
     }
   }, [searchParams]);
+
+  // Generate welcome message when course data is loaded
+  useEffect(() => {
+    if (personalizedCourseData && messages.length === 0 && !isLessonMode) {
+      console.log('👋 Generating welcome message for course:', personalizedCourseData.courseInfo.title);
+
+      // Generate welcome message using AI
+      const generateWelcomeMessage = async () => {
+        try {
+          setIsLoading(true);
+
+          const welcomePrompt = `ВАША РОЛЬ:
+Вы - учитель этого курса. Ученик пришёл к вам на индивидуальное занятие${lessonSessionData ? ` (урок ${lessonSessionData.lessonNumber})` : ''}.
+
+ПРИ ПЕРВОМ СООБЩЕНИИ:
+1. Поприветствуйте ученика: "Добро пожаловать на урок по ${personalizedCourseData.courseInfo.title}!"
+${lessonSessionData && lessonSessionData.lessonNumber > 1 && lessonSessionData.homeworks && lessonSessionData.homeworks.length > 0 ? `2. СРАЗУ ПРОВЕРЬТЕ ДОМАШНЕЕ ЗАДАНИЕ: Спросите про задание с прошлого урока: "${lessonSessionData.homeworks[lessonSessionData.homeworks.length - 1].task}". Попросите рассказать, как ученик его выполнил.
+3. После проверки домашнего задания разберите ошибки (если были) и похвалите за правильные части` : `2. Представьтесь как учитель по предмету "${personalizedCourseData.courseInfo.title}"
+3. Спросите, что конкретно ученик хочет изучить или какие вопросы у него есть по этому предмету`}
+${!lessonSessionData || lessonSessionData.lessonNumber === 1 ? `4. Предложите помощь с домашним заданием, объяснением темы или подготовкой к контрольной` : ''}
+
+ДОМАШНИЕ ЗАДАНИЯ:
+- В конце урока (примерно после 30-40 минут обсуждения или когда тема хорошо разобрана) дайте ученику домашнее задание
+- Домашнее задание должно быть по теме урока
+- Формулируйте четко: "Домашнее задание: [конкретное задание]"
+- Запомните это домашнее задание - на следующем уроке вы ОБЯЗАТЕЛЬНО должны его проверить!
+
+ОСОБЕННОСТИ ВАШЕГО СТИЛЯ:
+- Объясняйте сложное простыми словами, как если бы разговаривали с учеником ${personalizedCourseData.courseInfo.grade} класса
+- Используйте примеры из реальной жизни и аналогии
+- Разбивайте информацию на логические блоки
+- Задавайте наводящие вопросы для проверки понимания
+- Будьте терпеливы, поддерживающи и мотивирующи
+- Адаптируйте объяснения под уровень ученика
+- Поощряйте самостоятельное мышление
+- Хвалите за правильные ответы и старания
+
+ПОМНИТЕ:
+- Вы учитель по предмету "${personalizedCourseData.courseInfo.title}", поэтому все объяснения должны быть в контексте этого предмета
+- Это урок ${lessonSessionData ? `номер ${lessonSessionData.lessonNumber}` : ''}
+${lessonSessionData && lessonSessionData.lessonNumber > 1 ? '- ОБЯЗАТЕЛЬНО начните с проверки домашнего задания!' : ''}
+- В конце урока дайте домашнее задание
+- Спрашивайте, что конкретно нужно изучить, чтобы помочь максимально эффективно
+
+Приветствуйте ученика и начните урок!`;
+
+          const response = await fetch('/api/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [
+                { role: 'system', content: welcomePrompt },
+                { role: 'user', content: 'Привет! Я готов начать урок.' }
+              ],
+              model: 'gpt-4o-mini',
+              temperature: 0.7,
+              max_tokens: 500
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const welcomeMessage = data.choices[0].message.content;
+
+            // Add welcome message to chat
+            const welcomeMessageObj: Message = {
+              id: `welcome-${Date.now()}`,
+              role: 'assistant',
+              content: welcomeMessage,
+              timestamp: new Date(),
+              ttsPlayed: false
+            };
+
+            // Add welcome message to chat using ChatContainer ref
+            if (chatContainerRef.current?.addMessage) {
+              chatContainerRef.current.addMessage(welcomeMessageObj);
+              console.log('✅ Welcome message added to ChatContainer');
+            } else {
+              // Fallback to local messages state
+              setMessages([welcomeMessageObj]);
+              console.log('✅ Welcome message added to local state (fallback)');
+            }
+          } else {
+            console.error('❌ Failed to generate welcome message');
+          }
+        } catch (error) {
+          console.error('❌ Error generating welcome message:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      generateWelcomeMessage();
+    }
+  }, [personalizedCourseData, lessonSessionData, messages.length, isLessonMode]);
 
   // Auto-generate lesson when both conditions are met
   useEffect(() => {
