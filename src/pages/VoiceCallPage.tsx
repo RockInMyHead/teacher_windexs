@@ -219,28 +219,6 @@ const VoiceCallPage: React.FC = () => {
     }
   };
 
-  // Setup audio analysis
-  const setupAudioAnalysis = (stream: MediaStream) => {
-    try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      audioContextRef.current = audioContext;
-
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.3;
-
-      const source = audioContext.createMediaStreamSource(stream);
-      source.connect(analyser);
-      analyserRef.current = analyser;
-
-      console.log('🎧 Audio analysis ready');
-
-      // Start detection loop
-      detectAudio();
-    } catch (error) {
-      console.error('❌ Audio analysis setup error:', error);
-    }
-  };
 
   // Detect audio levels with adaptive noise floor
   const detectAudio = () => {
